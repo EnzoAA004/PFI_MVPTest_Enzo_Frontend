@@ -1,3 +1,4 @@
+import "./theme.css";
 import { useEffect, useMemo, useState } from "react";
 import { getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { AppShell } from "./components/AppShell";
