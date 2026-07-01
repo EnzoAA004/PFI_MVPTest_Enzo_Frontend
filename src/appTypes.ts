@@ -133,3 +133,43 @@ export type ReviewHistoryState = {
   auditTrail: AuditEvent[];
   patientStudies: PatientStudy[];
 };
+
+export type AuthUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  licenseNumber?: string;
+  specialty?: string;
+  institution?: string;
+  roles: string[];
+  verified: boolean;
+};
+
+export type AuthPendingResponse = {
+  challengeId: string;
+  channel: string;
+  expiresInSeconds: number;
+  message: string;
+  devVerificationCode?: string | null;
+};
+
+export type AuthTokenResponse = {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresInSeconds: number;
+  user: AuthUser;
+};
+
+export type AuthSession = AuthTokenResponse & {
+  createdAt: string;
+};
+
+export type RegisterRequest = {
+  fullName: string;
+  email: string;
+  password: string;
+  licenseNumber?: string;
+  specialty?: string;
+  institution?: string;
+};
