@@ -4,6 +4,7 @@
 - [ ] Framework preset configurado como `Vite`.
 - [ ] Build command configurado como `npm run build`.
 - [ ] Output directory configurado como `dist`.
+- [ ] `vercel.json` detectado por Vercel.
 - [ ] Variable `VITE_API_BASE_URL=https://url-backend` cargada.
 - [ ] Variable `VITE_USE_MOCK=false` cargada.
 - [ ] CORS del backend permite el dominio generado por Vercel.

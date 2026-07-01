@@ -10,6 +10,8 @@ Configuracion recomendada:
 - Output directory: `dist`
 - Produccion: usar backend Spring Boot publicado como unica API del frontend.
 
+El repositorio incluye `vercel.json` con esa misma configuracion y rewrite a `index.html` para que la app React funcione como SPA.
+
 ## Variables de entorno
 
 ```text
@@ -29,6 +31,15 @@ VITE_USE_MOCK=false
 - Cargar `VITE_USE_MOCK=false`.
 - Confirmar CORS en backend para el dominio de Vercel.
 - Ejecutar deploy y validar dashboard, caso demo y guardado de revision.
+
+## Pasos en Vercel
+
+1. Crear un nuevo proyecto desde el repositorio GitHub del frontend.
+2. Confirmar framework `Vite`.
+3. Revisar que Vercel tome `npm run build` y `dist` desde `vercel.json`.
+4. Cargar las variables de entorno de produccion.
+5. Hacer deploy.
+6. Copiar el dominio generado y permitirlo en CORS del backend Spring Boot.
 
 ## Verificacion previa
 
