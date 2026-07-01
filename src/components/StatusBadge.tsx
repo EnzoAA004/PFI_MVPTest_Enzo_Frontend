@@ -1,5 +1,5 @@
 import type * as React from "react";
-import type { Priority, ReviewStatus } from "../types";
+import type { Priority, ReviewStatus } from "../appTypes";
 
 interface StatusBadgeProps {
   children: React.ReactNode;
