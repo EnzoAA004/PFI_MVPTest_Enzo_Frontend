@@ -6,12 +6,15 @@ export interface PipelineRunRequest {
   caseId: string;
   plane: Plane;
   modelKey: string;
+  inputPath?: string;
   imageRef?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ReviewUpdateRequest {
   status: ReviewStatus;
   observations: string;
+  notes?: string;
   reviewer?: string;
 }
 
@@ -19,12 +22,15 @@ export interface ReviewStatusResponse {
   runId?: string;
   status?: ReviewStatus;
   observations?: string;
+  notes?: string;
+  reviewer?: string;
   reviewedAt?: string;
+  updatedAt?: string;
 }
 
 export interface AgentDecision {
   priority?: "alta" | "media" | "baja";
-  status?: "requiere_revision" | "listo_para_revision" | "sin_priorizacion";
+  status?: "requiere_revision" | "listo_para_revision" | "sin_priorizacion" | string;
   flags?: string[];
   reasons?: string[];
   humanReviewRequired?: boolean;
@@ -33,7 +39,7 @@ export interface AgentDecision {
 export interface Measurement {
   id?: string;
   label?: string;
-  value?: number;
+  value?: number | string;
   unit?: string;
   confidence?: number;
   plane?: Plane;
