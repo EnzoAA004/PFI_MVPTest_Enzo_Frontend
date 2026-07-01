@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ViewKey } from "../types";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
@@ -5,7 +6,7 @@ import { Sidebar } from "./Sidebar";
 interface AppShellProps {
   activeView: ViewKey;
   onChangeView: (view: ViewKey) => void;
-  children: React.ReactNode;
+  children: ReactNode;
   health: string;
   modelCount: number;
   aiModuleAvailable?: boolean;
