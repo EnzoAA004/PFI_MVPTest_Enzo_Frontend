@@ -22,6 +22,7 @@ interface StudyReviewViewProps {
 export function StudyReviewView({ run, measurements, auditTrail, saving, onMeasurementsChange, onSaveReview }: StudyReviewViewProps) {
   const [tab, setTab] = useState<"Sagittal" | "Axial" | "3D Reconstruction">("Sagittal");
   const [overlayEnabled, setOverlayEnabled] = useState(true);
+  const [overlayOpacity, setOverlayOpacity] = useState(74);
   const [editMode, setEditMode] = useState(false);
   const [selectedMask, setSelectedMask] = useState("disc-space");
   const [selectedLandmark, setSelectedLandmark] = useState("L4");
@@ -84,12 +85,13 @@ export function StudyReviewView({ run, measurements, auditTrail, saving, onMeasu
             <button type="button">Undo</button>
             <button onClick={() => void save("aceptado")} type="button">Approve</button>
             <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Toggle AI Overlay</button>
+            <label className="opacity-control">Overlay <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state">Selected mask: <strong>{selectedMask}</strong> · Selected landmark: <strong>{selectedLandmark}</strong></div>
+          <div className="edit-state">Selected mask: <strong>{selectedMask}</strong> · Selected landmark: <strong>{selectedLandmark}</strong> · Overlay opacity: <strong>{overlayOpacity}%</strong></div>
           {tab === "3D Reconstruction" ? <article className="panel-card full-viewer"><SpineReconstructionPreview /></article> : (
             <div className="viewer-stack">
-              <MriSliceViewer variant="sagittal" overlayEnabled={overlayEnabled} editMode={editMode} selectedLandmark={selectedLandmark} onSelectMask={setSelectedMask} onSelectLandmark={setSelectedLandmark} />
-              <MriSliceViewer variant="axial" overlayEnabled={overlayEnabled} editMode={editMode} selectedLandmark={selectedLandmark} onSelectMask={setSelectedMask} onSelectLandmark={setSelectedLandmark} />
+              <MriSliceViewer variant="sagittal" overlayEnabled={overlayEnabled} overlayOpacity={overlayOpacity / 100} editMode={editMode} selectedLandmark={selectedLandmark} onSelectMask={setSelectedMask} onSelectLandmark={setSelectedLandmark} />
+              <MriSliceViewer variant="axial" overlayEnabled={overlayEnabled} overlayOpacity={overlayOpacity / 100} editMode={editMode} selectedLandmark={selectedLandmark} onSelectMask={setSelectedMask} onSelectLandmark={setSelectedLandmark} />
             </div>
           )}
         </section>
