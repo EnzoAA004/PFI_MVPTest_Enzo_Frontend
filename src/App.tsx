@@ -38,6 +38,7 @@ function App() {
   const review = safeRun.review ?? sampleRun.review ?? fallbackReview;
   const runId = safeRun.runId ?? sampleRun.runId ?? fallbackRunId;
   const caseId = safeRun.caseId ?? sampleRun.caseId;
+  const humanReviewRequired = agentDecision.humanReviewRequired !== false;
   const worklist = useMemo(() => [safeRun], [safeRun]);
 
   useEffect(() => {
@@ -183,11 +184,16 @@ function App() {
           <article className="card">
             <div className="section-heading">
               <h2>Panel agente</h2>
-              <span className={`badge priority-${agentDecision.priority ?? "media"}`}>{agentDecision.priority ?? "media"}</span>
+              <div className="badge-row">
+                <span className={`badge priority-${agentDecision.priority ?? "media"}`}>{agentDecision.priority ?? "media"}</span>
+                <span className={humanReviewRequired ? "badge review-required" : "badge review-optional"}>
+                  {humanReviewRequired ? "revision requerida" : "revision registrada"}
+                </span>
+              </div>
             </div>
             <p className="assistive-note">
               Estado: {agentDecision.status ?? "requiere_revision"}. Requiere revision profesional:{" "}
-              {agentDecision.humanReviewRequired !== false ? "si" : "no"}.
+              {humanReviewRequired ? "si" : "no"}.
             </p>
             <div className="flag-row">
               {(agentDecision.flags ?? []).map((flag) => (
@@ -216,7 +222,9 @@ function App() {
                     <div className="overlay-line line-b" />
                     <div className="overlay-area" />
                   </div>
-                  {safeRun.overlayPath && <code className="overlay-path">{safeRun.overlayPath}</code>}
+                  {safeRun.overlayPath && (
+                    <code className="overlay-path">Ruta de overlay local/no accesible desde navegador: {safeRun.overlayPath}</code>
+                  )}
                 </div>
               )}
               <p className="assistive-note">Representacion visual para revisar regiones marcadas por el pipeline tecnico.</p>
@@ -257,17 +265,18 @@ function App() {
               <h2>Revision profesional</h2>
               <span>Human-in-the-loop</span>
             </div>
-            <label>
+            <label htmlFor="review-status">
               Estado
-              <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
+              <select id="review-status" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
                 {reviewStatuses.map((status) => (
                   <option value={status} key={status}>{status}</option>
                 ))}
               </select>
             </label>
-            <label>
+            <label htmlFor="review-observations">
               Observaciones
               <textarea
+                id="review-observations"
                 value={observations}
                 onChange={(event) => setObservations(event.target.value)}
                 placeholder="Registrar observaciones tecnicas de la revision profesional"

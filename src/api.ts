@@ -17,6 +17,35 @@ let mockRun: AiRunResponse = sampleRun;
 
 export const isDemoMode = () => demoMode;
 
+function normalizeModels(response: unknown): AiModel[] {
+  if (Array.isArray(response)) {
+    return response as AiModel[];
+  }
+
+  if (response && typeof response === "object" && "models" in response) {
+    const modelsValue = (response as { models?: unknown }).models;
+    if (Array.isArray(modelsValue)) {
+      return modelsValue as AiModel[];
+    }
+
+    if (modelsValue && typeof modelsValue === "object") {
+      return Object.entries(modelsValue).map(([key, value]) => {
+        const model = value && typeof value === "object" ? value as Record<string, unknown> : {};
+        const plane = model.plane === "axial" || model.plane === "sagittal" ? model.plane : undefined;
+        return {
+          key,
+          name: key,
+          version: typeof model.version === "string" ? model.version : "backend",
+          planes: plane ? [plane] : undefined,
+          enabled: true,
+        };
+      });
+    }
+  }
+
+  return sampleModels;
+}
+
 function normalizeReview(runId: string, review?: ReviewStatusResponse): ReviewStatusResponse {
   return {
     runId: review?.runId ?? runId,
@@ -83,7 +112,8 @@ export async function getHealth() {
 }
 
 export async function getModels(): Promise<AiModel[]> {
-  return request<AiModel[]>("/api/ai/models", undefined, () => sampleModels);
+  const response = await request<unknown>("/api/ai/models", undefined, () => sampleModels);
+  return normalizeModels(response);
 }
 
 export async function runPipeline(requestPayload: PipelineRunRequest): Promise<AiRunResponse> {

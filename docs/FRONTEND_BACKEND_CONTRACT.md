@@ -7,6 +7,7 @@ Contrato general:
 - Las respuestas usan `camelCase`.
 - El frontend espera `runId`, `caseId`, `plane`, `modelKey`, `measurements`, `overlayPath`, `agentDecision`, `review` y `humanReviewRequired` cuando esten disponibles.
 - Si algun campo falta, la UI debe seguir operativa y completar valores de demo/placeholder.
+- `GET /api/ai/models` puede responder un array de modelos o un objeto `{ "models": { ... } }`; el frontend normaliza ambos formatos.
 - Si el backend no responde, el frontend activa modo demo local con mock.
 - El backend es el unico punto de integracion con el modulo Python FastAPI.
 

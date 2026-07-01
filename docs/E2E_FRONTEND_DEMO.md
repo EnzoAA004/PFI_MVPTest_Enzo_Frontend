@@ -55,7 +55,7 @@ VITE_USE_MOCK=true
 2. Verificar el banner "Salida asistiva. Requiere revision profesional."
 3. Presionar "Ejecutar caso demo".
 4. Confirmar que se muestre `runId`, detalle de caso, panel agente, evidencia visual y mediciones.
-5. Si el backend no responde, confirmar el aviso "modo demo local".
+5. Si el backend no responde o el pipeline remoto devuelve error, confirmar el aviso "modo demo local".
 
 ## 5. Guardar Revision
 

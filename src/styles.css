@@ -189,6 +189,24 @@ h2 {
   white-space: nowrap;
 }
 
+.badge-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.review-required {
+  background: #e8eef8;
+  color: #274c7c;
+}
+
+.review-optional {
+  background: #e5f4ea;
+  color: #23633e;
+}
+
 .priority-alta {
   background: #ffe8e6;
   color: #a5372c;
