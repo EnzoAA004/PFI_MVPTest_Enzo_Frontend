@@ -1,0 +1,134 @@
+import { useState } from "react";
+import { createDemoDoctorSession, loginDoctor, registerDoctor, verifyLogin, verifyRegistration } from "../authClient";
+import type { AuthPendingResponse, AuthSession, RegisterRequest } from "../appTypes";
+
+interface AuthViewProps {
+  onAuthenticated: (session: AuthSession) => void;
+}
+
+type Mode = "login" | "register";
+
+type ChallengeState = {
+  mode: Mode;
+  challenge: AuthPendingResponse;
+  email: string;
+};
+
+export function AuthView({ onAuthenticated }: AuthViewProps) {
+  const [mode, setMode] = useState<Mode>("login");
+  const [form, setForm] = useState<RegisterRequest>({
+    fullName: "Dra. Demo Reviewer",
+    email: "doctor.demo@pfi.local",
+    password: "Demo1234!",
+    licenseNumber: "MN-DEMO-2026",
+    specialty: "Radiologia / Columna lumbar",
+    institution: "PFI Academic Lab",
+  });
+  const [challengeState, setChallengeState] = useState<ChallengeState | null>(null);
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  function updateField(key: keyof RegisterRequest, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submit() {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const challenge = mode === "register"
+        ? await registerDoctor(form)
+        : await loginDoctor(form.email, form.password);
+      setChallengeState({ mode, challenge, email: form.email });
+      setCode(challenge.devVerificationCode ?? "");
+      setMessage(challenge.message);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "No se pudo completar la solicitud");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function verify() {
+    if (!challengeState) return;
+    setLoading(true);
+    setError("");
+    try {
+      const session = challengeState.mode === "register"
+        ? await verifyRegistration(challengeState.challenge.challengeId, code)
+        : await verifyLogin(challengeState.challenge.challengeId, code);
+      onAuthenticated(session as AuthSession);
+    } catch (verifyError) {
+      setError(verifyError instanceof Error ? verifyError.message : "Codigo invalido o expirado");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function startDemo() {
+    setLoading(true);
+    setError("");
+    try {
+      const session = await createDemoDoctorSession();
+      onAuthenticated(session as AuthSession);
+    } catch (demoError) {
+      setError(demoError instanceof Error ? demoError.message : "No se pudo iniciar la sesion demo");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="auth-page">
+      <section className="auth-card">
+        <div className="auth-brand">
+          <div className="brand-mark">LM</div>
+          <div>
+            <strong>Lumbar MRI Analysis Platform</strong>
+            <span>Academic / de-identified data · Human review required</span>
+          </div>
+        </div>
+        <div className="auth-copy">
+          <p>Secure doctor access</p>
+          <h1>{mode === "register" ? "Registrar profesional" : "Ingresar como profesional"}</h1>
+          <span>El acceso protege el flujo de revision, historial y endpoints del pipeline asistivo.</span>
+        </div>
+        <div className="auth-tabs">
+          <button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setChallengeState(null); }} type="button">Login</button>
+          <button className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setChallengeState(null); }} type="button">Register</button>
+        </div>
+        {!challengeState ? (
+          <div className="auth-form">
+            {mode === "register" && (
+              <>
+                <label>Nombre completo<input value={form.fullName} onChange={(event) => updateField("fullName", event.target.value)} /></label>
+                <label>Matricula<input value={form.licenseNumber ?? ""} onChange={(event) => updateField("licenseNumber", event.target.value)} /></label>
+                <label>Especialidad<input value={form.specialty ?? ""} onChange={(event) => updateField("specialty", event.target.value)} /></label>
+                <label>Institucion<input value={form.institution ?? ""} onChange={(event) => updateField("institution", event.target.value)} /></label>
+              </>
+            )}
+            <label>Email profesional<input value={form.email} onChange={(event) => updateField("email", event.target.value)} /></label>
+            <label>Password<input type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} /></label>
+            <button className="primary-button" disabled={loading} onClick={() => void submit()} type="button">{loading ? "Procesando..." : mode === "register" ? "Crear cuenta y verificar" : "Enviar codigo de acceso"}</button>
+            <button className="ghost-button" disabled={loading} onClick={() => void startDemo()} type="button">Entrar con doctor demo</button>
+          </div>
+        ) : (
+          <div className="auth-form">
+            <div className="verification-panel">
+              <strong>Doble verificacion</strong>
+              <p>{message}</p>
+              {challengeState.challenge.devVerificationCode && <span>Codigo demo: {challengeState.challenge.devVerificationCode}</span>}
+            </div>
+            <label>Codigo de 6 digitos<input value={code} onChange={(event) => setCode(event.target.value)} maxLength={6} /></label>
+            <button className="primary-button" disabled={loading} onClick={() => void verify()} type="button">Verificar e ingresar</button>
+            <button className="ghost-button" onClick={() => setChallengeState(null)} type="button">Volver</button>
+          </div>
+        )}
+        {error && <div className="toast error">{error}</div>}
+      </section>
+    </main>
+  );
+}
