@@ -1,3 +1,4 @@
+import type * as React from "react";
 import type { Priority, ReviewStatus } from "../types";
 
 interface StatusBadgeProps {
