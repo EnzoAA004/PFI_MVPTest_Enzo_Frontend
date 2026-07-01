@@ -1,4 +1,4 @@
-import type { AuditEvent } from "../types";
+type AuditEvent = { id: string; timestamp: string; actor: string; action: string; detail: string };
 
 export function AuditTrail({ events }: { events: AuditEvent[] }) {
   return (
