@@ -64,76 +64,27 @@ function normalizeReview(runId: string, review?: ReviewStatusResponse): ReviewSt
   };
 }
 
-function normalizeAgentDecision(agent?: AgentDecision): AgentDecision {
-  const reasons = agent?.reasons ?? agent?.agentReasons ?? [];
-  return {
-    ...agent,
-    status: agent?.status ?? agent?.agentStatus ?? "requiere_revision",
-    priority: agent?.priority ?? mapPriority(agent?.reviewPriority),
-    flags: agent?.flags ?? agent?.agentReasons ?? [],
-    reasons,
-    humanReviewRequired: agent?.humanReviewRequired ?? true,
-    notClinicalDiagnosis: agent?.notClinicalDiagnosis ?? true,
-    recommendedAction:
-      agent?.recommendedAction ?? "Revisar overlays, mediciones y trazabilidad antes de usar el resultado.",
-  };
-}
-
-function measurementFromUnknown(item: unknown, index: number): Measurement {
-  const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-  const rawValue = row.value ?? row.measurementValue ?? row.result ?? "";
-  const numericValue = typeof rawValue === "number" || typeof rawValue === "string" ? rawValue : String(rawValue);
-  const confidence = typeof row.confidence === "number" ? row.confidence : undefined;
-  return {
-    id: String(row.id ?? row.key ?? `measurement-${index + 1}`),
-    label: String(row.label ?? row.name ?? row.measurement ?? "Technical measurement"),
-    value: numericValue,
-    unit: String(row.unit ?? ""),
-    confidence,
-    plane: row.plane === "axial" || row.plane === "sagittal" ? row.plane : undefined,
-    source: row.source === "Reviewer" ? "Reviewer" : "AI",
-    status: row.status === "editado" || row.status === "revisado" ? row.status : "pendiente",
-    outlier: Boolean(row.outlier),
-  };
-}
-
-function normalizeMeasurements(input?: AiRunResponse["measurements"]) {
-  if (Array.isArray(input)) {
-    return {
-      normalizedMeasurements: input.map((item, index) => measurementFromUnknown(item, index)),
-      measurementsStatus: "available",
-      measurementsDescription: "",
-    };
+function normalizeMeasurements(value: unknown): Measurement[] {
+  if (Array.isArray(value)) {
+    return value as Measurement[];
   }
 
-  const raw = input as RawMeasurements | undefined;
-  if (raw?.values && Array.isArray(raw.values) && raw.values.length > 0) {
-    return {
-      normalizedMeasurements: raw.values.map((item, index) => measurementFromUnknown(item, index)),
-      measurementsStatus: raw.status ?? "available",
-      measurementsDescription: raw.description ?? "",
-    };
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(record.values)) {
+      return record.values as Measurement[];
+    }
+    if (typeof record.status === "string" || typeof record.description === "string") {
+      return [{
+        id: "pipeline-status",
+        label: typeof record.description === "string" ? record.description : "Estado del pipeline tecnico",
+        value: typeof record.status === "string" ? record.status : "pendiente",
+        unit: "",
+      }];
+    }
   }
 
-  if (raw?.status === "pending_real_inference") {
-    return {
-      normalizedMeasurements: mockMeasurements.map((measurement) => ({
-        ...measurement,
-        source: "Placeholder" as const,
-        status: "pendiente" as const,
-        placeholder: true,
-      })),
-      measurementsStatus: "pending_real_inference",
-      measurementsDescription:
-        raw.description ?? "Pipeline tecnico disponible; inferencia real de mediciones pendiente.",
-    };
-  }
-
-  return {
-    normalizedMeasurements: mockMeasurements,
-    measurementsStatus: raw?.status ?? "placeholder",
-    measurementsDescription: raw?.description ?? "Mediciones mock de-identificadas para revision de interfaz.",
-  };
+  return sampleRun.measurements ?? [];
 }
 
 export function normalizeRun(run?: AiRunResponse): AiRunResponse {
@@ -178,7 +129,16 @@ async function request<T>(path: string, init?: RequestInit, fallback?: () => T):
       ...init,
     });
 
-    if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
+    if (!response.ok) {
+      let backendMessage = "";
+      try {
+        const errorBody = await response.json();
+        backendMessage = typeof errorBody.message === "string" ? `: ${errorBody.message}` : "";
+      } catch {
+        backendMessage = "";
+      }
+      throw new Error(`Backend respondio ${response.status}${backendMessage}`);
+    }
 
     demoMode = false;
     return (await response.json()) as T;
@@ -276,5 +236,5 @@ export async function updateReview(runId: string, payload: ReviewUpdateRequest):
       };
       return mockRun.review ?? normalizeReview(runId, undefined);
     },
-  );
+  ).then((review) => normalizeReview(runId, review));
 }

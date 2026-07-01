@@ -13,6 +13,7 @@ export interface PipelineRunRequest {
   inputPath?: string;
   metadata?: Record<string, unknown>;
   imageRef?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ReviewUpdateRequest {
@@ -28,8 +29,8 @@ export interface ReviewStatusResponse {
   notes?: string;
   observations?: string;
   reviewer?: string;
-  updatedAt?: string;
   reviewedAt?: string;
+  updatedAt?: string;
 }
 
 export interface AgentDecision {

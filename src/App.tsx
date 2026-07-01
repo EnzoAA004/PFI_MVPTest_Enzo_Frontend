@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
-import { AppShell } from "./components/AppShell";
-import { DashboardView } from "./components/DashboardView";
-import { PatientHistoryView } from "./components/PatientHistoryView";
-import { StudyReviewView } from "./components/StudyReviewView";
-import { initialAuditTrail, patientStudies, worklistStudies } from "./data/mockStudies";
+import { API_BASE_URL, getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { sampleRun } from "./mock/sampleRun";
 import {
   appendAuditEvent,
@@ -84,13 +79,13 @@ function App() {
     setInfo("");
     try {
       const response = await runPipeline({
-        caseId: "CASE-DEMO-0142",
-        plane: "sagittal",
+        caseId: sampleRun.caseId ?? "CASE-DEMO-0142",
+        plane: sampleRun.plane ?? "sagittal",
         modelKey: "sagittal_spider",
-        inputPath: "demo/CASE-DEMO-0142",
+        inputPath: "demo/case-demo-cloud-001",
         metadata: {
-          source: "frontend-review-workspace",
-          uiVersion: "redesign-v1",
+          source: "frontend-cloud-demo",
+          frontendBaseUrl: window.location.origin,
         },
       });
       const normalized = normalizeRun(response);
@@ -100,6 +95,7 @@ function App() {
       recordAudit("pipeline run generado", `${normalized.caseId} ejecutado. Run ID ${normalized.runId}.`, "System");
       recordAudit("reporte agente recuperado", "Respuesta normalizada para revision profesional.", "AI Agent");
       if (isDemoMode()) setInfo("Modo demo local activo o fallback aplicado. La interfaz conserva el flujo de revision.");
+      else setInfo("Caso demo ejecutado contra el backend. La respuesta se muestra como salida tecnica revisable.");
       setActiveView("review");
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "No se pudo ejecutar el caso demo");
@@ -130,7 +126,11 @@ function App() {
       setSelectedRun((current) => ({ ...current, review }));
       saveProfessionalReview(runId, review);
       recordAudit(status === "aceptado" ? "estado aprobado" : status === "observado" ? "estado observado" : "revision guardada", `Revision ${status} guardada para ${runId}.`);
-      if (isDemoMode()) setInfo("Revision guardada localmente por fallback demo.");
+      if (isDemoMode()) {
+        setInfo("Revision guardada en modo demo local porque el backend no confirmo la operacion.");
+      } else {
+        setInfo("Revision guardada correctamente en el backend.");
+      }
       return review;
     } catch (saveError) {
       const fallbackReview = {
