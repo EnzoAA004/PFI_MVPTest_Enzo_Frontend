@@ -1,4 +1,4 @@
-import type { AgentDecision } from "../types";
+import type { AgentDecision } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
 
 export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision }) {
