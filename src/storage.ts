@@ -1,3 +1,4 @@
+import { asyncGetItem, asyncSetItem } from "./browserStorage";
 import { initialAuditTrail, patientStudies } from "./data/mockStudies";
 import type { AiRunResponse, AuditEvent, Measurement, ReviewHistoryState, ReviewStatusResponse } from "./appTypes";
 
@@ -11,25 +12,26 @@ const emptyState: ReviewHistoryState = {
   patientStudies,
 };
 
-function canUseStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
+let cachedState: ReviewHistoryState = emptyState;
 
-export function loadReviewHistory(): ReviewHistoryState {
-  if (!canUseStorage()) return emptyState;
-
+export async function hydrateReviewHistory(): Promise<ReviewHistoryState> {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyState;
-    return { ...emptyState, ...JSON.parse(raw) } as ReviewHistoryState;
+    const raw = await asyncGetItem(STORAGE_KEY);
+    cachedState = raw ? ({ ...emptyState, ...JSON.parse(raw) } as ReviewHistoryState) : emptyState;
+    return cachedState;
   } catch {
-    return emptyState;
+    cachedState = emptyState;
+    return cachedState;
   }
 }
 
+export function loadReviewHistory(): ReviewHistoryState {
+  return cachedState;
+}
+
 export function saveReviewHistory(state: ReviewHistoryState) {
-  if (!canUseStorage()) return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  cachedState = state;
+  void asyncSetItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 export function saveRun(run: AiRunResponse) {
