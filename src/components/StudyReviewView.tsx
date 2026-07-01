@@ -71,7 +71,7 @@ export function StudyReviewView({ run, measurements, auditTrail, saving, onMeasu
             <p className="muted">Metadata seguro y de-identificado para demo academica.</p>
           </article>
           <article className="panel-card">
-            <div className="section-title"><h2>Series Navigator</h2></div>
+            <div className="section-title"><h2>Series Navigator / Contract Ready</h2></div>
             <div className="series-list">{series.map((item) => <button className="series-item" key={item} type="button"><span className="thumbnail" /><strong>{item}</strong></button>)}</div>
           </article>
         </aside>
