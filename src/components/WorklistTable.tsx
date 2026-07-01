@@ -1,4 +1,4 @@
-import type { StudyRow } from "../types";
+import type { StudyRow } from "../appTypes";
 import { PriorityBadge, ReviewBadge } from "./StatusBadge";
 
 interface WorklistTableProps {
