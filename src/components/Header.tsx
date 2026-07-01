@@ -8,9 +8,11 @@ interface HeaderProps {
   degradedMode?: boolean;
   onRunDemo: () => void;
   loading: boolean;
+  userName?: string;
+  onLogout?: () => void;
 }
 
-export function Header({ health, modelCount, aiModuleAvailable, degradedMode, onRunDemo, loading }: HeaderProps) {
+export function Header({ health, modelCount, aiModuleAvailable, degradedMode, onRunDemo, loading, userName, onLogout }: HeaderProps) {
   const backendTone = degradedMode ? "amber" : aiModuleAvailable ? "green" : "red";
   return (
     <header className="top-header">
@@ -23,10 +25,11 @@ export function Header({ health, modelCount, aiModuleAvailable, degradedMode, on
         <StatusBadge tone={backendTone}>
           {degradedMode ? "Modo degradado" : `Backend ${health}`} / {modelCount} models
         </StatusBadge>
-        <small title={API_BASE_URL}>Reviewer</small>
+        <small title={API_BASE_URL}>{userName ?? "Reviewer"}</small>
         <button className="primary-button" disabled={loading} onClick={onRunDemo} type="button">
           {loading ? "Ejecutando..." : "Ejecutar caso demo"}
         </button>
+        {onLogout && <button className="ghost-button" onClick={onLogout} type="button">Salir</button>}
       </div>
     </header>
   );
