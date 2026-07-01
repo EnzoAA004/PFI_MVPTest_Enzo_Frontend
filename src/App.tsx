@@ -10,6 +10,7 @@ import { PatientHistoryView } from "./components/PatientHistoryView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { initialAuditTrail, patientStudies, worklistStudies } from "./data/mockStudies";
 import { sampleRun } from "./mock/sampleRun";
+import { appendBackendAudit, saveBackendMeasurements } from "./reviewPersistenceApi";
 import {
   appendAuditEvent,
   loadReviewHistory,
@@ -88,6 +89,9 @@ function App() {
 
   function recordAudit(action: string, detail: string, actor = "Reviewer") {
     setAuditTrail(appendAuditEvent({ action, detail, actor }));
+    if (session) {
+      void appendBackendAudit(actor, action, detail).catch(() => undefined);
+    }
   }
 
   function logout() {
@@ -131,6 +135,7 @@ function App() {
     const runId = safeRun.runId ?? "local-run";
     setMeasurements(nextMeasurements);
     saveMeasurementEdits(runId, nextMeasurements);
+    void saveBackendMeasurements(runId, nextMeasurements, session?.user.fullName ?? "Reviewer", detail).catch(() => undefined);
     recordAudit("medicion editada", detail);
   }
 
