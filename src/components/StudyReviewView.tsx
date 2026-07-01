@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { AiRunResponse, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse } from "../types";
+import type { AiRunResponse, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse } from "../appTypes";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
 import { MeasurementsPanel } from "./MeasurementsPanel";
@@ -19,14 +19,7 @@ interface StudyReviewViewProps {
   onSaveReview: (status: ReviewStatus, notes: string) => Promise<ReviewStatusResponse | undefined>;
 }
 
-export function StudyReviewView({
-  run,
-  measurements,
-  auditTrail,
-  saving,
-  onMeasurementsChange,
-  onSaveReview,
-}: StudyReviewViewProps) {
+export function StudyReviewView({ run, measurements, auditTrail, saving, onMeasurementsChange, onSaveReview }: StudyReviewViewProps) {
   const [tab, setTab] = useState<"Sagittal" | "Axial" | "3D Reconstruction">("Sagittal");
   const [overlayEnabled, setOverlayEnabled] = useState(true);
   const [editMode, setEditMode] = useState(false);
@@ -45,14 +38,8 @@ export function StudyReviewView({
   return (
     <div className="view-stack review-workspace">
       <section className="page-heading">
-        <div>
-          <p>Study Review Workspace</p>
-          <h1>{run.caseId ?? "CASE-DEMO-0142"}</h1>
-        </div>
-        <div className="safety-copy">
-          <strong>Requiere revision profesional.</strong>
-          <span>Not for clinical diagnosis. Human review required.</span>
-        </div>
+        <div><p>Study Review Workspace</p><h1>{run.caseId ?? "CASE-DEMO-0142"}</h1></div>
+        <div className="safety-copy"><strong>Requiere revision profesional.</strong><span>Not for clinical diagnosis. Human review required.</span></div>
       </section>
 
       <section className="review-grid">
@@ -84,23 +71,12 @@ export function StudyReviewView({
           </article>
           <article className="panel-card">
             <div className="section-title"><h2>Series Navigator</h2></div>
-            <div className="series-list">
-              {series.map((item) => (
-                <button className="series-item" key={item} type="button">
-                  <span className="thumbnail" />
-                  <strong>{item}</strong>
-                </button>
-              ))}
-            </div>
+            <div className="series-list">{series.map((item) => <button className="series-item" key={item} type="button"><span className="thumbnail" /><strong>{item}</strong></button>)}</div>
           </article>
         </aside>
 
         <section className="center-column">
-          <div className="workspace-tabs">
-            {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => (
-              <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item}</button>
-            ))}
-          </div>
+          <div className="workspace-tabs">{(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item}</button>)}</div>
           <div className="toolbar">
             <button className={editMode ? "active" : ""} onClick={() => setEditMode((value) => !value)} type="button">Edit Mask</button>
             <button onClick={() => setSelectedLandmark("L4-L5")} type="button">Add Landmark</button>
@@ -109,60 +85,29 @@ export function StudyReviewView({
             <button onClick={() => void save("aceptado")} type="button">Approve</button>
             <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Toggle AI Overlay</button>
           </div>
-          <div className="edit-state">
-            Selected mask: <strong>{selectedMask}</strong> · Selected landmark: <strong>{selectedLandmark}</strong>
-          </div>
-          {tab === "3D Reconstruction" ? (
-            <article className="panel-card full-viewer"><SpineReconstructionPreview /></article>
-          ) : (
+          <div className="edit-state">Selected mask: <strong>{selectedMask}</strong> · Selected landmark: <strong>{selectedLandmark}</strong></div>
+          {tab === "3D Reconstruction" ? <article className="panel-card full-viewer"><SpineReconstructionPreview /></article> : (
             <div className="viewer-stack">
-              <MriSliceViewer
-                variant="sagittal"
-                overlayEnabled={overlayEnabled}
-                editMode={editMode}
-                selectedLandmark={selectedLandmark}
-                onSelectMask={setSelectedMask}
-                onSelectLandmark={setSelectedLandmark}
-              />
-              <MriSliceViewer
-                variant="axial"
-                overlayEnabled={overlayEnabled}
-                editMode={editMode}
-                selectedLandmark={selectedLandmark}
-                onSelectMask={setSelectedMask}
-                onSelectLandmark={setSelectedLandmark}
-              />
+              <MriSliceViewer variant="sagittal" overlayEnabled={overlayEnabled} editMode={editMode} selectedLandmark={selectedLandmark} onSelectMask={setSelectedMask} onSelectLandmark={setSelectedLandmark} />
+              <MriSliceViewer variant="axial" overlayEnabled={overlayEnabled} editMode={editMode} selectedLandmark={selectedLandmark} onSelectMask={setSelectedMask} onSelectLandmark={setSelectedLandmark} />
             </div>
           )}
         </section>
 
         <aside className="right-column">
-          <MeasurementsPanel
-            measurements={measurements}
-            inferenceStatus={run.measurementsStatus}
-            description={run.measurementsDescription}
-            onChange={onMeasurementsChange}
-          />
+          <MeasurementsPanel measurements={measurements} inferenceStatus={run.measurementsStatus} description={run.measurementsDescription} onChange={onMeasurementsChange} />
           <AgentSummary agentDecision={run.agentDecision} />
           <section className="panel-card notes-card">
             <div className="section-title"><h2>Notes</h2></div>
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones profesionales de revision..." />
             <div className="review-actions">
-              <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
-                <option value="pendiente">pendiente</option>
-                <option value="aceptado">aceptado</option>
-                <option value="observado">observado</option>
-                <option value="descartado">descartado</option>
-              </select>
+              <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}><option value="pendiente">pendiente</option><option value="aceptado">aceptado</option><option value="observado">observado</option><option value="descartado">descartado</option></select>
               <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Save Draft</button>
               <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve & Complete</button>
               <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Mark Observed</button>
             </div>
           </section>
-          <section className="panel-card">
-            <div className="section-title"><h2>Audit Trail</h2></div>
-            <AuditTrail events={auditTrail} />
-          </section>
+          <section className="panel-card"><div className="section-title"><h2>Audit Trail</h2></div><AuditTrail events={auditTrail} /></section>
         </aside>
       </section>
       <PrivacyBanner />
