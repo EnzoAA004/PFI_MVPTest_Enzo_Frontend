@@ -1,27 +1,32 @@
 import type { AuthSession, AuthTokenResponse } from "./appTypes";
+import { asyncGetItem, asyncRemoveItem, asyncSetItem } from "./browserStorage";
 
 const AUTH_KEY = "lumbar-mri-auth-session-v1";
+let cachedSession: AuthSession | null = null;
 
-function hasStorage() {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+export function getCachedAuthSession(): AuthSession | null {
+  return cachedSession;
 }
 
-export function loadAuthSession(): AuthSession | null {
-  if (!hasStorage()) return null;
+export async function loadAuthSession(): Promise<AuthSession | null> {
   try {
-    const raw = window.localStorage.getItem(AUTH_KEY);
-    return raw ? (JSON.parse(raw) as AuthSession) : null;
+    const raw = await asyncGetItem(AUTH_KEY);
+    cachedSession = raw ? (JSON.parse(raw) as AuthSession) : null;
+    return cachedSession;
   } catch {
+    cachedSession = null;
     return null;
   }
 }
 
 export function saveAuthSession(tokens: AuthTokenResponse): AuthSession {
   const session: AuthSession = { ...tokens, createdAt: new Date().toISOString() };
-  if (hasStorage()) window.localStorage.setItem(AUTH_KEY, JSON.stringify(session));
+  cachedSession = session;
+  void asyncSetItem(AUTH_KEY, JSON.stringify(session));
   return session;
 }
 
 export function clearAuthSession() {
-  if (hasStorage()) window.localStorage.removeItem(AUTH_KEY);
+  cachedSession = null;
+  void asyncRemoveItem(AUTH_KEY);
 }
