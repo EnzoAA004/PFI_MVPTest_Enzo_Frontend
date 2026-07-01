@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { API_BASE_URL, getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
+import { getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
+import { AppShell } from "./components/AppShell";
+import { DashboardView } from "./components/DashboardView";
+import { PatientHistoryView } from "./components/PatientHistoryView";
+import { StudyReviewView } from "./components/StudyReviewView";
+import { initialAuditTrail, patientStudies, worklistStudies } from "./data/mockStudies";
 import { sampleRun } from "./mock/sampleRun";
 import {
   appendAuditEvent,
@@ -82,9 +87,10 @@ function App() {
         caseId: sampleRun.caseId ?? "CASE-DEMO-0142",
         plane: sampleRun.plane ?? "sagittal",
         modelKey: "sagittal_spider",
-        inputPath: "demo/case-demo-cloud-001",
+        inputPath: "demo/CASE-DEMO-0142",
         metadata: {
-          source: "frontend-cloud-demo",
+          source: "frontend-review-workspace",
+          uiVersion: "redesign-v1",
           frontendBaseUrl: window.location.origin,
         },
       });
@@ -132,7 +138,7 @@ function App() {
         setInfo("Revision guardada correctamente en el backend.");
       }
       return review;
-    } catch (saveError) {
+    } catch {
       const fallbackReview = {
         runId,
         status,
