@@ -13,7 +13,7 @@ import {
   saveProfessionalReview,
   saveRun,
 } from "./storage";
-import type { AiModel, AiRunResponse, AuditEvent, Measurement, ReviewStatus, ViewKey } from "./types";
+import type { AiModel, AiRunResponse, AuditEvent, Measurement, ReviewStatus, ViewKey } from "./appTypes";
 
 function App() {
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
