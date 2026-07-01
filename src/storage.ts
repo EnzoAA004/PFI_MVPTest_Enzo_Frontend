@@ -1,5 +1,5 @@
 import { initialAuditTrail, patientStudies } from "./data/mockStudies";
-import type { AiRunResponse, AuditEvent, Measurement, ReviewHistoryState, ReviewStatusResponse } from "./types";
+import type { AiRunResponse, AuditEvent, Measurement, ReviewHistoryState, ReviewStatusResponse } from "./appTypes";
 
 const STORAGE_KEY = "lumbar-mri-review-history-v1";
 
