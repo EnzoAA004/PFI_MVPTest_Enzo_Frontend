@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { API_BASE_URL, getAgentReport, getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
+import { API_BASE_URL, getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { sampleRun } from "./mock/sampleRun";
 import type { AgentDecision, AiModel, AiRunResponse, ReviewStatus, ReviewStatusResponse } from "./types";
 
@@ -71,11 +71,15 @@ function App() {
       const response = await runPipeline({
         caseId: sampleRun.caseId ?? "CASE-DEMO-0142",
         plane: sampleRun.plane ?? "sagittal",
-        modelKey: sampleRun.modelKey ?? "pfi-segmentation-sagittal-v1",
-        imageRef: "demo/local-reference",
+        modelKey: "sagittal_spider",
+        inputPath: "demo/case-demo-cloud-001",
+        metadata: {
+          source: "frontend-cloud-demo",
+          frontendBaseUrl: window.location.origin,
+        },
       });
-      const report = await getAgentReport(response.runId ?? sampleRun.runId ?? fallbackRunId);
-      setSelectedRun(report);
+      setSelectedRun(response);
+      setInfo("Caso demo ejecutado contra el backend. La respuesta se muestra como salida tecnica revisable.");
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "No se pudo ejecutar el caso demo");
     } finally {
@@ -100,6 +104,8 @@ function App() {
       }));
       if (isDemoMode()) {
         setInfo("Revision guardada en modo demo local porque el backend no confirmo la operacion.");
+      } else {
+        setInfo("Revision guardada correctamente en el backend.");
       }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "No se pudo guardar la revision");
