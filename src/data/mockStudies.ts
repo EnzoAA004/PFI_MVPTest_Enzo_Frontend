@@ -1,4 +1,4 @@
-import type { AuditEvent, PatientStudy, StudyRow } from "../types";
+import type { AuditEvent, PatientStudy, StudyRow } from "../appTypes";
 
 export const worklistStudies: StudyRow[] = [
   {
