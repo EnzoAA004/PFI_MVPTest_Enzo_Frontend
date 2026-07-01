@@ -2,6 +2,14 @@
 
 El frontend React consume solamente el backend Spring Boot configurado por `VITE_API_BASE_URL`.
 
+Contrato general:
+
+- Las respuestas usan `camelCase`.
+- El frontend espera `runId`, `caseId`, `plane`, `modelKey`, `measurements`, `overlayPath`, `agentDecision`, `review` y `humanReviewRequired` cuando esten disponibles.
+- Si algun campo falta, la UI debe seguir operativa y completar valores de demo/placeholder.
+- Si el backend no responde, el frontend activa modo demo local con mock.
+- El backend es el unico punto de integracion con el modulo Python FastAPI.
+
 ## `GET /api/ai/health`
 
 Respuesta esperada:

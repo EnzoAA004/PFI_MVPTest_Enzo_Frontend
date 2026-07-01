@@ -1,9 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { getAgentReport, getHealth, getModels, isDemoMode, runPipeline, updateReview } from "./api";
+import { API_BASE_URL, getAgentReport, getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { sampleRun } from "./mock/sampleRun";
-import type { AiModel, AiRunResponse, ReviewStatus } from "./types";
+import type { AgentDecision, AiModel, AiRunResponse, ReviewStatus, ReviewStatusResponse } from "./types";
 
 const reviewStatuses: ReviewStatus[] = ["pendiente", "aceptado", "observado", "descartado"];
+const isRemoteUrl = (value?: string) => Boolean(value && /^https?:\/\//i.test(value));
+const fallbackRunId = "demo-run-2026-001";
+const fallbackReview: ReviewStatusResponse = {
+  runId: fallbackRunId,
+  status: "pendiente",
+  observations: "",
+};
+const fallbackAgentDecision: AgentDecision = {
+  priority: "media",
+  status: "requiere_revision",
+  flags: ["revision_profesional_requerida"],
+  reasons: ["La salida tecnica debe ser revisada por un profesional."],
+  humanReviewRequired: true,
+};
 
 function App() {
   const [health, setHealth] = useState("consultando");
@@ -12,17 +26,25 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
   const [demoMode, setDemoMode] = useState(false);
-  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(sampleRun.review.status);
-  const [observations, setObservations] = useState(sampleRun.review.observations);
+  const [overlayFailed, setOverlayFailed] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(sampleRun.review?.status ?? "pendiente");
+  const [observations, setObservations] = useState(sampleRun.review?.observations ?? "");
 
-  const worklist = useMemo(() => [selectedRun], [selectedRun]);
+  const safeRun = useMemo(() => normalizeRun(selectedRun), [selectedRun]);
+  const agentDecision = safeRun.agentDecision ?? sampleRun.agentDecision ?? fallbackAgentDecision;
+  const measurements = safeRun.measurements ?? [];
+  const review = safeRun.review ?? sampleRun.review ?? fallbackReview;
+  const runId = safeRun.runId ?? sampleRun.runId ?? fallbackRunId;
+  const caseId = safeRun.caseId ?? sampleRun.caseId;
+  const worklist = useMemo(() => [safeRun], [safeRun]);
 
   useEffect(() => {
     async function bootstrap() {
       try {
         const [healthResponse, modelResponse] = await Promise.all([getHealth(), getModels()]);
-        setHealth(healthResponse.status);
+        setHealth(healthResponse.status ?? "sin_estado");
         setModels(modelResponse);
       } catch (bootstrapError) {
         setError(bootstrapError instanceof Error ? bootstrapError.message : "No se pudo consultar el backend");
@@ -35,21 +57,23 @@ function App() {
   }, []);
 
   useEffect(() => {
-    setReviewStatus(selectedRun.review.status);
-    setObservations(selectedRun.review.observations);
-  }, [selectedRun]);
+    setReviewStatus(review.status ?? "pendiente");
+    setObservations(review.observations ?? "");
+    setOverlayFailed(false);
+  }, [review.status, review.observations, safeRun.overlayPath]);
 
   async function handleRunDemo() {
     setLoading(true);
     setError("");
+    setInfo("");
     try {
       const response = await runPipeline({
-        caseId: sampleRun.caseId,
-        plane: sampleRun.plane,
-        modelKey: sampleRun.modelKey,
+        caseId: sampleRun.caseId ?? "CASE-DEMO-0142",
+        plane: sampleRun.plane ?? "sagittal",
+        modelKey: sampleRun.modelKey ?? "pfi-segmentation-sagittal-v1",
         imageRef: "demo/local-reference",
       });
-      const report = await getAgentReport(response.runId);
+      const report = await getAgentReport(response.runId ?? sampleRun.runId ?? fallbackRunId);
       setSelectedRun(report);
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "No se pudo ejecutar el caso demo");
@@ -62,16 +86,20 @@ function App() {
   async function handleSaveReview() {
     setSaving(true);
     setError("");
+    setInfo("");
     try {
-      const review = await updateReview(selectedRun.runId, {
+      const updatedReview = await updateReview(runId, {
         status: reviewStatus,
         observations,
         reviewer: "profesional-revisor",
       });
       setSelectedRun((current) => ({
         ...current,
-        review,
+        review: updatedReview,
       }));
+      if (isDemoMode()) {
+        setInfo("Revision guardada en modo demo local porque el backend no confirmo la operacion.");
+      }
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "No se pudo guardar la revision");
     } finally {
@@ -98,22 +126,23 @@ function App() {
       </section>
 
       {demoMode && <div className="notice">Modo demo local activo: el backend no respondio o VITE_USE_MOCK=true.</div>}
+      {info && <div className="notice">{info}</div>}
       {error && <div className="error-box">{error}</div>}
 
       <section className="status-grid">
         <article className="card">
           <span className="label">Backend Spring Boot</span>
           <strong>{health}</strong>
-          <small>Base URL: {import.meta.env.VITE_API_BASE_URL || "http://localhost:8080"}</small>
+          <small>Base URL: {API_BASE_URL}</small>
         </article>
         <article className="card">
           <span className="label">Modelos disponibles</span>
           <strong>{models.length}</strong>
-          <small>{models.filter((model) => model.enabled).length} habilitados para uso asistivo</small>
+          <small>{models.filter((model) => model.enabled !== false).length} habilitados para uso asistivo</small>
         </article>
         <article className="card">
           <span className="label">Revision</span>
-          <strong>{selectedRun.review.status}</strong>
+          <strong>{review.status}</strong>
           <small>Validacion profesional obligatoria</small>
         </article>
       </section>
@@ -128,10 +157,10 @@ function App() {
             {worklist.map((run) => (
               <button key={run.runId} className="case-row active" onClick={() => setSelectedRun(run)}>
                 <span>
-                  <strong>{run.caseId}</strong>
-                  <small>{run.plane} · {run.modelKey}</small>
+                  <strong>{run.caseId ?? "caso-demo"}</strong>
+                  <small>{run.plane ?? "sagittal"} - {run.modelKey ?? "modelo-demo"}</small>
                 </span>
-                <span className={`badge priority-${run.agentDecision.priority}`}>{run.agentDecision.priority}</span>
+                <span className={`badge priority-${run.agentDecision?.priority ?? "media"}`}>{run.agentDecision?.priority ?? "media"}</span>
               </button>
             ))}
           </div>
@@ -141,32 +170,32 @@ function App() {
           <article className="card detail-card">
             <div className="section-heading">
               <h2>Detalle de caso</h2>
-              <span className={`badge status-${selectedRun.review.status}`}>{selectedRun.review.status}</span>
+              <span className={`badge status-${review.status ?? "pendiente"}`}>{review.status ?? "pendiente"}</span>
             </div>
             <div className="detail-grid">
-              <div><span className="label">Run ID</span><strong>{selectedRun.runId}</strong></div>
-              <div><span className="label">Caso</span><strong>{selectedRun.caseId}</strong></div>
-              <div><span className="label">Plano</span><strong>{selectedRun.plane}</strong></div>
-              <div><span className="label">Modelo</span><strong>{selectedRun.modelKey}</strong></div>
+              <div><span className="label">Run ID</span><strong>{runId}</strong></div>
+              <div><span className="label">Caso</span><strong>{caseId}</strong></div>
+              <div><span className="label">Plano</span><strong>{safeRun.plane ?? "sagittal"}</strong></div>
+              <div><span className="label">Modelo</span><strong>{safeRun.modelKey ?? "modelo-demo"}</strong></div>
             </div>
           </article>
 
           <article className="card">
             <div className="section-heading">
               <h2>Panel agente</h2>
-              <span className={`badge priority-${selectedRun.agentDecision.priority}`}>{selectedRun.agentDecision.priority}</span>
+              <span className={`badge priority-${agentDecision.priority ?? "media"}`}>{agentDecision.priority ?? "media"}</span>
             </div>
             <p className="assistive-note">
-              Estado: {selectedRun.agentDecision.status}. Requiere revision profesional:{" "}
-              {selectedRun.agentDecision.humanReviewRequired ? "si" : "no"}.
+              Estado: {agentDecision.status ?? "requiere_revision"}. Requiere revision profesional:{" "}
+              {agentDecision.humanReviewRequired !== false ? "si" : "no"}.
             </p>
             <div className="flag-row">
-              {selectedRun.agentDecision.flags.map((flag) => (
+              {(agentDecision.flags ?? []).map((flag) => (
                 <span className="flag" key={flag}>{flag}</span>
               ))}
             </div>
             <ul className="reason-list">
-              {selectedRun.agentDecision.reasons.map((reason) => (
+              {(agentDecision.reasons ?? []).map((reason) => (
                 <li key={reason}>{reason}</li>
               ))}
             </ul>
@@ -176,41 +205,50 @@ function App() {
             <article className="card">
               <div className="section-heading">
                 <h2>Evidencia visual</h2>
-                <span>Overlay</span>
+                <span>{safeRun.overlayPath ? "Overlay disponible" : "Sin overlay"}</span>
               </div>
-              <div className="overlay-box">
-                <div className="scan-frame">
-                  <div className="overlay-line line-a" />
-                  <div className="overlay-line line-b" />
-                  <div className="overlay-area" />
+              {isRemoteUrl(safeRun.overlayPath) && !overlayFailed ? (
+                <img className="overlay-image" src={safeRun.overlayPath} alt="Overlay de evidencia visual" onError={() => setOverlayFailed(true)} />
+              ) : (
+                <div className="overlay-box">
+                  <div className="scan-frame">
+                    <div className="overlay-line line-a" />
+                    <div className="overlay-line line-b" />
+                    <div className="overlay-area" />
+                  </div>
+                  {safeRun.overlayPath && <code className="overlay-path">{safeRun.overlayPath}</code>}
                 </div>
-              </div>
+              )}
               <p className="assistive-note">Representacion visual para revisar regiones marcadas por el pipeline tecnico.</p>
             </article>
 
             <article className="card">
               <div className="section-heading">
                 <h2>Mediciones</h2>
-                <span>{selectedRun.measurements.length}</span>
+                <span>{measurements.length}</span>
               </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Indicador</th>
-                    <th>Valor</th>
-                    <th>Conf.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedRun.measurements.map((measurement) => (
-                    <tr key={measurement.id}>
-                      <td>{measurement.label}</td>
-                      <td>{measurement.value} {measurement.unit}</td>
-                      <td>{measurement.confidence ? `${Math.round(measurement.confidence * 100)}%` : "N/A"}</td>
+              {measurements.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Indicador</th>
+                      <th>Valor</th>
+                      <th>Conf.</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {measurements.map((measurement, index) => (
+                      <tr key={measurement.id ?? `measurement-${index}`}>
+                        <td>{measurement.label ?? "Indicador tecnico"}</td>
+                        <td>{measurement.value ?? "N/A"} {measurement.unit ?? ""}</td>
+                        <td>{measurement.confidence ? `${Math.round(measurement.confidence * 100)}%` : "N/A"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="assistive-note">No hay mediciones disponibles para este reporte.</p>
+              )}
             </article>
           </div>
 

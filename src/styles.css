@@ -259,6 +259,26 @@ h2 {
   padding: 18px;
 }
 
+.overlay-image {
+  background: #f3f6f8;
+  border: 1px solid #d5dde4;
+  border-radius: 8px;
+  display: block;
+  max-height: 320px;
+  object-fit: contain;
+  width: 100%;
+}
+
+.overlay-path {
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 6px;
+  color: #263747;
+  display: block;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+  padding: 8px;
+}
+
 .scan-frame {
   background:
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 15px),
