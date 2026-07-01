@@ -1,5 +1,5 @@
 import { sampleModels, sampleRun } from "./mock/sampleRun";
-import type { AgentDecision, AiModel, AiRunResponse, PipelineRunRequest, ReviewStatusResponse, ReviewUpdateRequest } from "./types";
+import type { AgentDecision, AiModel, AiRunResponse, Measurement, PipelineRunRequest, ReviewStatusResponse, ReviewUpdateRequest } from "./types";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
@@ -50,9 +50,35 @@ function normalizeReview(runId: string, review?: ReviewStatusResponse): ReviewSt
   return {
     runId: review?.runId ?? runId,
     status: review?.status ?? "pendiente",
-    observations: review?.observations ?? "",
-    reviewedAt: review?.reviewedAt,
+    observations: review?.observations ?? review?.notes ?? "",
+    notes: review?.notes ?? review?.observations ?? "",
+    reviewer: review?.reviewer,
+    reviewedAt: review?.reviewedAt ?? review?.updatedAt,
+    updatedAt: review?.updatedAt ?? review?.reviewedAt,
   };
+}
+
+function normalizeMeasurements(value: unknown): Measurement[] {
+  if (Array.isArray(value)) {
+    return value as Measurement[];
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(record.values)) {
+      return record.values as Measurement[];
+    }
+    if (typeof record.status === "string" || typeof record.description === "string") {
+      return [{
+        id: "pipeline-status",
+        label: typeof record.description === "string" ? record.description : "Estado del pipeline tecnico",
+        value: typeof record.status === "string" ? record.status : "pendiente",
+        unit: "",
+      }];
+    }
+  }
+
+  return sampleRun.measurements ?? [];
 }
 
 export function normalizeRun(run?: AiRunResponse): AiRunResponse {
@@ -69,7 +95,7 @@ export function normalizeRun(run?: AiRunResponse): AiRunResponse {
       reasons: run?.agentDecision?.reasons ?? sampleAgentDecision.reasons,
       humanReviewRequired: run?.agentDecision?.humanReviewRequired ?? true,
     },
-    measurements: run?.measurements ?? sampleRun.measurements,
+    measurements: normalizeMeasurements(run?.measurements),
     review: normalizeReview(runId, run?.review),
   };
 }
@@ -90,7 +116,14 @@ async function request<T>(path: string, init?: RequestInit, fallback?: () => T):
     });
 
     if (!response.ok) {
-      throw new Error(`Backend respondio ${response.status}`);
+      let backendMessage = "";
+      try {
+        const errorBody = await response.json();
+        backendMessage = typeof errorBody.message === "string" ? `: ${errorBody.message}` : "";
+      } catch {
+        backendMessage = "";
+      }
+      throw new Error(`Backend respondio ${response.status}${backendMessage}`);
     }
 
     demoMode = false;
@@ -150,7 +183,12 @@ export async function updateReview(runId: string, payload: ReviewUpdateRequest):
     `/api/ai/review/${runId}`,
     {
       method: "PATCH",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        status: payload.status,
+        notes: payload.notes ?? payload.observations,
+        observations: payload.observations,
+        reviewer: payload.reviewer,
+      }),
     },
     () => {
       mockRun = {
@@ -159,10 +197,11 @@ export async function updateReview(runId: string, payload: ReviewUpdateRequest):
           runId,
           status: payload.status,
           observations: payload.observations,
+          notes: payload.notes ?? payload.observations,
           reviewedAt: new Date().toISOString(),
         },
       };
       return mockRun.review ?? normalizeReview(runId, undefined);
     },
-  );
+  ).then((review) => normalizeReview(runId, review));
 }
