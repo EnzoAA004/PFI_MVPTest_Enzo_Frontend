@@ -1,7 +1,7 @@
 import "./theme.css";
 import "./mri-theme.css";
 import { useEffect, useMemo, useState } from "react";
-import { getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
+import { getDemoStudyReview, getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { clearAuthSession, loadAuthSession } from "./authStorage";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
@@ -25,6 +25,7 @@ function App() {
   const [health, setHealth] = useState("consultando");
   const [models, setModels] = useState<AiModel[]>([]);
   const [selectedRun, setSelectedRun] = useState<AiRunResponse>(() => normalizeRun(sampleRun));
+  const [studyReview, setStudyReview] = useState<any | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>(() => normalizeRun(sampleRun).normalizedMeasurements ?? []);
   const [auditTrail, setAuditTrail] = useState<AuditEvent[]>(initialAuditTrail);
   const [loading, setLoading] = useState(false);
@@ -69,9 +70,14 @@ function App() {
 
     async function bootstrap() {
       try {
-        const [healthResponse, modelResponse] = await Promise.all([getHealth(), getModels()]);
+        const [healthResponse, modelResponse, demoStudyReview] = await Promise.all([
+          getHealth(),
+          getModels(),
+          getDemoStudyReview().catch(() => null),
+        ]);
         setHealth(healthResponse.status ?? "sin_estado");
         setModels(modelResponse);
+        setStudyReview(demoStudyReview);
       } catch (bootstrapError) {
         setError(bootstrapError instanceof Error ? bootstrapError.message : "No se pudo consultar el backend");
       }
@@ -190,6 +196,7 @@ function App() {
       {activeView === "review" && (
         <StudyReviewView
           run={safeRun}
+          studyReview={studyReview}
           measurements={measurements}
           auditTrail={auditTrail}
           saving={saving}
