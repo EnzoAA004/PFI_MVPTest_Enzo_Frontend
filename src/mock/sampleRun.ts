@@ -1,4 +1,4 @@
-import type { AiModel, AiRunResponse } from "../types";
+import type { AiModel, AiRunResponse } from "../appTypes";
 import { mockMeasurements } from "../data/mockMeasurements";
 
 export const sampleModels: AiModel[] = [
