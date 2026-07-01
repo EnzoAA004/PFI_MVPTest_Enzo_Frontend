@@ -1,12 +1,11 @@
-import type { ReactNode } from "react";
-import type { ViewKey } from "../types";
+import type { ViewKey } from "../appTypes";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 
 interface AppShellProps {
   activeView: ViewKey;
   onChangeView: (view: ViewKey) => void;
-  children: ReactNode;
+  children: any;
   health: string;
   modelCount: number;
   aiModuleAvailable?: boolean;
@@ -15,29 +14,12 @@ interface AppShellProps {
   loading: boolean;
 }
 
-export function AppShell({
-  activeView,
-  onChangeView,
-  children,
-  health,
-  modelCount,
-  aiModuleAvailable,
-  degradedMode,
-  onRunDemo,
-  loading,
-}: AppShellProps) {
+export function AppShell({ activeView, onChangeView, children, health, modelCount, aiModuleAvailable, degradedMode, onRunDemo, loading }: AppShellProps) {
   return (
     <div className="app-layout">
       <Sidebar activeView={activeView} onChangeView={onChangeView} />
       <main className="main-panel">
-        <Header
-          health={health}
-          modelCount={modelCount}
-          aiModuleAvailable={aiModuleAvailable}
-          degradedMode={degradedMode}
-          onRunDemo={onRunDemo}
-          loading={loading}
-        />
+        <Header health={health} modelCount={modelCount} aiModuleAvailable={aiModuleAvailable} degradedMode={degradedMode} onRunDemo={onRunDemo} loading={loading} />
         {children}
       </main>
     </div>
