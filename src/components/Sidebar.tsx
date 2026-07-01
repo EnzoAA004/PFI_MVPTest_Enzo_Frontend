@@ -1,4 +1,4 @@
-import type { ViewKey } from "../types";
+type ViewKey = "dashboard" | "review" | "history";
 
 const navItems: Array<{ key: ViewKey | "studies" | "queue" | "patients" | "settings"; label: string; badge?: string }> = [
   { key: "dashboard", label: "Dashboard" },
@@ -35,12 +35,7 @@ export function Sidebar({ activeView, onChangeView }: SidebarProps) {
         {navItems.map((item) => {
           const target = resolveTarget(item.key);
           return (
-            <button
-              className={activeView === target ? "active" : ""}
-              key={item.key}
-              onClick={() => onChangeView(target)}
-              type="button"
-            >
+            <button className={activeView === target ? "active" : ""} key={item.key} onClick={() => onChangeView(target)} type="button">
               <span>{item.label}</span>
               {item.badge && <em>{item.badge}</em>}
             </button>
