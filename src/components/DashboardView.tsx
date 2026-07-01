@@ -1,4 +1,4 @@
-import type { AuditEvent, StudyRow } from "../types";
+import type { AuditEvent, StudyRow } from "../appTypes";
 import { AuditTrail } from "./AuditTrail";
 import { MetricCard } from "./MetricCard";
 import { PrivacyBanner } from "./PrivacyBanner";
