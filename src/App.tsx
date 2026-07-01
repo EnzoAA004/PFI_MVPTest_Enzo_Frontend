@@ -1,7 +1,9 @@
 import "./theme.css";
 import { useEffect, useMemo, useState } from "react";
 import { getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
+import { clearAuthSession, loadAuthSession } from "./authStorage";
 import { AppShell } from "./components/AppShell";
+import { AuthView } from "./components/AuthView";
 import { DashboardView } from "./components/DashboardView";
 import { PatientHistoryView } from "./components/PatientHistoryView";
 import { StudyReviewView } from "./components/StudyReviewView";
@@ -14,9 +16,10 @@ import {
   saveProfessionalReview,
   saveRun,
 } from "./storage";
-import type { AiModel, AiRunResponse, AuditEvent, Measurement, ReviewStatus, ViewKey } from "./appTypes";
+import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, ReviewStatus, ViewKey } from "./appTypes";
 
 function App() {
+  const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [health, setHealth] = useState("consultando");
   const [models, setModels] = useState<AiModel[]>([]);
@@ -52,6 +55,7 @@ function App() {
   }, [safeRun]);
 
   useEffect(() => {
+    if (!session) return;
     const stored = loadReviewHistory();
     setAuditTrail(stored.auditTrail.length > 0 ? stored.auditTrail : initialAuditTrail);
 
@@ -73,10 +77,15 @@ function App() {
     }
 
     void bootstrap();
-  }, []);
+  }, [session]);
 
   function recordAudit(action: string, detail: string, actor = "Reviewer") {
     setAuditTrail(appendAuditEvent({ action, detail, actor }));
+  }
+
+  function logout() {
+    clearAuthSession();
+    setSession(null);
   }
 
   async function handleRunDemo() {
@@ -128,16 +137,13 @@ function App() {
         status,
         notes,
         observations: notes,
-        reviewer: "Reviewer",
+        reviewer: session?.user.fullName ?? "Reviewer",
       });
       setSelectedRun((current) => ({ ...current, review }));
       saveProfessionalReview(runId, review);
       recordAudit(status === "aceptado" ? "estado aprobado" : status === "observado" ? "estado observado" : "revision guardada", `Revision ${status} guardada para ${runId}.`);
-      if (isDemoMode()) {
-        setInfo("Revision guardada en modo demo local porque el backend no confirmo la operacion.");
-      } else {
-        setInfo("Revision guardada correctamente en el backend.");
-      }
+      if (isDemoMode()) setInfo("Revision guardada en modo demo local porque el backend no confirmo la operacion.");
+      else setInfo("Revision guardada correctamente en el backend.");
       return review;
     } catch {
       const fallbackReview = {
@@ -145,7 +151,7 @@ function App() {
         status,
         notes,
         observations: notes,
-        reviewer: "Reviewer",
+        reviewer: session?.user.fullName ?? "Reviewer",
         updatedAt: new Date().toISOString(),
       };
       setSelectedRun((current) => ({ ...current, review: fallbackReview }));
@@ -158,6 +164,10 @@ function App() {
     }
   }
 
+  if (!session) {
+    return <AuthView onAuthenticated={setSession} />;
+  }
+
   return (
     <AppShell
       activeView={activeView}
@@ -168,6 +178,8 @@ function App() {
       degradedMode={safeRun.degradedMode}
       onRunDemo={handleRunDemo}
       loading={loading}
+      userName={session.user.fullName}
+      onLogout={logout}
     >
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
