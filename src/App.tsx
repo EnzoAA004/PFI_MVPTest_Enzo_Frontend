@@ -10,7 +10,7 @@ import { PatientHistoryView } from "./components/PatientHistoryView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { initialAuditTrail, patientStudies, worklistStudies } from "./data/mockStudies";
 import { sampleRun } from "./mock/sampleRun";
-import { appendBackendAudit, saveBackendMeasurements } from "./reviewPersistenceApi";
+import { appendBackendAudit, getBackendReviewSnapshot, saveBackendMeasurements } from "./reviewPersistenceApi";
 import {
   appendAuditEvent,
   loadReviewHistory,
@@ -71,14 +71,28 @@ function App() {
 
     async function bootstrap() {
       try {
-        const [healthResponse, modelResponse, demoStudyReview] = await Promise.all([
+        const [healthResponse, modelResponse, demoStudyReview, backendSnapshot] = await Promise.all([
           getHealth(),
           getModels(),
           getDemoStudyReview().catch(() => null),
+          getBackendReviewSnapshot().catch(() => null),
         ]);
         setHealth(healthResponse.status ?? "sin_estado");
         setModels(modelResponse);
         setStudyReview(demoStudyReview);
+        if (backendSnapshot?.auditTrail?.length) {
+          setAuditTrail(backendSnapshot.auditTrail);
+        }
+        const backendMeasurements = backendSnapshot?.measurementsByRunId?.[runId];
+        if (backendMeasurements?.length) {
+          setMeasurements(backendMeasurements);
+          saveMeasurementEdits(runId, backendMeasurements);
+        }
+        const backendReview = backendSnapshot?.reviews?.find((item) => item.runId === runId);
+        if (backendReview) {
+          setSelectedRun((current) => ({ ...current, review: backendReview }));
+          saveProfessionalReview(runId, backendReview);
+        }
       } catch (bootstrapError) {
         setError(bootstrapError instanceof Error ? bootstrapError.message : "No se pudo consultar el backend");
       }
