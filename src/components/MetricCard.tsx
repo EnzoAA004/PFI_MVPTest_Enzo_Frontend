@@ -7,7 +7,7 @@ interface MetricCardProps {
 
 export function MetricCard({ label, value, detail, tone = "blue" }: MetricCardProps) {
   return (
-    <article className={`metric-card metric-${tone}`}>
+    <article className={`metric-card metric-${tone}`} aria-label={label}>
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
