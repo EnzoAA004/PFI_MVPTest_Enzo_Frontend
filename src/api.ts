@@ -6,6 +6,7 @@ import type {
   AiRunResponse,
   Measurement,
   PipelineRunRequest,
+  Plane,
   Priority,
   RawMeasurements,
   ReviewStatusResponse,
@@ -27,6 +28,10 @@ function mapPriority(value?: string): Priority {
   return "media";
 }
 
+function normalizePlane(value: unknown): Plane | undefined {
+  return value === "axial" || value === "sagittal" ? value : undefined;
+}
+
 function normalizeModels(response: unknown): AiModel[] {
   if (Array.isArray(response)) return response as AiModel[];
 
@@ -37,7 +42,7 @@ function normalizeModels(response: unknown): AiModel[] {
     if (modelsValue && typeof modelsValue === "object") {
       return Object.entries(modelsValue).map(([key, value]) => {
         const model = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-        const plane = model.plane === "axial" || model.plane === "sagittal" ? model.plane : undefined;
+        const plane = normalizePlane(model.plane);
         return {
           key,
           name: typeof model.name === "string" ? model.name : key,
@@ -64,27 +69,82 @@ function normalizeReview(runId: string, review?: ReviewStatusResponse): ReviewSt
   };
 }
 
-function normalizeMeasurements(value: unknown): Measurement[] {
+function toMeasurement(value: unknown, index: number): Measurement {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return {
+    id: typeof record.id === "string" ? record.id : `measurement-${index}`,
+    label: typeof record.label === "string" ? record.label : "Indicador tecnico",
+    value: typeof record.value === "number" || typeof record.value === "string" ? record.value : "N/A",
+    unit: typeof record.unit === "string" ? record.unit : "",
+    confidence: typeof record.confidence === "number" ? record.confidence : undefined,
+    plane: normalizePlane(record.plane),
+    source: record.source === "Reviewer" || record.source === "AI" || record.source === "Placeholder" ? record.source : "AI",
+    status: record.status === "revisado" || record.status === "editado" || record.status === "pendiente" ? record.status : "pendiente",
+    outlier: Boolean(record.outlier),
+    placeholder: Boolean(record.placeholder),
+  };
+}
+
+function normalizeMeasurements(value: unknown): {
+  normalizedMeasurements: Measurement[];
+  measurementsStatus?: string;
+  measurementsDescription?: string;
+} {
   if (Array.isArray(value)) {
-    return value as Measurement[];
+    return { normalizedMeasurements: value.map(toMeasurement) };
   }
 
   if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    if (Array.isArray(record.values)) {
-      return record.values as Measurement[];
+    const record = value as RawMeasurements;
+    if (Array.isArray(record.values) && record.values.length > 0) {
+      return {
+        normalizedMeasurements: record.values.map(toMeasurement),
+        measurementsStatus: record.status,
+        measurementsDescription: record.description,
+      };
+    }
+    if (record.status === "pending_real_inference") {
+      return {
+        normalizedMeasurements: mockMeasurements,
+        measurementsStatus: record.status,
+        measurementsDescription: record.description,
+      };
     }
     if (typeof record.status === "string" || typeof record.description === "string") {
-      return [{
-        id: "pipeline-status",
-        label: typeof record.description === "string" ? record.description : "Estado del pipeline tecnico",
-        value: typeof record.status === "string" ? record.status : "pendiente",
-        unit: "",
-      }];
+      return {
+        normalizedMeasurements: [
+          {
+            id: "pipeline-status",
+            label: record.description ?? "Estado del pipeline tecnico",
+            value: record.status ?? "pendiente",
+            unit: "",
+            source: "Placeholder",
+            status: "pendiente",
+            placeholder: true,
+          },
+        ],
+        measurementsStatus: record.status,
+        measurementsDescription: record.description,
+      };
     }
   }
 
-  return sampleRun.measurements ?? [];
+  return { normalizedMeasurements: mockMeasurements };
+}
+
+function normalizeAgentDecision(agentDecision?: AgentDecision): AgentDecision {
+  const priority = mapPriority(agentDecision?.priority ?? agentDecision?.reviewPriority);
+  const flags = agentDecision?.flags ?? agentDecision?.agentReasons ?? [];
+  const reasons = agentDecision?.reasons ?? agentDecision?.agentReasons ?? flags;
+  return {
+    ...agentDecision,
+    status: agentDecision?.status ?? agentDecision?.agentStatus ?? "requiere_revision",
+    priority,
+    flags,
+    reasons,
+    humanReviewRequired: agentDecision?.humanReviewRequired ?? true,
+    notClinicalDiagnosis: agentDecision?.notClinicalDiagnosis ?? true,
+  };
 }
 
 export function normalizeRun(run?: AiRunResponse): AiRunResponse {
