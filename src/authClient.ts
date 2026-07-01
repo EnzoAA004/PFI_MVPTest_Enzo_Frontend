@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "./api";
-import { loadAuthSession, saveAuthSession } from "./authStorage";
+import { getCachedAuthSession, saveAuthSession } from "./authStorage";
 import type { AuthPendingResponse, AuthTokenResponse, RegisterRequest } from "./appTypes";
 
 async function authRequest<T>(path: string, body?: unknown): Promise<T> {
@@ -13,7 +13,7 @@ async function authRequest<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export function authHeaders(): Record<string, string> {
-  const session = loadAuthSession();
+  const session = getCachedAuthSession();
   if (!session?.accessToken) return {};
   return { Authorization: `Bearer ${session.accessToken}` };
 }
