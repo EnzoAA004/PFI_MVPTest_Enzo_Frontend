@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "./api";
-import { getCachedAuthSession, saveAuthSession } from "./authStorage";
+import { clearAuthSession, getCachedAuthSession, saveAuthSession } from "./authStorage";
 import type { AuthPendingResponse, AuthTokenResponse, RegisterRequest } from "./appTypes";
 
 async function authRequest<T>(path: string, body?: unknown): Promise<T> {
@@ -39,4 +39,19 @@ export async function verifyLogin(challengeId: string, code: string) {
 export async function createDemoDoctorSession() {
   const tokens = await authRequest<AuthTokenResponse>("/api/auth/demo-doctor");
   return saveAuthSession(tokens);
+}
+
+export async function refreshDoctorSession() {
+  const session = getCachedAuthSession();
+  if (!session?.refreshToken) throw new Error("No hay refresh token disponible");
+  const tokens = await authRequest<AuthTokenResponse>("/api/auth/refresh", { refreshToken: session.refreshToken });
+  return saveAuthSession(tokens);
+}
+
+export async function logoutDoctor() {
+  const session = getCachedAuthSession();
+  if (session?.refreshToken) {
+    await authRequest<{ status: string }>("/api/auth/logout", { refreshToken: session.refreshToken }).catch(() => ({ status: "local" }));
+  }
+  clearAuthSession();
 }
