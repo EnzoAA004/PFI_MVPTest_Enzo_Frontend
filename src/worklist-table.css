@@ -50,7 +50,7 @@
 
 .selectable-worklist tbody tr.selected-worklist-row {
   background: #f8fbff;
-  box-shadow: inset 0 0 0 1px rgba(191, 219, 254, .9);
+  box-shadow: inset 0 0 0 1px rgba(203, 213, 225, .62);
 }
 
 .selectable-worklist td small {
