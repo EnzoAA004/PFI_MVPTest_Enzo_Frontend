@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "../api";
+import { authHeaders } from "../authClient";
 import type { ViewKey } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
 
@@ -20,9 +21,22 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
   const showTechnicalReport = activeView === "review" && Boolean(currentRunId);
   const technicalReportUrl = currentRunId ? `${API_BASE_URL}/api/ai/agent/report/${currentRunId}` : "";
 
-  function openTechnicalReport() {
+  async function openTechnicalReport() {
     if (!technicalReportUrl) return;
-    window.open(technicalReportUrl, "_blank", "noopener,noreferrer");
+    try {
+      const response = await fetch(technicalReportUrl, {
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+      });
+      if (!response.ok) throw new Error(`Backend respondió ${response.status}`);
+      const payload = await response.json();
+      const formattedJson = JSON.stringify(payload, null, 2);
+      const blob = new Blob([formattedJson], { type: "application/json;charset=utf-8" });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (error) {
+      alert(error instanceof Error ? `No se pudo abrir el reporte técnico: ${error.message}` : "No se pudo abrir el reporte técnico.");
+    }
   }
 
   return (
@@ -38,7 +52,7 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
         </StatusBadge>
         <small title={API_BASE_URL}>{userName ?? "Reviewer"}</small>
         {showTechnicalReport && (
-          <button className="ghost-button" onClick={openTechnicalReport} title={technicalReportUrl} type="button">
+          <button className="ghost-button" onClick={() => void openTechnicalReport()} title="Abrir reporte técnico autenticado" type="button">
             Reporte técnico
           </button>
         )}
