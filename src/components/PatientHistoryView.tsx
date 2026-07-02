@@ -73,7 +73,7 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
 
   function PanelTitle({ id, title, children }: { id: string; title: string; children?: ReactNode }) {
     const isVisible = visible(id);
-    return <div className="section-title"><h2>{title}</h2><div className="panel-title-actions">{children}<button className="visibility-toggle" onClick={() => toggle(id)} type="button" aria-label={isVisible ? `Ocultar ${title}` : `Mostrar ${title}`}><VisibilityIcon visible={isVisible} /></button></div></div>;
+    return <div className="section-title"><h2>{title}</h2><div className="panel-title-actions">{children}<button className={`visibility-toggle ${isVisible ? "is-visible" : "is-hidden"}`} onClick={() => toggle(id)} type="button" aria-label={isVisible ? `Ocultar ${title}` : `Mostrar ${title}`} title={isVisible ? `Ocultar ${title}` : `Mostrar ${title}`}><VisibilityIcon visible={isVisible} /></button></div></div>;
   }
 
   function exportSummary() {

@@ -13,7 +13,7 @@ export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision 
         <h2>AI Agent Summary</h2>
         <div className="panel-title-actions">
           <StatusBadge tone="amber">{agentDecision?.priority ?? "media"}</StatusBadge>
-          <button className="visibility-toggle" onClick={() => setVisible((value) => !value)} type="button" aria-label={visible ? "Hide AI Agent Summary" : "Show AI Agent Summary"}><VisibilityIcon visible={visible} /></button>
+          <button className={`visibility-toggle ${visible ? "is-visible" : "is-hidden"}`} onClick={() => setVisible((value) => !value)} type="button" aria-label={visible ? "Hide AI Agent Summary" : "Show AI Agent Summary"} title={visible ? "Hide AI Agent Summary" : "Show AI Agent Summary"}><VisibilityIcon visible={visible} /></button>
         </div>
       </div>
       {visible ? (

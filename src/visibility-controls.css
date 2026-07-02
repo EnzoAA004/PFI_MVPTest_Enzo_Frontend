@@ -1,8 +1,19 @@
-.visibility-toggle{align-items:center!important;background:#fff!important;border:1px solid #cbd5e1!important;border-radius:10px!important;box-shadow:0 3px 10px rgba(15,23,42,.04)!important;color:#334155!important;display:inline-flex!important;font-size:0!important;height:30px!important;justify-content:center!important;min-width:30px!important;padding:0!important;position:relative!important}
-.visibility-toggle:hover{background:#eff6ff!important;border-color:#93c5fd!important;box-shadow:0 6px 16px rgba(37,99,235,.12)!important;color:#1d4ed8!important}
-.visibility-toggle::before{background:#fff!important;border:1.8px solid currentColor!important;border-radius:76% 18%!important;content:""!important;display:block!important;height:13px!important;transform:rotate(45deg)!important;width:13px!important}
-.visibility-toggle::after{background:currentColor!important;border-radius:50%!important;content:""!important;height:4px!important;left:50%!important;position:absolute!important;top:50%!important;transform:translate(-50%,-50%)!important;width:4px!important}
-.visibility-toggle .visibility-icon{display:block!important;height:1px!important;opacity:0!important;overflow:hidden!important;position:absolute!important;width:1px!important}
+.visibility-toggle{align-items:center!important;background:#ffffff!important;border:1px solid #d7e2ef!important;border-radius:10px!important;box-shadow:0 2px 8px rgba(15,23,42,.045)!important;color:#42546b!important;cursor:pointer!important;display:inline-flex!important;font-size:0!important;height:36px!important;justify-content:center!important;min-width:36px!important;padding:0!important;position:relative!important;transition:background .18s ease,border-color .18s ease,color .18s ease,box-shadow .18s ease,transform .18s ease!important;width:36px!important}
+.visibility-toggle:hover{background:#f8fbff!important;border-color:#bfd1e4!important;box-shadow:0 6px 16px rgba(15,23,42,.075)!important;color:#1f3a5a!important}
+.visibility-toggle:active{transform:scale(.97)!important}
+.visibility-toggle.is-visible{background:#eff6ff!important;border-color:#bfdbfe!important;color:#2563eb!important}
+.visibility-toggle.is-hidden{background:#ffffff!important;border-color:#d7e2ef!important;color:#64748b!important}
+.visibility-toggle::before,.visibility-toggle::after{content:none!important;display:none!important}
+.visibility-icon-svg{color:currentColor!important;display:block!important;flex:0 0 auto!important;height:18px!important;width:18px!important}
+.ios-switch{align-items:center!important;background:#d9dde4!important;border:none!important;border-radius:999px!important;box-shadow:inset 0 0 0 1px rgba(15,23,42,.06)!important;cursor:pointer!important;display:inline-flex!important;height:32px!important;min-width:52px!important;padding:0!important;position:relative!important;transition:background .2s ease,box-shadow .2s ease,opacity .18s ease!important;width:52px!important}
+.ios-switch.is-on{background:#67d85f!important}
+.ios-switch.is-off{background:#d9dde4!important}
+.ios-switch-thumb{background:#ffffff!important;border-radius:999px!important;box-shadow:0 2px 6px rgba(15,23,42,.22),0 1px 2px rgba(15,23,42,.1)!important;height:26px!important;left:3px!important;position:absolute!important;top:3px!important;transition:transform .2s ease!important;width:26px!important}
+.ios-switch.is-on .ios-switch-thumb{transform:translateX(20px)!important}
+.ios-switch:disabled{cursor:not-allowed!important;opacity:.56!important}
+.ios-switch.compact-switch{height:28px!important;min-width:46px!important;width:46px!important}
+.ios-switch.compact-switch .ios-switch-thumb{height:22px!important;width:22px!important}
+.ios-switch.compact-switch.is-on .ios-switch-thumb{transform:translateX(18px)!important}
 .selectable-worklist .clickable-row{cursor:pointer;transition:background .16s,box-shadow .16s,transform .16s}
 .selectable-worklist .clickable-row:hover{background:#f8fbff;box-shadow:inset 3px 0 0 #2563eb}
 .selectable-worklist .clickable-row:focus-visible{outline:2px solid #2563eb;outline-offset:-2px;background:#eff6ff}

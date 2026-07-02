@@ -394,7 +394,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         <h2>{title}</h2>
         <div className="panel-title-actions">
           {children}
-          <button className="visibility-toggle" onClick={() => togglePanel(panelId)} type="button" aria-label={visible ? `Ocultar ${title}` : `Mostrar ${title}`}>
+          <button className={`visibility-toggle ${visible ? "is-visible" : "is-hidden"}`} onClick={() => togglePanel(panelId)} type="button" aria-label={visible ? `Ocultar ${title}` : `Mostrar ${title}`} title={visible ? `Ocultar ${title}` : `Mostrar ${title}`}>
             <VisibilityIcon visible={visible} />
           </button>
         </div>
