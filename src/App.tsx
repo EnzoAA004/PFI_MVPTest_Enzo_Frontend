@@ -77,6 +77,11 @@ function reviewRequiresNotes(status: ReviewStatus, notes: string) {
   return (status === "observado" || status === "descartado") && notes.trim().length < 5;
 }
 
+function approvalWasCancelled(status: ReviewStatus) {
+  if (status !== "aceptado") return false;
+  return !window.confirm("Confirmo que revisé visualmente las máscaras, mediciones, trazabilidad del modelo y que esta aprobación corresponde a una revisión profesional humana. Esta salida no constituye diagnóstico clínico autónomo.");
+}
+
 function isBackendValidationError(error: unknown) {
   return error instanceof Error && (error.message.includes("400") || error.message.toLowerCase().includes("nota profesional"));
 }
@@ -308,6 +313,11 @@ function App() {
     const trimmedNotes = notes.trim();
     if (reviewRequiresNotes(status, trimmedNotes)) {
       setError("Para observar o descartar un caso, agregá una nota profesional descriptiva.");
+      setSaving(false);
+      return undefined;
+    }
+    if (approvalWasCancelled(status)) {
+      setInfo("Aprobación cancelada. No se guardaron cambios de estado.");
       setSaving(false);
       return undefined;
     }
