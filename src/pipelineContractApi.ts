@@ -6,8 +6,11 @@ export type PipelineContractSchema = {
   status?: string;
   purpose?: string;
   proxiedByBackend?: boolean;
+  aiModuleAvailable?: boolean;
+  degradedMode?: boolean;
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
+  message?: string;
   rootFields?: Record<string, string>;
   aiOutput?: Record<string, unknown>;
   quality?: Record<string, unknown>;
