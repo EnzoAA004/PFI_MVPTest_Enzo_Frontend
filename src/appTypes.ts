@@ -67,6 +67,38 @@ export type Measurement = {
   linkedLandmarks?: string[];
 };
 
+export type ReviewExportFormat = "json" | "csv" | "html";
+
+export type ReviewExportRequest = {
+  format: ReviewExportFormat;
+  caseId?: string;
+  subjectRef?: string;
+  studyDate?: string;
+  plane?: string;
+  modelKey?: string;
+  modelVersion?: string;
+  inferenceMode?: string;
+  modelReadiness?: string;
+  notes?: string;
+  reviewer?: string;
+  measurements?: Measurement[];
+};
+
+export type ReviewExportResponse = {
+  status: string;
+  format: ReviewExportFormat;
+  fileName: string;
+  mimeType: string;
+  content: string;
+  runId: string;
+  caseId: string;
+  deidentified: boolean;
+  rawImagesIncluded: boolean;
+  humanReviewRequired: boolean;
+  notClinicalDiagnosis: boolean;
+  generatedAt?: string;
+};
+
 export type StudyPoint = {
   x: number;
   y: number;
