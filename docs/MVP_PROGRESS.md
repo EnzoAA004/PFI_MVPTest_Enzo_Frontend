@@ -8,6 +8,7 @@
 - Se reemplazaron los iconos custom de visibilidad por `lucide-react`.
 - Se refino el estilo de botones de visualizacion con estados visible/oculto mas sobrios.
 - Se refino el estilo de switches tipo iOS para 2FA y aprobacion profesional.
+- Se corrigio la tarjeta de trazabilidad de corrida para que los datos largos no desborden sobre el visor.
 - Las filas de la worklist son seleccionables y tienen boton `Abrir revision`.
 - Dashboard e History muestran un estado de carga animado mientras hidratan datos desde backend/Postgres, evitando que aparezcan mocks antes del fetch.
 - Resultados IA y revision calcula delta entre IA y Reviewer, ordena outliers/cambios relevantes arriba y conserva persistencia solo al guardar.
