@@ -9,6 +9,18 @@ function boolText(value?: boolean) {
   return value ? "sí" : "no";
 }
 
+function statusTone(schema: PipelineContractSchema | null, error: string) {
+  if (error) return "amber";
+  if (schema?.degradedMode || schema?.status === "degraded_fallback") return "amber";
+  if (schema?.status === "stable") return "green";
+  return "blue";
+}
+
+function statusLabel(schema: PipelineContractSchema | null, loading: boolean) {
+  if (schema?.status === "degraded_fallback") return "fallback backend";
+  return schema?.status ?? (loading ? "consultando" : "sin datos");
+}
+
 export function PipelineContractCard() {
   const [schema, setSchema] = useState<PipelineContractSchema | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,14 +52,16 @@ export function PipelineContractCard() {
           <h2>Contrato técnico del pipeline</h2>
           <p className="muted compact-copy">Estructura estable que conecta AI Module, backend y frontend.</p>
         </div>
-        <StatusBadge tone={schema?.status === "stable" ? "green" : error ? "amber" : "blue"}>{schema?.status ?? (loading ? "consultando" : "sin datos")}</StatusBadge>
+        <StatusBadge tone={statusTone(schema, error)}>{statusLabel(schema, loading)}</StatusBadge>
       </div>
 
       {error && <div className="panel-hidden-placeholder">{error}</div>}
+      {schema?.degradedMode && <div className="panel-hidden-placeholder">Fallback servido por backend: {schema.message ?? "AI Module no disponible al consultar el contrato."}</div>}
 
       <dl className="info-list compact-info">
         <div><dt>Schema</dt><dd>{schema?.schemaVersion ?? "sin datos"}</dd></div>
         <div><dt>Proxy backend</dt><dd>{boolText(schema?.proxiedByBackend)}</dd></div>
+        <div><dt>AI Module disponible</dt><dd>{boolText(schema?.aiModuleAvailable)}</dd></div>
         <div><dt>Revisión humana</dt><dd>{boolText(schema?.humanReviewRequired)}</dd></div>
         <div><dt>No diagnóstico</dt><dd>{boolText(schema?.notClinicalDiagnosis)}</dd></div>
       </dl>
