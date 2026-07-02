@@ -139,6 +139,7 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
   const backendTone = degradedMode ? "amber" : aiModuleAvailable ? "green" : "red";
   const showTechnicalReport = activeView === "review" && Boolean(currentRunId);
   const technicalReportUrl = currentRunId ? `${API_BASE_URL}/api/ai/agent/report/${currentRunId}` : "";
+  const runButtonText = loading ? "Ejecutando..." : "Ejecutar análisis";
 
   async function openTechnicalReport() {
     if (!technicalReportUrl) return;
@@ -158,6 +159,15 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
     }
   }
 
+  async function copyRunId() {
+    if (!currentRunId) return;
+    try {
+      await navigator.clipboard.writeText(currentRunId);
+    } catch {
+      window.prompt("Copiar Run ID", currentRunId);
+    }
+  }
+
   return (
     <header className="top-header">
       <div className="search-box">
@@ -171,12 +181,17 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
         </StatusBadge>
         <small title={API_BASE_URL}>{userName ?? "Reviewer"}</small>
         {showTechnicalReport && (
-          <button className="ghost-button" onClick={() => void openTechnicalReport()} title="Abrir reporte técnico autenticado" type="button">
-            Reporte técnico
-          </button>
+          <>
+            <button className="ghost-button" onClick={() => void copyRunId()} title={currentRunId} type="button">
+              Copiar Run ID
+            </button>
+            <button className="ghost-button" onClick={() => void openTechnicalReport()} title="Abrir reporte técnico autenticado" type="button">
+              Reporte técnico
+            </button>
+          </>
         )}
-        <button className="primary-button" disabled={loading} onClick={onRunDemo} type="button">
-          {loading ? "Ejecutando..." : "Ejecutar caso demo"}
+        <button className="primary-button" disabled={loading} onClick={onRunDemo} title="Ejecutar análisis sobre el caso seleccionado o el demo por defecto" type="button">
+          {runButtonText}
         </button>
         {onLogout && <button className="ghost-button" onClick={onLogout} type="button">Salir</button>}
       </div>
