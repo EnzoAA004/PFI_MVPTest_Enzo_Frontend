@@ -15,9 +15,16 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
     onOpenReview(study);
   }
 
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTableRowElement>, study: StudyRow) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      void openStudy(study);
+    }
+  }
+
   return (
     <div className="table-wrap">
-      <table className="worklist-table">
+      <table className="worklist-table selectable-worklist">
         <thead>
           <tr>
             <th>Case ID</th>
@@ -27,12 +34,12 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
             <th>Model Status</th>
             <th>Review Status</th>
             <th>Priority</th>
-            <th>Actions</th>
+            <th>Open</th>
           </tr>
         </thead>
         <tbody>
           {studies.map((study) => (
-            <tr key={study.caseId}>
+            <tr key={study.caseId} className="clickable-row" tabIndex={0} onClick={() => void openStudy(study)} onKeyDown={(event) => handleKeyDown(event, study)}>
               <td><strong>{study.caseId}</strong><small>{study.modelKey}</small></td>
               <td>{study.patientId}</td>
               <td>{study.plane}</td>
@@ -40,7 +47,7 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
               <td><span className="model-state">{study.modelStatus}</span></td>
               <td><ReviewBadge status={study.reviewStatus} /></td>
               <td><PriorityBadge priority={study.priority} /></td>
-              <td><button className="ghost-button" onClick={() => void openStudy(study)} type="button">Review</button></td>
+              <td><button className="primary-button table-open-button" onClick={(event) => { event.stopPropagation(); void openStudy(study); }} type="button">Abrir revisión</button></td>
             </tr>
           ))}
         </tbody>
