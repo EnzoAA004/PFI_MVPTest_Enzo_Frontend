@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./api";
+import { authHeaders } from "./authClient";
 import type { Measurement, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyRow, StudyRun } from "./appTypes";
 import { worklistStudies } from "./data/mockStudies";
 import { mockMeasurements } from "./data/mockMeasurements";
@@ -16,6 +17,10 @@ function mapStatus(value?: string): ReviewStatus {
 
 function mapPlane(value: unknown): Plane {
   return value === "axial" ? "axial" : "sagittal";
+}
+
+function protectedHeaders() {
+  return { "Content-Type": "application/json", ...authHeaders() };
 }
 
 function normalizeStudy(value: unknown, index = 0): StudyRow {
@@ -64,7 +69,7 @@ function normalizeMeasurement(value: unknown, index: number): Measurement {
 
 export async function fetchStudyDetail(study: StudyRow): Promise<StudyDetailResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/studies/${study.caseId}`);
+    const response = await fetch(`${API_BASE_URL}/api/studies/${study.caseId}`, { headers: protectedHeaders() });
     if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
     const payload = await response.json() as Record<string, unknown>;
     const normalizedStudy = normalizeStudy(payload.study ?? study);
@@ -80,7 +85,7 @@ export async function fetchStudyDetail(study: StudyRow): Promise<StudyDetailResp
 
 export async function fetchStudyRuns(study: StudyRow): Promise<StudyRun[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/studies/${study.caseId}/runs`);
+    const response = await fetch(`${API_BASE_URL}/api/studies/${study.caseId}/runs`, { headers: protectedHeaders() });
     if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
     const payload = await response.json() as { runs?: unknown[] };
     return Array.isArray(payload.runs) ? payload.runs.map((run) => normalizeRun(run, study)) : [];
