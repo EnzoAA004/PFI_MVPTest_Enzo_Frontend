@@ -53,7 +53,10 @@ export type RawMeasurements = {
 export type Measurement = {
   id: string;
   label: string;
+  level?: string;
   value: number | string;
+  aiValue?: number | string;
+  reviewerValue?: number | string | null;
   unit: string;
   confidence?: number;
   plane?: Plane;
@@ -61,17 +64,86 @@ export type Measurement = {
   status: "pendiente" | "revisado" | "editado";
   outlier?: boolean;
   placeholder?: boolean;
+  linkedLandmarks?: string[];
+};
+
+export type StudyPoint = {
+  x: number;
+  y: number;
+};
+
+export type MaskContour = {
+  seriesId: string;
+  sliceIndex: number;
+  points: StudyPoint[];
+};
+
+export type StudySeries = {
+  id: string;
+  name: string;
+  plane: Plane;
+  sequence?: string;
+  sliceCount: number;
+  selectedSlice: number;
+  imageUrl?: string | null;
+  overlayUrl?: string | null;
+  overlayOpacity?: number;
+  status?: string;
+};
+
+export type StudyMask = {
+  id: string;
+  label: string;
+  className: string;
+  color: string;
+  confidence?: number;
+  editable?: boolean;
+  enabled?: boolean;
+  contours?: MaskContour[];
+};
+
+export type StudyLandmark = {
+  id: string;
+  label: string;
+  seriesId: string;
+  sliceIndex: number;
+  x: number;
+  y: number;
+  editable?: boolean;
+  linkedMaskId?: string | null;
+};
+
+export type AiOutputState = {
+  status?: string;
+  label?: string;
+  description?: string;
+  realInferenceAvailable?: boolean;
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+  agentDecision?: AgentDecision;
 };
 
 export type AiRunResponse = {
   runId?: string;
   caseId?: string;
+  studyId?: string;
+  patientId?: string;
+  studyDate?: string;
+  modality?: string;
+  bodyRegion?: string;
+  reviewStatus?: ReviewStatus;
   plane?: Plane;
   modelKey?: string;
+  modelVersion?: string;
   inputPath?: string;
   metadata?: Record<string, unknown>;
   agentDecision?: AgentDecision;
+  aiOutput?: AiOutputState;
+  series?: StudySeries[];
+  masks?: StudyMask[];
+  landmarks?: StudyLandmark[];
   measurements?: Measurement[] | RawMeasurements;
+  measurementValues?: Measurement[];
   normalizedMeasurements?: Measurement[];
   measurementsStatus?: string;
   measurementsDescription?: string;
