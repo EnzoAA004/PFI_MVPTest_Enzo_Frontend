@@ -1,4 +1,4 @@
-import type { AuditEvent, StudyRow } from "../appTypes";
+import type { AuditEvent, StudiesSummary, StudyRow } from "../appTypes";
 import { AuditTrail } from "./AuditTrail";
 import { MetricCard } from "./MetricCard";
 import { PrivacyBanner } from "./PrivacyBanner";
@@ -9,9 +9,15 @@ interface DashboardViewProps {
   studies: StudyRow[];
   auditTrail: AuditEvent[];
   onOpenReview: () => void;
+  summary?: StudiesSummary;
 }
 
-export function DashboardView({ studies, auditTrail, onOpenReview }: DashboardViewProps) {
+export function DashboardView({ studies, auditTrail, onOpenReview, summary }: DashboardViewProps) {
+  const total = summary?.total ?? studies.length;
+  const pending = summary?.pending ?? studies.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
+  const completed = summary?.completed ?? studies.filter((study) => study.reviewStatus === "aceptado").length;
+  const flagged = summary?.flagged ?? studies.filter((study) => study.priority === "alta" || study.reviewStatus === "observado").length;
+
   return (
     <div className="view-stack">
       <section className="page-heading">
@@ -26,10 +32,10 @@ export function DashboardView({ studies, auditTrail, onOpenReview }: DashboardVi
       </section>
 
       <section className="metric-grid">
-        <MetricCard label="Pending Reviews" value="14" detail="7 standard priority" tone="amber" />
-        <MetricCard label="AI-ready Studies" value="28" detail="technical pipeline available" tone="teal" />
+        <MetricCard label="Pending Reviews" value={String(pending)} detail={`${total} studies loaded from backend`} tone="amber" />
+        <MetricCard label="AI-ready Studies" value={String(completed)} detail="reviewed or ready for follow-up" tone="teal" />
         <MetricCard label="Model Status" value="Online" detail="backend + AI module monitored" tone="green" />
-        <MetricCard label="Flagged Cases" value="5" detail="requires closer inspection" tone="purple" />
+        <MetricCard label="Flagged Cases" value={String(flagged)} detail="requires closer inspection" tone="purple" />
       </section>
 
       <section className="dashboard-grid">
@@ -42,7 +48,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview }: DashboardVi
         </article>
         <aside className="right-rail">
           <article className="panel-card">
-            <div className="section-title"><h2>Latest Segmentation Preview</h2><span>CASE-DEMO-0142</span></div>
+            <div className="section-title"><h2>Latest Segmentation Preview</h2><span>{studies[0]?.caseId ?? "CASE-DEMO-0142"}</span></div>
             <div className="mini-mri">
               <span className="mini-vertebra v1" />
               <span className="mini-vertebra v2" />
