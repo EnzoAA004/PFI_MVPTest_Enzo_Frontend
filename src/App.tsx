@@ -1,7 +1,7 @@
 import "./theme.css";
 import "./mri-theme.css";
 import { useEffect, useMemo, useState } from "react";
-import { getDemoStudyReview, getHealth, getModels, getStudies, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
+import { getDemoStudyReview, getHealth, getModels, getStudies, getSystemDiagnostics, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { logoutDoctor } from "./authClient";
 import { loadAuthSession } from "./authStorage";
 import { AppShell } from "./components/AppShell";
@@ -15,7 +15,23 @@ import { sampleRun } from "./mock/sampleRun";
 import { appendBackendAudit, getBackendReviewSnapshot, saveBackendMeasurements } from "./reviewPersistenceApi";
 import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessionalReview, saveRun } from "./storage";
 import { fetchSubjectHistory } from "./subjectHistoryApi";
-import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, StudiesSummary, StudyRow, ViewKey } from "./appTypes";
+import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, StudiesSummary, StudyRow, SystemDiagnostics, ViewKey } from "./appTypes";
+
+type InferenceMode = "contract" | "real";
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
+}
+
+function inferenceModeFromDiagnostics(diagnostics?: SystemDiagnostics | null): InferenceMode {
+  const aiModule = asRecord(diagnostics?.aiModule);
+  const response = asRecord(aiModule?.response);
+  const models = asRecord(aiModule?.models);
+  const summary = asRecord(aiModule?.artifactSummary) ?? asRecord(response?.artifactSummary) ?? asRecord(models?.summary);
+  const defaultMode = String(summary?.defaultInferenceMode ?? aiModule?.defaultInferenceMode ?? "contract");
+  const readyForRealInference = summary?.readyForRealInference === true;
+  return defaultMode === "real" && readyForRealInference ? "real" : "contract";
+}
 
 function metricsForStudy(study: StudyRow, index: number) {
   const seed = Math.abs((study.caseId.charCodeAt(study.caseId.length - 1) || index) + index) % 7;
@@ -42,6 +58,7 @@ function App() {
   const [studyReview, setStudyReview] = useState<any | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>(() => normalizeRun(sampleRun).normalizedMeasurements ?? []);
   const [auditTrail, setAuditTrail] = useState<AuditEvent[]>(initialAuditTrail);
+  const [inferenceMode, setInferenceMode] = useState<InferenceMode>("contract");
   const [loading, setLoading] = useState(false);
   const [bootstrapLoading, setBootstrapLoading] = useState(Boolean(loadAuthSession()));
   const [saving, setSaving] = useState(false);
@@ -96,16 +113,18 @@ function App() {
 
     async function bootstrap() {
       try {
-        const [healthResponse, modelResponse, studyResponse, demoStudyReview, backendSnapshot] = await Promise.all([
+        const [healthResponse, modelResponse, studyResponse, demoStudyReview, backendSnapshot, diagnosticsResponse] = await Promise.all([
           getHealth(),
           getModels(),
           getStudies().catch(() => null),
           getDemoStudyReview().catch(() => null),
           getBackendReviewSnapshot().catch(() => null),
+          getSystemDiagnostics().catch(() => null),
         ]);
         if (cancelled) return;
         setHealth(healthResponse.status ?? "sin_estado");
         setModels(modelResponse);
+        setInferenceMode(inferenceModeFromDiagnostics(diagnosticsResponse));
         const subjectRef = studyResponse?.items?.[0]?.patientId ?? "PAT-0087";
         if (studyResponse?.items?.length) {
           setBackendStudies(studyResponse.items);
@@ -148,14 +167,27 @@ function App() {
   async function handleRunDemo() {
     setLoading(true); setError(""); setInfo("");
     try {
-      const response = await runPipeline({ caseId: sampleRun.caseId ?? "CASE-DEMO-0142", plane: sampleRun.plane ?? "sagittal", modelKey: "sagittal_spider", inputPath: "demo/CASE-DEMO-0142", metadata: { source: "frontend-review-workspace", uiVersion: "redesign-v1", frontendBaseUrl: window.location.origin } });
+      const activeInferenceMode = inferenceMode;
+      const response = await runPipeline({
+        caseId: sampleRun.caseId ?? "CASE-DEMO-0142",
+        plane: sampleRun.plane ?? "sagittal",
+        modelKey: "sagittal_spider",
+        inputPath: "demo/CASE-DEMO-0142",
+        metadata: {
+          source: "frontend-review-workspace",
+          uiVersion: "redesign-v1",
+          frontendBaseUrl: window.location.origin,
+          inferenceMode: activeInferenceMode,
+          requestedBy: session?.user.fullName ?? "Reviewer",
+        },
+      });
       const normalized = normalizeRun(response);
       setSelectedRun(normalized);
       setMeasurements(normalized.normalizedMeasurements ?? []);
       saveRun(normalized);
-      recordAudit("pipeline run generado", `${normalized.caseId} ejecutado. Run ID ${normalized.runId}.`, "System");
+      recordAudit("pipeline run generado", `${normalized.caseId} ejecutado. Run ID ${normalized.runId}. inferenceMode=${activeInferenceMode}.`, "System");
       recordAudit("reporte agente recuperado", "Respuesta normalizada para revision profesional.", "AI Agent");
-      setInfo(isDemoMode() ? "Modo demo local activo o fallback aplicado. La interfaz conserva el flujo de revision." : "Caso demo ejecutado contra el backend. La respuesta se muestra como salida tecnica revisable.");
+      setInfo(isDemoMode() ? "Modo demo local activo o fallback aplicado. La interfaz conserva el flujo de revision." : `Caso demo ejecutado contra el backend en modo ${activeInferenceMode}. La respuesta se muestra como salida tecnica revisable.`);
       setActiveView("review");
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : "No se pudo ejecutar el caso demo");
