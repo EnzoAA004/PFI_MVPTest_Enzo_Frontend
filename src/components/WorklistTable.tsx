@@ -1,4 +1,6 @@
 import type { StudyRow } from "../appTypes";
+import { fetchStudyDetail } from "../studyApi";
+import { saveSelectedStudyDetail, saveSelectedStudyFallback } from "../selectedStudyStorage";
 import { PriorityBadge, ReviewBadge } from "./StatusBadge";
 
 interface WorklistTableProps {
@@ -7,6 +9,12 @@ interface WorklistTableProps {
 }
 
 export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
+  async function openStudy(study: StudyRow) {
+    saveSelectedStudyFallback(study);
+    void fetchStudyDetail(study).then(saveSelectedStudyDetail).catch(() => undefined);
+    onOpenReview(study);
+  }
+
   return (
     <div className="table-wrap">
       <table className="worklist-table">
@@ -32,7 +40,7 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
               <td><span className="model-state">{study.modelStatus}</span></td>
               <td><ReviewBadge status={study.reviewStatus} /></td>
               <td><PriorityBadge priority={study.priority} /></td>
-              <td><button className="ghost-button" onClick={() => onOpenReview(study)} type="button">Review</button></td>
+              <td><button className="ghost-button" onClick={() => void openStudy(study)} type="button">Review</button></td>
             </tr>
           ))}
         </tbody>
