@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AgentDecision } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
+import { VisibilityIcon } from "./VisibilityIcon";
 
 export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision }) {
   const [visible, setVisible] = useState(true);
@@ -12,7 +13,7 @@ export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision 
         <h2>AI Agent Summary</h2>
         <div className="panel-title-actions">
           <StatusBadge tone="amber">{agentDecision?.priority ?? "media"}</StatusBadge>
-          <button className="visibility-toggle" onClick={() => setVisible((value) => !value)} type="button" aria-label={visible ? "Ocultar AI Agent Summary" : "Mostrar AI Agent Summary"}>{visible ? "👁" : "🙈"}</button>
+          <button className="visibility-toggle" onClick={() => setVisible((value) => !value)} type="button" aria-label={visible ? "Hide AI Agent Summary" : "Show AI Agent Summary"}><VisibilityIcon visible={visible} /></button>
         </div>
       </div>
       {visible ? (
@@ -30,7 +31,7 @@ export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision 
             {reasons.map((reason) => <li key={reason}>{reason}</li>)}
           </ul>
         </>
-      ) : <div className="panel-hidden-placeholder">Resumen oculto. Usá el ojo para desplegarlo.</div>}
+      ) : <div className="panel-hidden-placeholder">Panel hidden. Use the visibility control to expand it.</div>}
     </section>
   );
 }
