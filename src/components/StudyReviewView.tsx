@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { exportReviewReport } from "../api";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyMask, StudySeries } from "../appTypes";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
 import { AgentSummary } from "./AgentSummary";
@@ -37,6 +38,7 @@ type MeasurementRow = {
 };
 
 type DeltaSeverity = "none" | "low" | "medium" | "high";
+type ExportFormat = "json" | "csv" | "html";
 
 interface StudyReviewViewProps {
   run: AiRunResponse;
@@ -343,7 +345,43 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     };
   }
 
-  function exportJson() {
+  function backendExportPayload(format: ExportFormat) {
+    const payload = exportPayload();
+    return {
+      format,
+      caseId: payload.caseId,
+      subjectRef: payload.subjectRef,
+      studyDate: payload.studyDate,
+      plane: payload.plane,
+      modelKey: payload.modelKey,
+      modelVersion: payload.modelVersion,
+      inferenceMode: payload.inferenceMode,
+      modelReadiness: payload.modelReadiness,
+      notes: payload.notes,
+      measurements: resultRows.map((row) => ({
+        id: row.id,
+        label: `${row.label}${row.level ? ` ${row.level}` : ""}`,
+        value: row.reviewerValue || row.aiValue,
+        aiValue: row.aiValue,
+        reviewerValue: row.reviewerValue || null,
+        unit: row.unit,
+        confidence: row.confidence,
+        plane: displayRun.plane,
+        source: row.reviewerValue ? "Reviewer" : "AI",
+        status: row.status === "draft" ? "pendiente" : row.status,
+        outlier: Boolean(row.outlier),
+      })) as Measurement[],
+    };
+  }
+
+  async function tryBackendExport(format: ExportFormat) {
+    const runId = displayRun.runId ?? "local-run";
+    const response = await exportReviewReport(runId, backendExportPayload(format));
+    downloadTextFile(response.fileName, response.content, response.mimeType);
+  }
+
+  async function exportJson() {
+    try { await tryBackendExport("json"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
     const cleanPayload = {
       report: { title: "PFI Lumbar MRI - Resumen academico de revision", generatedAt: payload.generatedAt, caseId: payload.caseId, runId: payload.runId, reviewStatus: payload.reviewStatus, scope: payload.governance.scope },
@@ -358,7 +396,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-review-formatted.json`, JSON.stringify(cleanPayload, null, 2), "application/json;charset=utf-8");
   }
 
-  function exportCsv() {
+  async function exportCsv() {
+    try { await tryBackendExport("csv"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
     const headers = ["Caso", "Run", "Medición", "Nivel", "Valor IA", "Valor Reviewer", "Delta", "Unidad", "Prioridad", "Estado", "Outlier", "Confianza (%)"];
     const rows = payload.measurements.map((row) => [payload.caseId, payload.runId, row.label, row.level, row.aiValue, row.reviewerValue ?? "sin cambios", row.deltaFormatted, row.unit, row.severity, row.status, row.outlier ? "si" : "no", row.confidence !== undefined ? Math.round(row.confidence * 100) : ""]);
@@ -366,7 +405,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-mediciones.csv`, csv, "text/csv;charset=utf-8");
   }
 
-  function exportHtml() {
+  async function exportHtml() {
+    try { await tryBackendExport("html"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
     const measurementRows = payload.measurements.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong><br><span>${escapeHtml(row.level)}</span></td><td>${escapeHtml(row.aiValue)} ${escapeHtml(row.unit)}</td><td>${escapeHtml(row.reviewerValue ?? "sin cambios")}</td><td>${escapeHtml(row.deltaFormatted)}</td><td>${escapeHtml(row.status)}</td><td>${row.outlier ? "Si" : "No"}</td></tr>`).join("");
     const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>PFI Lumbar MRI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">PFI Lumbar MRI Analysis Platform</div><h1>Resumen academico de revision</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Run ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatus)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Outliers<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso academico/investigacion, datos de-identificados, requiere revision profesional y no constituye diagnostico clinico. No incluye imagenes crudas. Readiness: ${escapeHtml(payload.modelReadiness)}.</section><h2>Mediciones IA vs Reviewer</h2><table><thead><tr><th>Medicion</th><th>IA</th><th>Reviewer</th><th>Delta</th><th>Estado</th><th>Outlier</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Subject ref de-identificado: ${escapeHtml(payload.subjectRef)} · Study date: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
@@ -586,9 +626,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Observar</button>
                 </div>
                 <div className="review-actions compact-actions export-actions">
-                  <button className="ghost-button" onClick={exportHtml} type="button">Exportar informe</button>
-                  <button className="ghost-button" onClick={exportJson} type="button">Exportar JSON</button>
-                  <button className="ghost-button" onClick={exportCsv} type="button">Exportar CSV</button>
+                  <button className="ghost-button" onClick={() => void exportHtml()} type="button">Exportar informe</button>
+                  <button className="ghost-button" onClick={() => void exportJson()} type="button">Exportar JSON</button>
+                  <button className="ghost-button" onClick={() => void exportCsv()} type="button">Exportar CSV</button>
                 </div>
               </>
             ) : hiddenPlaceholder}
