@@ -117,10 +117,7 @@ export type AiOutputState = {
   status?: string;
   label?: string;
   description?: string;
-  inferenceMode?: string;
-  requestedInferenceMode?: string;
   realInferenceAvailable?: boolean;
-  modelReadiness?: string;
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
   agentDecision?: AgentDecision;
@@ -298,14 +295,18 @@ export type AuthSession = {
   tokenType?: string;
   expiresInSeconds?: number;
   user: AuthUser;
+  createdAt?: string;
+  storedAt?: string;
 };
 
 export type AuthPendingResponse = {
-  status: string;
+  status?: string;
   challengeId: string;
+  channel?: string;
   deliveryHint?: string;
   expiresInSeconds?: number;
   demoCode?: string;
+  devVerificationCode?: string;
   message?: string;
 };
 
@@ -320,64 +321,13 @@ export type RegisterRequest = {
   institution?: string;
 };
 
-export type DiagnosticBlock = Record<string, unknown> & {
-  available?: boolean;
-  connected?: boolean;
-  enabled?: boolean;
-  status?: string;
-  service?: string;
-  mode?: string;
-  message?: string;
-  defaultInferenceMode?: string;
-  artifactSummary?: AiArtifactSummary;
-  models?: AiModelsDiagnostics;
-  response?: Record<string, unknown>;
-};
-
-export type AiArtifactSummary = {
-  modelsRegistered?: number;
-  artifactsAvailable?: number;
-  artifactsMissing?: number;
-  readyForRealInference?: boolean;
-  defaultInferenceMode?: string;
-  humanReviewRequired?: boolean;
-  notClinicalDiagnosis?: boolean;
-};
-
-export type AiModelArtifact = {
-  path?: string | null;
-  exists?: boolean;
-  sizeBytes?: number;
-  sizeMb?: number;
-  extension?: string | null;
-};
-
-export type AiModelDiagnostic = Record<string, unknown> & {
-  key?: string;
-  version?: string;
-  plane?: Plane;
-  artifact?: AiModelArtifact;
-  readiness?: string;
-  inferenceModes?: Record<string, boolean>;
-  availableForRealInference?: boolean;
-  enabled?: boolean;
-  humanReviewRequired?: boolean;
-  notClinicalDiagnosis?: boolean;
-};
-
-export type AiModelsDiagnostics = Record<string, unknown> & {
-  models?: Record<string, AiModelDiagnostic>;
-  summary?: AiArtifactSummary;
-  paths?: Record<string, string>;
-};
-
 export type SystemDiagnostics = {
   status: string;
   checkedAt?: string;
-  backend?: DiagnosticBlock;
-  aiModule?: DiagnosticBlock;
-  database?: DiagnosticBlock;
-  auth?: DiagnosticBlock;
+  backend?: Record<string, unknown>;
+  aiModule?: Record<string, unknown>;
+  database?: Record<string, unknown>;
+  auth?: Record<string, unknown>;
   persistence?: Record<string, unknown>;
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
