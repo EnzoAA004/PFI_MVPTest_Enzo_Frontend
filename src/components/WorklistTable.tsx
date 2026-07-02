@@ -50,8 +50,18 @@ function sortLabel(active: boolean, direction: SortDirection) {
 export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("studyDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const selectedCaseId = loadSelectedStudyDetail()?.study?.caseId;
+  const selectedStudy = loadSelectedStudyDetail()?.study;
   const sortedStudies = useMemo(() => [...studies].sort((a, b) => compareStudy(a, b, sortKey, sortDirection)), [sortDirection, sortKey, studies]);
+
+  function rowIdentity(study: StudyRow) {
+    return study.runId ?? `${study.caseId}-${study.patientId}-${study.studyDate}-${study.plane}`;
+  }
+
+  function isSelected(study: StudyRow) {
+    if (!selectedStudy) return false;
+    if (selectedStudy.runId || study.runId) return selectedStudy.runId === study.runId;
+    return rowIdentity(selectedStudy) === rowIdentity(study);
+  }
 
   async function openStudy(study: StudyRow) {
     saveSelectedStudyFallback(study);
@@ -104,9 +114,9 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
         </thead>
         <tbody>
           {sortedStudies.map((study) => {
-            const selected = selectedCaseId === study.caseId;
+            const selected = isSelected(study);
             return (
-              <tr key={study.caseId} className={`clickable-row ${selected ? "selected-worklist-row" : ""}`} tabIndex={0} onClick={() => void openStudy(study)} onKeyDown={(event) => handleKeyDown(event, study)} aria-current={selected ? "true" : undefined}>
+              <tr key={rowIdentity(study)} className={`clickable-row ${selected ? "selected-worklist-row" : ""}`} tabIndex={0} onClick={() => void openStudy(study)} onKeyDown={(event) => handleKeyDown(event, study)} aria-current={selected ? "true" : undefined}>
                 <td><strong>{study.caseId}</strong><small>{study.runId ?? study.modelKey}</small></td>
                 <td>{study.patientId}</td>
                 <td>{study.plane}</td>

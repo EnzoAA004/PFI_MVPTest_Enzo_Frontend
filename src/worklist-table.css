@@ -45,12 +45,12 @@
 
 .selectable-worklist tbody tr:hover {
   background: #f8fbff;
-  box-shadow: inset 3px 0 0 rgba(37, 99, 235, .28);
+  box-shadow: inset 0 0 0 1px rgba(191, 209, 228, .7);
 }
 
 .selectable-worklist tbody tr.selected-worklist-row {
-  background: linear-gradient(90deg, rgba(37, 99, 235, .09), rgba(255, 255, 255, .98));
-  box-shadow: inset 4px 0 0 #2563eb, 0 5px 14px rgba(37, 99, 235, .08);
+  background: #f8fbff;
+  box-shadow: inset 0 0 0 1px rgba(191, 219, 254, .9);
 }
 
 .selectable-worklist td small {
