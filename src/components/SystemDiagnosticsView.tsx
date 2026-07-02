@@ -3,6 +3,7 @@ import { getSystemDiagnostics, warmupSystem } from "../api";
 import { getCurrentDoctor, listProfessionals, updateDoctorSettings, updateProfessionalApproval } from "../authClient";
 import type { AiArtifactSummary, AiModelDiagnostic, AiModelsDiagnostics, AuthUser, DiagnosticBlock, SystemDiagnostics } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
+import { ToggleSwitch } from "./ToggleSwitch";
 
 function toneFor(block?: DiagnosticBlock, rootStatus?: string) {
   if (block?.available === false || block?.connected === false || rootStatus === "degraded") return "amber";
@@ -105,6 +106,10 @@ function approvalTone(user: AuthUser) {
   return "green";
 }
 
+function isPending(user: AuthUser) {
+  return user.approved === false || user.roles.includes("PENDING_APPROVAL");
+}
+
 export function SystemDiagnosticsView() {
   const [diagnostics, setDiagnostics] = useState<SystemDiagnostics | null>(null);
   const [doctor, setDoctor] = useState<AuthUser | null>(null);
@@ -187,10 +192,10 @@ export function SystemDiagnosticsView() {
         <div className="section-title"><h2>Configuración de seguridad profesional</h2><StatusBadge tone={doctor?.twoFactorEnabled ? "green" : "blue"}>{doctor?.twoFactorEnabled ? "2FA activo" : "2FA opcional"}</StatusBadge></div>
         <p className="muted compact-copy">La doble verificación no se fuerza por defecto. Cada profesional puede habilitarla o deshabilitarla desde esta pantalla.</p>
         <dl className="info-list compact-info"><div><dt>Profesional</dt><dd>{doctor?.fullName ?? "sin datos"}</dd></div><div><dt>Email</dt><dd>{doctor?.email ?? "sin datos"}</dd></div><div><dt>Cuenta aprobada</dt><dd>{doctor?.approved === false ? "no" : "sí"}</dd></div><div><dt>Onboarding</dt><dd>{doctor?.onboardingCompleted ? "completo" : "pendiente"}</dd></div></dl>
-        <div className="review-actions compact-actions"><button className="primary-button" disabled={loading || !doctor} onClick={() => void toggleTwoFactor()} type="button">{doctor?.twoFactorEnabled ? "Deshabilitar doble verificación" : "Habilitar doble verificación"}</button></div>
+        <ToggleSwitch checked={Boolean(doctor?.twoFactorEnabled)} disabled={loading || !doctor} label="Doble verificación" description="Requerir un código adicional al iniciar sesión. El cambio se aplica en el próximo login." onChange={() => void toggleTwoFactor()} />
       </section>
 
-      {isAdmin && <section className="panel-card compact-card professional-admin-card"><div className="section-title"><h2>Aprobación de profesionales</h2><StatusBadge tone="blue">admin</StatusBadge></div><p className="muted compact-copy">Los profesionales nuevos quedan con acceso limitado hasta ser aprobados por un administrador.</p><div className="comparison-table unified-results-table professional-table"><div className="comparison-head"><span>Profesional</span><span>Email</span><span>Estado</span><span>Roles</span><span>Acción</span></div>{professionals.map((user) => <div className="comparison-row compact-comparison-row" key={user.email}><span><strong>{user.fullName}</strong><small>{user.licenseNumber || "sin matrícula"} · {user.specialty || "sin especialidad"}</small></span><span>{user.email}</span><span><StatusBadge tone={approvalTone(user)}>{user.approved === false || user.roles.includes("PENDING_APPROVAL") ? "pendiente" : "aprobado"}</StatusBadge></span><span>{user.roles.join(", ")}</span><span><button className="ghost-button table-open-button" disabled={loading || user.roles.includes("ADMIN")} onClick={() => void setApproval(user, !(user.approved === false || user.roles.includes("PENDING_APPROVAL")))} type="button">{user.approved === false || user.roles.includes("PENDING_APPROVAL") ? "Aprobar" : "Pausar"}</button></span></div>)}</div></section>}
+      {isAdmin && <section className="panel-card compact-card professional-admin-card"><div className="section-title"><h2>Aprobación de profesionales</h2><StatusBadge tone="blue">admin</StatusBadge></div><p className="muted compact-copy">Los profesionales nuevos quedan con acceso limitado hasta ser aprobados por un administrador.</p><div className="comparison-table unified-results-table professional-table"><div className="comparison-head"><span>Profesional</span><span>Email</span><span>Estado</span><span>Roles</span><span>Aprobación</span></div>{professionals.map((user) => <div className="comparison-row compact-comparison-row" key={user.email}><span><strong>{user.fullName}</strong><small>{user.licenseNumber || "sin matrícula"} · {user.specialty || "sin especialidad"}</small></span><span>{user.email}</span><span><StatusBadge tone={approvalTone(user)}>{isPending(user) ? "pendiente" : "aprobado"}</StatusBadge></span><span>{user.roles.join(", ")}</span><span><button type="button" role="switch" aria-checked={!isPending(user)} aria-label={`Aprobación ${user.fullName}`} className={!isPending(user) ? "ios-switch is-on compact-switch" : "ios-switch is-off compact-switch"} disabled={loading || user.roles.includes("ADMIN")} onClick={() => void setApproval(user, isPending(user))}><span className="ios-switch-thumb" /></button></span></div>)}</div></section>}
 
       <AiArtifactReadiness diagnostics={diagnostics} />
       <section className="panel-card compact-card"><div className="section-title"><h2>Condiciones de seguridad del MVP</h2></div><ul className="check-list"><li>Revisión profesional requerida: {diagnostics?.humanReviewRequired === false ? "no" : "sí"}</li><li>No constituye diagnóstico clínico: {diagnostics?.notClinicalDiagnosis === false ? "no" : "sí"}</li><li>Persistencia activa: {String(diagnostics?.persistence?.mode ?? "sin datos")}</li><li>Postgres habilitado: {diagnostics?.persistence?.postgresEnabled ? "sí" : "no"}</li></ul></section>
