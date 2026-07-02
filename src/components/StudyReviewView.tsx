@@ -92,6 +92,8 @@ export function StudyReviewView({
           outlier: Boolean(item.outlier),
           linkedLandmarks: [],
         }));
+  const hasReviewerDrafts = Object.keys(reviewerValues).some((key) => reviewerValues[key] !== "");
+  const reviewerDraftCount = Object.keys(reviewerValues).filter((key) => reviewerValues[key] !== "").length;
 
   function toggleMask(maskId: string) {
     setMaskVisibility((current) => ({ ...current, [maskId]: !(current[maskId] ?? true) }));
@@ -104,14 +106,30 @@ export function StudyReviewView({
 
   function updateReviewerValue(measurement: any, value: string) {
     setReviewerValues((current) => ({ ...current, [measurement.id]: value }));
+  }
+
+  function getPersistedReviewerValue(measurementId: string) {
+    const persisted = measurements.find((item) => item.id === measurementId && item.source === "Reviewer");
+    return persisted?.value ?? "";
+  }
+
+  function commitReviewerMeasurements() {
+    if (!hasReviewerDrafts) return;
+    const changedIds = new Set(Object.keys(reviewerValues).filter((key) => reviewerValues[key] !== ""));
     const nextMeasurements = measurements.map((item) =>
-      item.id === measurement.id ? { ...item, value, source: "Reviewer" as const, status: "editado" as const } : item,
+      changedIds.has(item.id)
+        ? { ...item, value: reviewerValues[item.id], source: "Reviewer" as const, status: "editado" as const }
+        : item,
     );
-    onMeasurementsChange(nextMeasurements, `${measurement.label} actualizado en AI vs Reviewer`);
+    onMeasurementsChange(nextMeasurements, `${changedIds.size} medicion/es guardadas por Reviewer desde AI vs Reviewer`);
+    setReviewerValues({});
   }
 
   async function save(status: ReviewStatus) {
     setReviewStatus(status);
+    if (hasReviewerDrafts) {
+      commitReviewerMeasurements();
+    }
     await onSaveReview(status, notes);
   }
 
@@ -240,17 +258,32 @@ export function StudyReviewView({
 
         <aside className="right-column">
           <section className="panel-card">
-            <div className="section-title"><h2>AI vs Reviewer</h2><StatusBadge tone="blue">editable</StatusBadge></div>
+            <div className="section-title">
+              <h2>AI vs Reviewer</h2>
+              <StatusBadge tone={hasReviewerDrafts ? "amber" : "blue"}>{hasReviewerDrafts ? "draft" : "editable"}</StatusBadge>
+            </div>
+            <p className="muted">Las mediciones editadas se guardan en backend/Postgres solo al hacer clic en Guardar cambios o aprobar la revision.</p>
             <div className="comparison-table">
               <div className="comparison-head"><span>Metric</span><span>AI value</span><span>Reviewer</span><span>Status</span></div>
-              {studyMeasurements.map((item: any) => (
-                <div className="comparison-row" key={item.id}>
-                  <span><strong>{item.label}</strong><small>{item.level ?? "L4-L5"} · {Math.round((item.confidence ?? 0) * 100)}%</small></span>
-                  <span>{item.aiValue ?? item.value} {item.unit}</span>
-                  <input value={reviewerValues[item.id] ?? item.reviewerValue ?? ""} onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder="review" />
-                  <span>{item.status ?? "pendiente"}</span>
-                </div>
-              ))}
+              {studyMeasurements.map((item: any) => {
+                const persistedReviewerValue = getPersistedReviewerValue(item.id);
+                const draftValue = reviewerValues[item.id];
+                const inputValue = draftValue ?? item.reviewerValue ?? persistedReviewerValue ?? "";
+                const status = draftValue !== undefined && draftValue !== "" ? "draft" : persistedReviewerValue ? "guardado" : item.status ?? "pendiente";
+                return (
+                  <div className="comparison-row" key={item.id}>
+                    <span><strong>{item.label}</strong><small>{item.level ?? "L4-L5"} · {Math.round((item.confidence ?? 0) * 100)}%</small></span>
+                    <span>{item.aiValue ?? item.value} {item.unit}</span>
+                    <input value={inputValue} onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder="review" />
+                    <span>{status}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="review-actions">
+              <button className="primary-button" disabled={!hasReviewerDrafts || saving} onClick={commitReviewerMeasurements} type="button">Guardar cambios de medidas</button>
+              <button className="ghost-button" disabled={!hasReviewerDrafts || saving} onClick={() => setReviewerValues({})} type="button">Descartar cambios</button>
+              {hasReviewerDrafts && <span className="muted">{reviewerDraftCount} cambio/s pendiente/s</span>}
             </div>
           </section>
           <MeasurementsPanel measurements={measurements} inferenceStatus={run.measurementsStatus} description={run.measurementsDescription} onChange={onMeasurementsChange} />
