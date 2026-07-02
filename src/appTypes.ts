@@ -244,6 +244,32 @@ export type PatientStudy = {
   };
 };
 
+export type PatientHistorySummary = {
+  totalStudies: number;
+  mostRecent?: string;
+  firstStudy?: string;
+};
+
+export type PatientHistoryGovernance = {
+  dataScope?: string;
+  rawImagesExport?: string;
+  derivedMetricsExport?: string;
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+};
+
+export type PatientHistoryResponse = {
+  status: string;
+  source?: string;
+  subjectRef: string;
+  deidentified?: boolean;
+  studies: PatientStudy[];
+  summary?: PatientHistorySummary;
+  governance?: PatientHistoryGovernance;
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+};
+
 export type ReviewHistoryState = {
   runs: AiRunResponse[];
   measurementsByRunId: Record<string, Measurement[]>;
@@ -263,54 +289,42 @@ export type AuthUser = {
   verified: boolean;
 };
 
-export type AuthPendingResponse = {
-  challengeId: string;
-  channel: string;
-  expiresInSeconds: number;
-  message: string;
-  devVerificationCode?: string | null;
-};
-
-export type AuthTokenResponse = {
+export type AuthSession = {
   accessToken: string;
   refreshToken: string;
-  tokenType: string;
-  expiresInSeconds: number;
+  tokenType?: string;
+  expiresInSeconds?: number;
   user: AuthUser;
 };
 
-export type AuthSession = AuthTokenResponse & {
-  createdAt: string;
+export type AuthPendingResponse = {
+  status: string;
+  challengeId: string;
+  deliveryHint?: string;
+  expiresInSeconds?: number;
+  demoCode?: string;
+  message?: string;
 };
+
+export type AuthTokenResponse = AuthSession;
 
 export type RegisterRequest = {
   fullName: string;
   email: string;
   password: string;
-  licenseNumber?: string;
-  specialty?: string;
+  licenseNumber: string;
+  specialty: string;
   institution?: string;
-};
-
-export type DiagnosticBlock = {
-  available?: boolean;
-  connected?: boolean;
-  enabled?: boolean;
-  status?: string;
-  mode?: string;
-  service?: string;
-  message?: string;
-  response?: Record<string, unknown>;
 };
 
 export type SystemDiagnostics = {
   status: string;
   checkedAt?: string;
-  backend?: DiagnosticBlock;
-  aiModule?: DiagnosticBlock;
-  database?: DiagnosticBlock;
-  auth?: DiagnosticBlock;
-  persistence?: DiagnosticBlock & { postgresEnabled?: boolean };
+  backend?: Record<string, unknown>;
+  aiModule?: Record<string, unknown>;
+  database?: Record<string, unknown>;
+  auth?: Record<string, unknown>;
+  persistence?: Record<string, unknown>;
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
 };
