@@ -1,9 +1,11 @@
 import type { StudyDetailResponse, StudyRow } from "./appTypes";
 
 const SELECTED_STUDY_KEY = "pfi.selectedStudyDetail";
+export const SELECTED_STUDY_EVENT = "pfi:selected-study-updated";
 
 export function saveSelectedStudyDetail(detail: StudyDetailResponse) {
   sessionStorage.setItem(SELECTED_STUDY_KEY, JSON.stringify(detail));
+  window.dispatchEvent(new Event(SELECTED_STUDY_EVENT));
 }
 
 export function loadSelectedStudyDetail(): StudyDetailResponse | null {
