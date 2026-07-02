@@ -1,4 +1,4 @@
-import { authHeaders } from "./authClient";
+import { authHeaders, refreshDoctorSession } from "./authClient";
 import { mockMeasurements } from "./data/mockMeasurements";
 import { worklistStudies } from "./data/mockStudies";
 import { sampleModels, sampleRun } from "./mock/sampleRun";
@@ -38,7 +38,27 @@ function normalizeAgentDecision(agentDecision?: AgentDecision): AgentDecision { 
 function normalizeStudyRow(value: unknown, index: number): StudyRow { const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {}; const fallback = worklistStudies[index] ?? worklistStudies[0]; return { caseId: typeof record.caseId === "string" ? record.caseId : fallback.caseId, patientId: typeof record.patientId === "string" ? record.patientId : typeof record.subjectRef === "string" ? record.subjectRef : fallback.patientId, plane: normalizePlane(record.plane) ?? fallback.plane, studyDate: typeof record.studyDate === "string" ? record.studyDate : fallback.studyDate, modelKey: typeof record.modelKey === "string" ? record.modelKey : fallback.modelKey, modelStatus: typeof record.modelStatus === "string" ? record.modelStatus : fallback.modelStatus, reviewStatus: mapReviewStatus(typeof record.reviewStatus === "string" ? record.reviewStatus : fallback.reviewStatus), priority: mapPriority(typeof record.priority === "string" ? record.priority : fallback.priority), runId: typeof record.runId === "string" ? record.runId : fallback.runId }; }
 function normalizeStudiesResponse(response: unknown): StudiesResponse { const record = response && typeof response === "object" ? (response as Record<string, unknown>) : {}; const itemsValue = Array.isArray(record.items) ? record.items : worklistStudies; const items = itemsValue.map(normalizeStudyRow); const pending = items.filter((item) => item.reviewStatus === "pendiente" || item.reviewStatus === "observado").length; const completed = items.filter((item) => item.reviewStatus === "aceptado").length; const flagged = items.filter((item) => item.priority === "alta" || item.reviewStatus === "observado").length; return { status: typeof record.status === "string" ? record.status : "ok", source: typeof record.source === "string" ? record.source : "frontend-normalized", items, summary: { total: items.length, pending, completed, flagged }, humanReviewRequired: true, notClinicalDiagnosis: true }; }
 export function normalizeRun(run?: AiRunResponse): AiRunResponse { const runId = run?.runId ?? sampleRun.runId ?? FALLBACK_RUN_ID; const measurementState = normalizeMeasurements(run?.measurements ?? run?.measurementValues ?? sampleRun.measurements); return { ...sampleRun, ...run, runId, caseId: run?.caseId ?? sampleRun.caseId ?? "CASE-DEMO-0142", plane: run?.plane ?? sampleRun.plane ?? "sagittal", modelKey: run?.modelKey ?? sampleRun.modelKey ?? "sagittal_spider", inputPath: run?.inputPath ?? "demo/CASE-DEMO-0142", metadata: run?.metadata ?? { source: "frontend-review-workspace", uiVersion: "redesign-v1" }, agentDecision: normalizeAgentDecision(run?.agentDecision ?? run?.aiOutput?.agentDecision ?? sampleRun.agentDecision), aiOutput: run?.aiOutput, series: run?.series, masks: run?.masks, landmarks: run?.landmarks, measurements: run?.measurements ?? sampleRun.measurements, measurementValues: measurementState.normalizedMeasurements, normalizedMeasurements: measurementState.normalizedMeasurements, measurementsStatus: measurementState.measurementsStatus, measurementsDescription: measurementState.measurementsDescription, overlayPath: run?.overlayPath ?? null, review: normalizeReview(runId, run?.review), aiModuleAvailable: run?.aiModuleAvailable ?? true, degradedMode: run?.degradedMode ?? false, humanReviewRequired: run?.humanReviewRequired ?? run?.agentDecision?.humanReviewRequired ?? run?.aiOutput?.humanReviewRequired ?? true, notClinicalDiagnosis: run?.notClinicalDiagnosis ?? run?.agentDecision?.notClinicalDiagnosis ?? run?.aiOutput?.notClinicalDiagnosis ?? true }; }
-async function request<T>(path: string, init?: RequestInit, fallback?: () => T, includeAuth = true): Promise<T> { if (USE_MOCK && fallback) { demoMode = true; return fallback(); } try { const response = await fetch(`${API_BASE_URL}${path}`, { headers: { "Content-Type": "application/json", ...(includeAuth ? authHeaders() : {}), ...init?.headers }, ...init }); if (!response.ok) throw new Error(`Backend respondio ${response.status}`); demoMode = false; return (await response.json()) as T; } catch (error) { if (fallback) { demoMode = true; return fallback(); } throw error; } }
+async function request<T>(path: string, init?: RequestInit, fallback?: () => T, includeAuth = true): Promise<T> {
+  if (USE_MOCK && fallback) { demoMode = true; return fallback(); }
+  const requestInit = () => ({ headers: { "Content-Type": "application/json", ...(includeAuth ? authHeaders() : {}), ...init?.headers }, ...init });
+  try {
+    let response = await fetch(`${API_BASE_URL}${path}`, requestInit());
+    if (response.status === 401 && includeAuth) {
+      try {
+        await refreshDoctorSession();
+        response = await fetch(`${API_BASE_URL}${path}`, requestInit());
+      } catch {
+        // If refresh fails, preserve the previous error/fallback behavior.
+      }
+    }
+    if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
+    demoMode = false;
+    return (await response.json()) as T;
+  } catch (error) {
+    if (fallback) { demoMode = true; return fallback(); }
+    throw error;
+  }
+}
 export async function getHealth() { return request<{ status: string; service?: string }>("/api/ai/health", undefined, () => ({ status: "demo", service: "mock-local" }), false); }
 export async function getModels(): Promise<AiModel[]> { const response = await request<unknown>("/api/ai/models", undefined, () => sampleModels, false); return normalizeModels(response); }
 export async function getStudies(): Promise<StudiesResponse> { const response = await request<unknown>("/api/studies", undefined, () => ({ status: "demo", items: worklistStudies })); return normalizeStudiesResponse(response); }
