@@ -2,7 +2,8 @@ import "./theme.css";
 import "./mri-theme.css";
 import { useEffect, useMemo, useState } from "react";
 import { getDemoStudyReview, getHealth, getModels, getStudies, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
-import { clearAuthSession, loadAuthSession } from "./authStorage";
+import { logoutDoctor } from "./authClient";
+import { loadAuthSession } from "./authStorage";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
 import { DashboardView } from "./components/DashboardView";
@@ -140,7 +141,9 @@ function App() {
     if (session) void appendBackendAudit(actor, action, detail).catch(() => undefined);
   }
 
-  function logout() { clearAuthSession(); setSession(null); }
+  function logout() {
+    void logoutDoctor().finally(() => setSession(null));
+  }
 
   async function handleRunDemo() {
     setLoading(true); setError(""); setInfo("");
