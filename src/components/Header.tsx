@@ -46,6 +46,7 @@ function renderTechnicalReportHtml(payload: any) {
       ? asRecord(payload.measurements).values
       : [];
   const json = JSON.stringify(payload, null, 2);
+  const filename = `pfi-technical-report-${String(payload.runId ?? "run")}.json`.replace(/[^a-zA-Z0-9._-]/g, "-");
   const rows = measurements.map((item: any) => `
     <tr>
       <td><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.level)}</span></td>
@@ -127,10 +128,17 @@ function renderTechnicalReportHtml(payload: any) {
 
     <div class="actions">
       <button class="primary" onclick="window.print()">Imprimir / guardar PDF</button>
-      <button onclick="navigator.clipboard.writeText(document.querySelector('pre').innerText)">Copiar JSON</button>
+      <button onclick="copyJson()">Copiar JSON</button>
+      <button onclick="downloadJson()">Descargar JSON</button>
     </div>
     <p class="footer">Reporte generado localmente desde la app usando fetch autenticado. El enlace blob no expone el JWT.</p>
   </main>
+  <script>
+    const jsonFilename = ${JSON.stringify(filename)};
+    function reportJson(){ return document.querySelector('pre').innerText; }
+    async function copyJson(){ try { await navigator.clipboard.writeText(reportJson()); } catch { window.prompt('Copiar JSON', reportJson()); } }
+    function downloadJson(){ const blob = new Blob([reportJson()], { type: 'application/json;charset=utf-8' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = jsonFilename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url); }
+  </script>
 </body>
 </html>`;
 }
