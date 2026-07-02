@@ -104,6 +104,35 @@ export type StudyRow = {
   runId?: string;
 };
 
+export type StudyRun = {
+  runId: string;
+  caseId: string;
+  plane: Plane;
+  modelKey: string;
+  modelStatus: string;
+  reviewStatus: ReviewStatus;
+  measurementCount?: number;
+};
+
+export type StudyDetailResponse = {
+  status: string;
+  study: StudyRow;
+  review?: ReviewStatusResponse;
+  measurements?: Measurement[];
+  runs?: StudyRun[];
+  auditTrail?: AuditEvent[];
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+};
+
+export type StudyRunsResponse = {
+  status: string;
+  caseId: string;
+  runs: StudyRun[];
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+};
+
 export type StudiesSummary = {
   total: number;
   pending: number;
