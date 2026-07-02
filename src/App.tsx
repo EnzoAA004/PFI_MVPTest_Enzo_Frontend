@@ -322,7 +322,7 @@ function App() {
   if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
 
   return (
-    <AppShell activeView={activeView} onChangeView={setActiveView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onRunDemo={handleRunDemo} loading={loading} userName={session.user.fullName} onLogout={logout}>
+    <AppShell activeView={activeView} onChangeView={setActiveView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onRunDemo={handleRunDemo} loading={loading} userName={session.user.fullName} onLogout={logout}>
       {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
