@@ -2,12 +2,14 @@ import "./theme.css";
 import "./mri-theme.css";
 import { useEffect, useMemo, useState } from "react";
 import { getDemoStudyReview, getHealth, getModels, getStudies, getSystemDiagnostics, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
-import { logoutDoctor } from "./authClient";
+import { logoutDoctor, updateDoctorSettings } from "./authClient";
 import { hydrateAuthSession, loadAuthSession } from "./authStorage";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
 import { DashboardView } from "./components/DashboardView";
+import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { PatientHistoryView } from "./components/PatientHistoryView";
+import { PendingApprovalView } from "./components/PendingApprovalView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { SystemDiagnosticsView } from "./components/SystemDiagnosticsView";
 import { initialAuditTrail, patientStudies, worklistStudies } from "./data/mockStudies";
@@ -63,6 +65,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [bootstrapLoading, setBootstrapLoading] = useState(Boolean(loadAuthSession()));
   const [saving, setSaving] = useState(false);
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
 
@@ -97,6 +100,8 @@ function App() {
           : patientStudies;
   const shouldShowDataLoading = bootstrapLoading && backendStudies.length === 0;
   const historySubjectRef = patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? "PAT-0087";
+  const pendingApproval = Boolean(session && (session.user.approved === false || session.user.roles.includes("PENDING_APPROVAL")));
+  const needsOnboarding = Boolean(session && session.user.approved !== false && !session.user.roles.includes("PENDING_APPROVAL") && session.user.onboardingCompleted === false);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,7 +118,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || pendingApproval) return;
     let cancelled = false;
     const stored = loadReviewHistory();
     setAuditTrail(stored.auditTrail.length > 0 ? stored.auditTrail : initialAuditTrail);
@@ -168,7 +173,7 @@ function App() {
 
     void bootstrap();
     return () => { cancelled = true; };
-  }, [session]);
+  }, [session, pendingApproval]);
 
   function recordAudit(action: string, detail: string, actor = "Reviewer") {
     setAuditTrail(appendAuditEvent({ action, detail, actor }));
@@ -177,6 +182,18 @@ function App() {
 
   function logout() {
     void logoutDoctor().finally(() => setSession(null));
+  }
+
+  async function completeOnboarding() {
+    setOnboardingSaving(true);
+    try {
+      const user = await updateDoctorSettings({ onboardingCompleted: true });
+      setSession((current) => current ? { ...current, user } : current);
+    } catch {
+      setSession((current) => current ? { ...current, user: { ...current.user, onboardingCompleted: true } } : current);
+    } finally {
+      setOnboardingSaving(false);
+    }
   }
 
   async function handleRunDemo() {
@@ -188,13 +205,7 @@ function App() {
         plane: sampleRun.plane ?? "sagittal",
         modelKey: "sagittal_spider",
         inputPath: "demo/CASE-DEMO-0142",
-        metadata: {
-          source: "frontend-review-workspace",
-          uiVersion: "redesign-v1",
-          frontendBaseUrl: window.location.origin,
-          inferenceMode: activeInferenceMode,
-          requestedBy: session?.user.fullName ?? "Reviewer",
-        },
+        metadata: { source: "frontend-review-workspace", uiVersion: "redesign-v1", frontendBaseUrl: window.location.origin, inferenceMode: activeInferenceMode, requestedBy: session?.user.fullName ?? "Reviewer" },
       });
       const normalized = normalizeRun(response);
       setSelectedRun(normalized);
@@ -241,9 +252,11 @@ function App() {
 
   if (authBootstrapping) return <main className="auth-page"><LoadingState title="Restaurando sesión" detail="Buscando sesión profesional en almacenamiento asíncrono del navegador." /></main>;
   if (!session) return <AuthView onAuthenticated={setSession} />;
+  if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
 
   return (
     <AppShell activeView={activeView} onChangeView={setActiveView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onRunDemo={handleRunDemo} loading={loading} userName={session.user.fullName} onLogout={logout}>
+      {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} onOpenReview={() => setActiveView("review")} />)}
