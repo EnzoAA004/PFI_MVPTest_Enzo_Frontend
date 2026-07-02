@@ -6,6 +6,7 @@
 - La tabla de worklist puede abrir la fila seleccionada.
 - El detalle seleccionado se guarda en `sessionStorage` para que el workspace de revision muestre el caso correspondiente.
 - Los controles de visualizacion usan un icono CSS profesional en lugar de emojis.
+- Las filas de la worklist son seleccionables y tienen boton `Abrir revision`.
 
 ## Pendiente
 
