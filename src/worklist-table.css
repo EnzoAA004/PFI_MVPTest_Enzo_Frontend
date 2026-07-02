@@ -1,0 +1,65 @@
+.sortable-header {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 900;
+  gap: 6px;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+  text-transform: inherit;
+  width: 100%;
+}
+
+.sortable-header em {
+  align-items: center;
+  background: rgba(148, 163, 184, .14);
+  border-radius: 999px;
+  color: #64748b;
+  display: inline-flex;
+  font-style: normal;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  min-width: 18px;
+  padding: 0 5px;
+}
+
+.sortable-header.active {
+  color: #1d4ed8;
+}
+
+.sortable-header.active em {
+  background: rgba(37, 99, 235, .12);
+  color: #1d4ed8;
+}
+
+.selectable-worklist tbody tr {
+  transition: background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.selectable-worklist tbody tr:hover {
+  background: #f8fbff;
+  box-shadow: inset 3px 0 0 rgba(37, 99, 235, .28);
+}
+
+.selectable-worklist tbody tr.selected-worklist-row {
+  background: linear-gradient(90deg, rgba(37, 99, 235, .09), rgba(255, 255, 255, .98));
+  box-shadow: inset 4px 0 0 #2563eb, 0 5px 14px rgba(37, 99, 235, .08);
+}
+
+.selectable-worklist td small {
+  color: #64748b;
+  display: block;
+  font-size: .72rem;
+  margin-top: 3px;
+}
+
+.table-open-button {
+  white-space: nowrap;
+}
