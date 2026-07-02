@@ -8,7 +8,7 @@ import { WorklistTable } from "./WorklistTable";
 interface DashboardViewProps {
   studies: StudyRow[];
   auditTrail: AuditEvent[];
-  onOpenReview: () => void;
+  onOpenReview: (study: StudyRow) => void;
   summary?: StudiesSummary;
 }
 
@@ -17,6 +17,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary }: Da
   const pending = summary?.pending ?? studies.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
   const completed = summary?.completed ?? studies.filter((study) => study.reviewStatus === "aceptado").length;
   const flagged = summary?.flagged ?? studies.filter((study) => study.priority === "alta" || study.reviewStatus === "observado").length;
+  const latestStudy = studies[0];
 
   return (
     <div className="view-stack">
@@ -42,13 +43,13 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary }: Da
         <article className="panel-card wide-card">
           <div className="section-title">
             <h2>Worklist</h2>
-            <button className="ghost-button" onClick={onOpenReview} type="button">Open Study Review</button>
+            <button className="ghost-button" disabled={!latestStudy} onClick={() => latestStudy && onOpenReview(latestStudy)} type="button">Open Study Review</button>
           </div>
           <WorklistTable studies={studies} onOpenReview={onOpenReview} />
         </article>
         <aside className="right-rail">
           <article className="panel-card">
-            <div className="section-title"><h2>Latest Segmentation Preview</h2><span>{studies[0]?.caseId ?? "CASE-DEMO-0142"}</span></div>
+            <div className="section-title"><h2>Latest Segmentation Preview</h2><span>{latestStudy?.caseId ?? "CASE-DEMO-0142"}</span></div>
             <div className="mini-mri">
               <span className="mini-vertebra v1" />
               <span className="mini-vertebra v2" />
