@@ -1,0 +1,146 @@
+/* Responsive shell overrides. Keep this file imported after styles/theme files. */
+.app-layout {
+  width: 100%;
+}
+
+.sidebar,
+.side-nav,
+.sidebar-footer {
+  min-width: 0;
+}
+
+.side-nav {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  width: 100%;
+}
+
+.side-nav button {
+  align-items: center;
+  display: flex !important;
+  flex: 0 0 auto;
+  gap: 10px;
+  justify-content: space-between;
+  width: 100%;
+  white-space: normal;
+}
+
+.side-nav button span {
+  overflow-wrap: anywhere;
+}
+
+.side-nav em {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1180px) {
+  .app-layout {
+    display: grid;
+    grid-template-columns: 1fr !important;
+  }
+
+  .sidebar {
+    align-items: center;
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 16px;
+    height: auto !important;
+    min-height: 0;
+    padding: 14px 18px !important;
+    position: sticky;
+    top: 0;
+    width: 100% !important;
+    z-index: 50;
+  }
+
+  .brand {
+    min-width: 0;
+  }
+
+  .brand > div:last-child {
+    display: grid;
+  }
+
+  .side-nav {
+    align-items: center;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding: 2px 4px;
+    scrollbar-width: thin;
+    width: 100%;
+  }
+
+  .side-nav button {
+    flex: 0 0 auto;
+    min-height: 38px !important;
+    padding: 8px 12px !important;
+    width: auto;
+    white-space: nowrap;
+  }
+
+  .side-nav button.active,
+  .side-nav button:hover {
+    transform: none !important;
+  }
+
+  .sidebar-footer {
+    align-items: center;
+    display: flex !important;
+    gap: 8px;
+    margin-top: 0 !important;
+    white-space: nowrap;
+  }
+
+  .sidebar-footer button {
+    min-height: 36px;
+    padding: 7px 12px;
+  }
+
+  .main-panel {
+    padding: 18px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    position: static;
+  }
+
+  .brand {
+    justify-content: center;
+  }
+
+  .side-nav {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .side-nav button {
+    min-width: max-content;
+  }
+
+  .sidebar-footer {
+    justify-content: space-between;
+  }
+
+  .top-header {
+    align-items: stretch;
+    display: grid !important;
+  }
+
+  .header-actions {
+    justify-content: flex-start !important;
+  }
+}
+
+@media (min-width: 1181px) {
+  .sidebar {
+    width: 248px !important;
+  }
+}
