@@ -1,6 +1,6 @@
-type ViewKey = "dashboard" | "review" | "history";
+import type { ViewKey } from "../appTypes";
 
-const navItems: Array<{ key: ViewKey | "studies" | "queue" | "patients" | "settings"; label: string; badge?: string }> = [
+const navItems: Array<{ key: ViewKey | "studies" | "queue" | "patients"; label: string; badge?: string }> = [
   { key: "dashboard", label: "Dashboard" },
   { key: "studies", label: "Studies" },
   { key: "queue", label: "Review Queue", badge: "14" },
@@ -18,7 +18,7 @@ export function Sidebar({ activeView, onChangeView }: SidebarProps) {
   function resolveTarget(key: string): ViewKey {
     if (key === "history" || key === "patients") return "history";
     if (key === "studies" || key === "queue") return "review";
-    if (key === "settings") return "history";
+    if (key === "settings") return "settings";
     return "dashboard";
   }
 
