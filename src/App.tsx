@@ -43,6 +43,18 @@ function toPatientStudy(study: StudyRow, index: number): PatientStudy {
   };
 }
 
+function LoadingState({ title, detail }: { title: string; detail: string }) {
+  return (
+    <section className="panel-card clinical-loading-state" aria-live="polite">
+      <span className="clinical-spinner" />
+      <div>
+        <h2>{title}</h2>
+        <p>{detail}</p>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
@@ -55,6 +67,7 @@ function App() {
   const [measurements, setMeasurements] = useState<Measurement[]>(() => normalizeRun(sampleRun).normalizedMeasurements ?? []);
   const [auditTrail, setAuditTrail] = useState<AuditEvent[]>(initialAuditTrail);
   const [loading, setLoading] = useState(false);
+  const [bootstrapLoading, setBootstrapLoading] = useState(Boolean(loadAuthSession()));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
@@ -62,7 +75,7 @@ function App() {
   const safeRun = useMemo(() => normalizeRun(selectedRun), [selectedRun]);
   const history = useMemo(() => loadReviewHistory(), [auditTrail, selectedRun]);
   const studies = useMemo(() => {
-    const baseRows = backendStudies.length ? backendStudies : worklistStudies;
+    const baseRows = backendStudies.length ? backendStudies : bootstrapLoading ? [] : worklistStudies;
     const currentRunId = safeRun.runId;
     return baseRows.map((row, index) => {
       if (index !== 0 && row.runId !== currentRunId) return row;
@@ -82,14 +95,23 @@ function App() {
         runId: safeRun.runId ?? row.runId,
       };
     });
-  }, [backendStudies, safeRun]);
+  }, [backendStudies, bootstrapLoading, safeRun]);
   const backendPatientStudies = useMemo(() => studies.map(toPatientStudy), [studies]);
-  const visiblePatientStudies = history.patientStudies.length ? history.patientStudies : backendPatientStudies.length ? backendPatientStudies : patientStudies;
+  const visiblePatientStudies = backendPatientStudies.length
+    ? backendPatientStudies
+    : bootstrapLoading
+      ? []
+      : history.patientStudies.length
+        ? history.patientStudies
+        : patientStudies;
+  const shouldShowDataLoading = bootstrapLoading && backendStudies.length === 0;
 
   useEffect(() => {
     if (!session) return;
+    let cancelled = false;
     const stored = loadReviewHistory();
     setAuditTrail(stored.auditTrail.length > 0 ? stored.auditTrail : initialAuditTrail);
+    setBootstrapLoading(true);
 
     const normalized = normalizeRun(stored.runs[0] ?? sampleRun);
     const runId = normalized.runId ?? "demo-run-2026-001";
@@ -107,6 +129,7 @@ function App() {
           getDemoStudyReview().catch(() => null),
           getBackendReviewSnapshot().catch(() => null),
         ]);
+        if (cancelled) return;
         setHealth(healthResponse.status ?? "sin_estado");
         setModels(modelResponse);
         if (studyResponse?.items?.length) {
@@ -128,11 +151,14 @@ function App() {
           saveProfessionalReview(runId, backendReview);
         }
       } catch (bootstrapError) {
-        setError(bootstrapError instanceof Error ? bootstrapError.message : "No se pudo consultar el backend");
+        if (!cancelled) setError(bootstrapError instanceof Error ? bootstrapError.message : "No se pudo consultar el backend");
+      } finally {
+        if (!cancelled) setBootstrapLoading(false);
       }
     }
 
     void bootstrap();
+    return () => { cancelled = true; };
   }, [session]);
 
   function recordAudit(action: string, detail: string, actor = "Reviewer") {
@@ -246,7 +272,9 @@ function App() {
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (
-        <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} onOpenReview={() => setActiveView("review")} />
+        shouldShowDataLoading
+          ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." />
+          : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} onOpenReview={() => setActiveView("review")} />
       )}
       {activeView === "review" && (
         <StudyReviewView
@@ -259,7 +287,11 @@ function App() {
           onSaveReview={handleSaveReview}
         />
       )}
-      {activeView === "history" && <PatientHistoryView studies={visiblePatientStudies} />}
+      {activeView === "history" && (
+        shouldShowDataLoading
+          ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." />
+          : <PatientHistoryView studies={visiblePatientStudies} />
+      )}
       {activeView === "settings" && <SystemDiagnosticsView />}
     </AppShell>
   );
