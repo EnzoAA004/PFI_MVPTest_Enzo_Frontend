@@ -3,7 +3,7 @@ import { PriorityBadge, ReviewBadge } from "./StatusBadge";
 
 interface WorklistTableProps {
   studies: StudyRow[];
-  onOpenReview: () => void;
+  onOpenReview: (study: StudyRow) => void;
 }
 
 export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
@@ -13,7 +13,7 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
         <thead>
           <tr>
             <th>Case ID</th>
-            <th>Patient ID</th>
+            <th>Subject Ref</th>
             <th>Plane</th>
             <th>Study Date</th>
             <th>Model Status</th>
@@ -32,7 +32,7 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
               <td><span className="model-state">{study.modelStatus}</span></td>
               <td><ReviewBadge status={study.reviewStatus} /></td>
               <td><PriorityBadge priority={study.priority} /></td>
-              <td><button className="ghost-button" onClick={onOpenReview} type="button">Review</button></td>
+              <td><button className="ghost-button" onClick={() => onOpenReview(study)} type="button">Review</button></td>
             </tr>
           ))}
         </tbody>
