@@ -14,6 +14,10 @@ type ChallengeState = {
   email: string;
 };
 
+function isSession(value: AuthPendingResponse | AuthSession): value is AuthSession {
+  return typeof (value as AuthSession).accessToken === "string";
+}
+
 export function AuthView({ onAuthenticated }: AuthViewProps) {
   const [mode, setMode] = useState<Mode>("login");
   const [form, setForm] = useState<RegisterRequest>({
@@ -39,12 +43,20 @@ export function AuthView({ onAuthenticated }: AuthViewProps) {
     setError("");
     setMessage("");
     try {
-      const challenge = mode === "register"
+      const response = mode === "register"
         ? await registerDoctor(form)
         : await loginDoctor(form.email, form.password);
-      setChallengeState({ mode, challenge, email: form.email });
-      setCode(challenge.devVerificationCode ?? "");
-      setMessage(challenge.message);
+      if (isSession(response)) {
+        onAuthenticated(response);
+        return;
+      }
+      if (!response.challengeId) {
+        setMessage(response.message ?? "Solicitud recibida. Revisá el estado de la cuenta profesional.");
+        return;
+      }
+      setChallengeState({ mode, challenge: response, email: form.email });
+      setCode(response.devVerificationCode ?? "");
+      setMessage(response.message ?? "Código de verificación generado.");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "No se pudo completar la solicitud");
     } finally {
@@ -53,7 +65,7 @@ export function AuthView({ onAuthenticated }: AuthViewProps) {
   }
 
   async function verify() {
-    if (!challengeState) return;
+    if (!challengeState?.challenge.challengeId) return;
     setLoading(true);
     setError("");
     try {
@@ -112,21 +124,22 @@ export function AuthView({ onAuthenticated }: AuthViewProps) {
             )}
             <label>Email profesional<input value={form.email} onChange={(event) => updateField("email", event.target.value)} /></label>
             <label>Password<input type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} /></label>
-            <button className="primary-button" disabled={loading} onClick={() => void submit()} type="button">{loading ? "Procesando..." : mode === "register" ? "Crear cuenta y verificar" : "Enviar codigo de acceso"}</button>
+            <button className="primary-button" disabled={loading} onClick={() => void submit()} type="button">{loading ? "Procesando..." : mode === "register" ? "Crear cuenta y verificar" : "Ingresar"}</button>
             <button className="ghost-button" disabled={loading} onClick={() => void startDemo()} type="button">Entrar con doctor demo</button>
           </div>
         ) : (
           <div className="auth-form">
             <div className="verification-panel">
-              <strong>Doble verificacion</strong>
+              <strong>{challengeState.mode === "register" ? "Verificación de registro" : "Doble verificación"}</strong>
               <p>{message}</p>
               {challengeState.challenge.devVerificationCode && <span>Codigo demo: {challengeState.challenge.devVerificationCode}</span>}
             </div>
             <label>Codigo de 6 digitos<input value={code} onChange={(event) => setCode(event.target.value)} maxLength={6} /></label>
-            <button className="primary-button" disabled={loading} onClick={() => void verify()} type="button">Verificar e ingresar</button>
+            <button className="primary-button" disabled={loading} onClick={() => void verify()} type="button">Verificar</button>
             <button className="ghost-button" onClick={() => setChallengeState(null)} type="button">Volver</button>
           </div>
         )}
+        {message && !challengeState && <div className="toast info">{message}</div>}
         {error && <div className="toast error">{error}</div>}
       </section>
     </main>
