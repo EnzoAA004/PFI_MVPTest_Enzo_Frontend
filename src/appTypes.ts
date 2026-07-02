@@ -322,6 +322,9 @@ export type AuthUser = {
   institution?: string;
   roles: string[];
   verified: boolean;
+  approved?: boolean;
+  twoFactorEnabled?: boolean;
+  onboardingCompleted?: boolean;
 };
 
 export type AuthSession = {
@@ -336,7 +339,7 @@ export type AuthSession = {
 
 export type AuthPendingResponse = {
   status?: string;
-  challengeId: string;
+  challengeId?: string;
   channel?: string;
   deliveryHint?: string;
   expiresInSeconds?: number;
@@ -346,6 +349,12 @@ export type AuthPendingResponse = {
 };
 
 export type AuthTokenResponse = AuthSession;
+export type AuthLoginResponse = AuthPendingResponse | AuthTokenResponse;
+
+export type AuthSettingsRequest = {
+  twoFactorEnabled?: boolean;
+  onboardingCompleted?: boolean;
+};
 
 export type RegisterRequest = {
   fullName: string;
