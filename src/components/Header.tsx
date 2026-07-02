@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "../api";
-import { authHeaders } from "../authClient";
+import { authHeaders, refreshDoctorSession } from "../authClient";
 import type { ViewKey } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
 
@@ -33,6 +33,17 @@ function boolText(value: unknown) {
   if (value === true) return "sí";
   if (value === false) return "no";
   return "sin datos";
+}
+
+function writePreviewWindow(target: Window | null, title: string, detail: string) {
+  if (!target) return;
+  try {
+    target.document.open();
+    target.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"/><title>${escapeHtml(title)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;background:#eef4fb;color:#102033;margin:0;padding:32px}main{max-width:760px;margin:auto;background:white;border:1px solid #d8e6f4;border-radius:22px;padding:28px;box-shadow:0 20px 60px rgba(15,23,42,.14)}p{color:#60738a;line-height:1.5}</style></head><body><main><h1>${escapeHtml(title)}</h1><p>${escapeHtml(detail)}</p></main></body></html>`);
+    target.document.close();
+  } catch {
+    // Some browsers restrict document access; the final blob navigation still works.
+  }
 }
 
 function renderTechnicalReportHtml(payload: any) {
@@ -149,21 +160,49 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
   const technicalReportUrl = currentRunId ? `${API_BASE_URL}/api/ai/agent/report/${currentRunId}` : "";
   const runButtonText = loading ? "Ejecutando..." : "Ejecutar análisis";
 
+  async function fetchTechnicalReportPayload() {
+    let response = await fetch(technicalReportUrl, {
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+    });
+    if (response.status === 401) {
+      try {
+        await refreshDoctorSession();
+        response = await fetch(technicalReportUrl, {
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+        });
+      } catch {
+        // Preserve final backend response handling below.
+      }
+    }
+    if (!response.ok) throw new Error(`Backend respondió ${response.status}`);
+    return response.json();
+  }
+
   async function openTechnicalReport() {
     if (!technicalReportUrl) return;
+    const previewWindow = window.open("", "_blank");
+    if (previewWindow) {
+      previewWindow.opener = null;
+      writePreviewWindow(previewWindow, "Cargando reporte técnico", "Consultando el backend con la sesión autenticada. Esta pestaña se actualizará automáticamente.");
+    }
     try {
-      const response = await fetch(technicalReportUrl, {
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-      });
-      if (!response.ok) throw new Error(`Backend respondió ${response.status}`);
-      const payload = await response.json();
+      const payload = await fetchTechnicalReportPayload();
       const html = renderTechnicalReportHtml(payload);
       const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank", "noopener,noreferrer");
+      if (previewWindow) {
+        previewWindow.location.href = blobUrl;
+      } else {
+        window.open(blobUrl, "_blank", "noopener,noreferrer");
+      }
       window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
     } catch (error) {
-      alert(error instanceof Error ? `No se pudo abrir el reporte técnico: ${error.message}` : "No se pudo abrir el reporte técnico.");
+      const message = error instanceof Error ? `No se pudo abrir el reporte técnico: ${error.message}` : "No se pudo abrir el reporte técnico.";
+      if (previewWindow) {
+        writePreviewWindow(previewWindow, "No se pudo abrir el reporte técnico", message);
+      } else {
+        alert(message);
+      }
     }
   }
 
