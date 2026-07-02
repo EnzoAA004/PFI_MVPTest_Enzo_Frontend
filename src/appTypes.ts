@@ -101,6 +101,23 @@ export type StudyRow = {
   modelStatus: string;
   reviewStatus: ReviewStatus;
   priority: Priority;
+  runId?: string;
+};
+
+export type StudiesSummary = {
+  total: number;
+  pending: number;
+  completed: number;
+  flagged: number;
+};
+
+export type StudiesResponse = {
+  status: string;
+  source?: string;
+  items: StudyRow[];
+  summary?: StudiesSummary;
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
 };
 
 export type AuditEvent = {
