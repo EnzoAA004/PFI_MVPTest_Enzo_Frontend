@@ -3,3 +3,7 @@
 .visibility-toggle::before{background:#fff!important;border:1.8px solid currentColor!important;border-radius:76% 18%!important;content:""!important;display:block!important;height:13px!important;transform:rotate(45deg)!important;width:13px!important}
 .visibility-toggle::after{background:currentColor!important;border-radius:50%!important;content:""!important;height:4px!important;left:50%!important;position:absolute!important;top:50%!important;transform:translate(-50%,-50%)!important;width:4px!important}
 .visibility-toggle .visibility-icon{display:block!important;height:1px!important;opacity:0!important;overflow:hidden!important;position:absolute!important;width:1px!important}
+.selectable-worklist .clickable-row{cursor:pointer;transition:background .16s,box-shadow .16s,transform .16s}
+.selectable-worklist .clickable-row:hover{background:#f8fbff;box-shadow:inset 3px 0 0 #2563eb}
+.selectable-worklist .clickable-row:focus-visible{outline:2px solid #2563eb;outline-offset:-2px;background:#eff6ff}
+.table-open-button{font-size:.78rem!important;min-height:30px!important;padding:6px 10px!important;white-space:nowrap!important}
