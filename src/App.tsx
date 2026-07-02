@@ -73,6 +73,14 @@ function LoadingState({ title, detail }: { title: string; detail: string }) {
   return <section className="panel-card clinical-loading-state" aria-live="polite"><span className="clinical-spinner" /><div><h2>{title}</h2><p>{detail}</p></div></section>;
 }
 
+function reviewRequiresNotes(status: ReviewStatus, notes: string) {
+  return (status === "observado" || status === "descartado") && notes.trim().length < 5;
+}
+
+function isBackendValidationError(error: unknown) {
+  return error instanceof Error && (error.message.includes("400") || error.message.toLowerCase().includes("nota profesional"));
+}
+
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
   const [authBootstrapping, setAuthBootstrapping] = useState(true);
@@ -297,17 +305,27 @@ function App() {
 
   async function handleSaveReview(status: ReviewStatus, notes: string) {
     setSaving(true); setError(""); setInfo("");
+    const trimmedNotes = notes.trim();
+    if (reviewRequiresNotes(status, trimmedNotes)) {
+      setError("Para observar o descartar un caso, agregá una nota profesional descriptiva.");
+      setSaving(false);
+      return undefined;
+    }
     const runId = safeRun.runId ?? "local-run";
     try {
-      const review = await updateReview(runId, { status, notes, observations: notes, reviewer: session?.user.fullName ?? "Reviewer" });
+      const review = await updateReview(runId, { status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Reviewer" });
       setSelectedRun((current) => ({ ...current, review }));
       setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: review.status ?? status } : row));
       saveProfessionalReview(runId, review);
       recordAudit(status === "aceptado" ? "estado aprobado" : status === "observado" ? "estado observado" : "revision guardada", `Revision ${status} guardada para ${runId}.`);
       setInfo(isDemoMode() ? "Revision guardada en modo demo local porque el backend no confirmo la operacion." : "Revision guardada correctamente en el backend.");
       return review;
-    } catch {
-      const fallbackReview = { runId, status, notes, observations: notes, reviewer: session?.user.fullName ?? "Reviewer", updatedAt: new Date().toISOString() };
+    } catch (reviewError) {
+      if (isBackendValidationError(reviewError)) {
+        setError(reviewError instanceof Error ? reviewError.message : "La revisión no cumple las reglas profesionales requeridas.");
+        return undefined;
+      }
+      const fallbackReview = { runId, status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Reviewer", updatedAt: new Date().toISOString() };
       setSelectedRun((current) => ({ ...current, review: fallbackReview }));
       setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: status } : row));
       saveProfessionalReview(runId, fallbackReview);
