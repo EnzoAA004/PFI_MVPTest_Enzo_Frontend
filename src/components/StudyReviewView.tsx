@@ -92,6 +92,27 @@ function normalizeRow(item: any, fallbackPlane?: string): MeasurementRow {
   };
 }
 
+function safeFileFragment(value?: string) {
+  return String(value ?? "study-review").replace(/[^a-zA-Z0-9-_]/g, "-").slice(0, 80);
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value: unknown) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 interface StudyReviewViewProps {
   run: AiRunResponse;
   studyReview?: any | null;
@@ -223,6 +244,55 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     setReviewerValues({});
   }
 
+  function exportPayload() {
+    return {
+      exportType: "academic_deidentified_review",
+      generatedAt: new Date().toISOString(),
+      caseId: displayRun.caseId,
+      subjectRef: selectedDetail?.study?.patientId ?? studyReview?.patientId ?? "PAT-0087",
+      studyDate: selectedDetail?.study?.studyDate ?? studyReview?.studyDate ?? "2026-07-01",
+      runId: displayRun.runId,
+      plane: displayRun.plane,
+      modelKey: displayRun.modelKey,
+      reviewStatus,
+      notes,
+      governance: {
+        scope: "academic/research only",
+        deidentified: true,
+        rawImagesIncluded: false,
+        humanReviewRequired: true,
+        notClinicalDiagnosis: true,
+      },
+      measurements: resultRows.map((row) => ({
+        id: row.id,
+        label: row.label,
+        level: row.level,
+        aiValue: row.aiValue,
+        reviewerValue: row.reviewerValue || null,
+        delta: row.delta,
+        unit: row.unit,
+        severity: row.severity,
+        status: row.status,
+        outlier: Boolean(row.outlier),
+        confidence: row.confidence,
+      })),
+      auditTrail: auditTrail.slice(0, 25),
+    };
+  }
+
+  function exportJson() {
+    const payload = exportPayload();
+    downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-review.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+  }
+
+  function exportCsv() {
+    const payload = exportPayload();
+    const headers = ["caseId", "runId", "measurementId", "label", "level", "aiValue", "reviewerValue", "delta", "unit", "severity", "status", "outlier", "confidence"];
+    const rows = payload.measurements.map((row) => [payload.caseId, payload.runId, row.id, row.label, row.level, row.aiValue, row.reviewerValue ?? "", row.delta ?? "", row.unit, row.severity, row.status, row.outlier, row.confidence ?? ""]);
+    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-measurements.csv`, csv, "text/csv;charset=utf-8");
+  }
+
   async function save(status: ReviewStatus) {
     setReviewStatus(status);
     if (hasReviewerDrafts) commitReviewerMeasurements();
@@ -350,7 +420,26 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           <AgentSummary agentDecision={studyReview?.aiOutput?.agentDecision ?? run.agentDecision} />
           <section className="panel-card notes-card compact-card">
             <PanelTitle panelId="decision" title="Notas y decisión" />
-            {panelVisible("decision") ? <><textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones profesionales de revision..." /><div className="review-actions compact-actions"><select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}><option value="pendiente">pendiente</option><option value="aceptado">aceptado</option><option value="observado">observado</option><option value="descartado">descartado</option></select><button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Save Draft</button><button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button><button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Observe</button></div></> : hiddenPlaceholder}
+            {panelVisible("decision") ? (
+              <>
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones profesionales de revision..." />
+                <div className="review-actions compact-actions">
+                  <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
+                    <option value="pendiente">pendiente</option>
+                    <option value="aceptado">aceptado</option>
+                    <option value="observado">observado</option>
+                    <option value="descartado">descartado</option>
+                  </select>
+                  <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Save Draft</button>
+                  <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button>
+                  <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Observe</button>
+                </div>
+                <div className="review-actions compact-actions export-actions">
+                  <button className="ghost-button" onClick={exportJson} type="button">Exportar JSON</button>
+                  <button className="ghost-button" onClick={exportCsv} type="button">Exportar CSV</button>
+                </div>
+              </>
+            ) : hiddenPlaceholder}
           </section>
           <section className="panel-card compact-card collapsible-audit"><PanelTitle panelId="audit" title="Audit Trail" />{panelVisible("audit") ? <AuditTrail events={auditTrail.slice(0, 4)} /> : hiddenPlaceholder}</section>
         </aside>
