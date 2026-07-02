@@ -1,7 +1,7 @@
 import "./theme.css";
 import "./mri-theme.css";
 import { useEffect, useMemo, useState } from "react";
-import { getDemoStudyReview, getHealth, getModels, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
+import { getDemoStudyReview, getHealth, getModels, getStudies, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { clearAuthSession, loadAuthSession } from "./authStorage";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
@@ -19,13 +19,15 @@ import {
   saveProfessionalReview,
   saveRun,
 } from "./storage";
-import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, ReviewStatus, ViewKey } from "./appTypes";
+import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, ReviewStatus, StudiesSummary, StudyRow, ViewKey } from "./appTypes";
 
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [health, setHealth] = useState("consultando");
   const [models, setModels] = useState<AiModel[]>([]);
+  const [backendStudies, setBackendStudies] = useState<StudyRow[]>([]);
+  const [studiesSummary, setStudiesSummary] = useState<StudiesSummary | undefined>();
   const [selectedRun, setSelectedRun] = useState<AiRunResponse>(() => normalizeRun(sampleRun));
   const [studyReview, setStudyReview] = useState<any | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>(() => normalizeRun(sampleRun).normalizedMeasurements ?? []);
@@ -38,25 +40,27 @@ function App() {
   const safeRun = useMemo(() => normalizeRun(selectedRun), [selectedRun]);
   const history = useMemo(() => loadReviewHistory(), [auditTrail, selectedRun]);
   const studies = useMemo(() => {
-    const first = worklistStudies[0];
-    return [
-      {
-        ...first,
-        caseId: safeRun.caseId ?? first.caseId,
-        plane: safeRun.plane ?? first.plane,
-        modelKey: safeRun.modelKey ?? first.modelKey,
+    const baseRows = backendStudies.length ? backendStudies : worklistStudies;
+    const currentRunId = safeRun.runId;
+    return baseRows.map((row, index) => {
+      if (index !== 0 && row.runId !== currentRunId) return row;
+      return {
+        ...row,
+        caseId: safeRun.caseId ?? row.caseId,
+        plane: safeRun.plane ?? row.plane,
+        modelKey: safeRun.modelKey ?? row.modelKey,
         modelStatus:
           safeRun.measurementsStatus === "pending_real_inference"
             ? "Pipeline tecnico / inferencia pendiente"
             : safeRun.degradedMode
               ? "Modo degradado"
-              : "AI-ready",
-        reviewStatus: safeRun.review?.status ?? first.reviewStatus,
-        priority: safeRun.agentDecision?.priority ?? first.priority,
-      },
-      ...worklistStudies.slice(1),
-    ];
-  }, [safeRun]);
+              : row.modelStatus,
+        reviewStatus: safeRun.review?.status ?? row.reviewStatus,
+        priority: safeRun.agentDecision?.priority ?? row.priority,
+        runId: safeRun.runId ?? row.runId,
+      };
+    });
+  }, [backendStudies, safeRun]);
 
   useEffect(() => {
     if (!session) return;
@@ -72,14 +76,19 @@ function App() {
 
     async function bootstrap() {
       try {
-        const [healthResponse, modelResponse, demoStudyReview, backendSnapshot] = await Promise.all([
+        const [healthResponse, modelResponse, studyResponse, demoStudyReview, backendSnapshot] = await Promise.all([
           getHealth(),
           getModels(),
+          getStudies().catch(() => null),
           getDemoStudyReview().catch(() => null),
           getBackendReviewSnapshot().catch(() => null),
         ]);
         setHealth(healthResponse.status ?? "sin_estado");
         setModels(modelResponse);
+        if (studyResponse?.items?.length) {
+          setBackendStudies(studyResponse.items);
+          setStudiesSummary(studyResponse.summary);
+        }
         setStudyReview(demoStudyReview);
         if (backendSnapshot?.auditTrail?.length) {
           setAuditTrail(backendSnapshot.auditTrail);
@@ -167,6 +176,7 @@ function App() {
         reviewer: session?.user.fullName ?? "Reviewer",
       });
       setSelectedRun((current) => ({ ...current, review }));
+      setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: review.status ?? status } : row));
       saveProfessionalReview(runId, review);
       recordAudit(status === "aceptado" ? "estado aprobado" : status === "observado" ? "estado observado" : "revision guardada", `Revision ${status} guardada para ${runId}.`);
       if (isDemoMode()) setInfo("Revision guardada en modo demo local porque el backend no confirmo la operacion.");
@@ -182,6 +192,7 @@ function App() {
         updatedAt: new Date().toISOString(),
       };
       setSelectedRun((current) => ({ ...current, review: fallbackReview }));
+      setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: status } : row));
       saveProfessionalReview(runId, fallbackReview);
       recordAudit("revision guardada", `Fallback local aplicado para ${runId}.`);
       setInfo("No se pudo confirmar el PATCH en backend; revision guardada localmente.");
@@ -211,7 +222,7 @@ function App() {
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (
-        <DashboardView studies={studies} auditTrail={auditTrail} onOpenReview={() => setActiveView("review")} />
+        <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} onOpenReview={() => setActiveView("review")} />
       )}
       {activeView === "review" && (
         <StudyReviewView
