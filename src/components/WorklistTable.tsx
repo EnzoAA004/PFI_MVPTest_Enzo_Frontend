@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Priority, ReviewStatus, StudyRow } from "../appTypes";
+import "../worklist-table.css";
 import { fetchStudyDetail } from "../studyApi";
 import { loadSelectedStudyDetail, saveSelectedStudyDetail, saveSelectedStudyFallback } from "../selectedStudyStorage";
 import { PriorityBadge, ReviewBadge } from "./StatusBadge";
