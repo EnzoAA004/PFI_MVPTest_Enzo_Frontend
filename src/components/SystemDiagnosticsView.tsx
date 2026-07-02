@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { getSystemDiagnostics, warmupSystem } from "../api";
-import type { AiArtifactSummary, AiModelDiagnostic, AiModelsDiagnostics, DiagnosticBlock, SystemDiagnostics } from "../appTypes";
+import { getCurrentDoctor, listProfessionals, updateDoctorSettings, updateProfessionalApproval } from "../authClient";
+import type { AiArtifactSummary, AiModelDiagnostic, AiModelsDiagnostics, AuthUser, DiagnosticBlock, SystemDiagnostics } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
 
 function toneFor(block?: DiagnosticBlock, rootStatus?: string) {
@@ -61,10 +62,7 @@ function modelEntries(models?: AiModelsDiagnostics): [string, AiModelDiagnostic]
 function DiagnosticCard({ title, block, children }: { title: string; block?: DiagnosticBlock; children?: ReactNode }) {
   return (
     <article className="panel-card compact-card diagnostic-card">
-      <div className="section-title">
-        <h2>{title}</h2>
-        <StatusBadge tone={toneFor(block)}>{blockStatus(block)}</StatusBadge>
-      </div>
+      <div className="section-title"><h2>{title}</h2><StatusBadge tone={toneFor(block)}>{blockStatus(block)}</StatusBadge></div>
       <dl className="info-list compact-info">
         {block?.service && <div><dt>Service</dt><dd>{block.service}</dd></div>}
         {block?.mode && <div><dt>Mode</dt><dd>{block.mode}</dd></div>}
@@ -87,13 +85,8 @@ function AiArtifactReadiness({ diagnostics }: { diagnostics: SystemDiagnostics |
   const defaultMode = summary?.defaultInferenceMode ?? aiModule?.defaultInferenceMode ?? "contract";
   return (
     <section className="panel-card compact-card ai-artifact-readiness">
-      <div className="section-title">
-        <h2>AI Module readiness</h2>
-        <StatusBadge tone={summary?.readyForRealInference ? "green" : "amber"}>{summary?.readyForRealInference ? "real listo" : "contract mode"}</StatusBadge>
-      </div>
-      <p className="muted compact-copy">
-        Diagnóstico liviano de artifacts .pt. No carga modelos pesados; solo informa si el MVP puede operar en modo contrato o si ya tiene artifacts disponibles para inferencia real.
-      </p>
+      <div className="section-title"><h2>AI Module readiness</h2><StatusBadge tone={summary?.readyForRealInference ? "green" : "amber"}>{summary?.readyForRealInference ? "real listo" : "contract mode"}</StatusBadge></div>
+      <p className="muted compact-copy">Diagnóstico liviano de artifacts .pt. No carga modelos pesados; solo informa si el MVP puede operar en modo contrato o si ya tiene artifacts disponibles para inferencia real.</p>
       <dl className="info-list compact-info">
         <div><dt>Modo por defecto</dt><dd>{defaultMode}</dd></div>
         <div><dt>Modelos registrados</dt><dd>{summary?.modelsRegistered ?? entries.length ?? "sin datos"}</dd></div>
@@ -101,37 +94,38 @@ function AiArtifactReadiness({ diagnostics }: { diagnostics: SystemDiagnostics |
         <div><dt>Artifacts faltantes</dt><dd>{summary?.artifactsMissing ?? "sin datos"}</dd></div>
         <div><dt>Real inference ready</dt><dd>{boolText(summary?.readyForRealInference)}</dd></div>
       </dl>
-      {entries.length > 0 ? (
-        <div className="comparison-table unified-results-table ai-artifact-table">
-          <div className="comparison-head"><span>Modelo</span><span>Artifact</span><span>Readiness</span><span>Modo real</span><span>Tamaño</span></div>
-          {entries.map(([key, model]) => (
-            <div className="comparison-row compact-comparison-row" key={key}>
-              <span><strong>{key}</strong><small>{String(model.plane ?? "plane n/d")} · {String(model.version ?? "contract-v1")}</small></span>
-              <span>{model.artifact?.exists ? "presente" : "faltante"}</span>
-              <span><StatusBadge tone={readinessTone(model)}>{readinessLabel(model.readiness)}</StatusBadge></span>
-              <span>{boolText(model.availableForRealInference)}</span>
-              <span>{model.artifact?.sizeMb ? `${model.artifact.sizeMb} MB` : "—"}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="panel-hidden-placeholder">Sin detalle de modelos. Verificá que el backend pueda consultar /models del AI Module.</div>
-      )}
+      {entries.length > 0 ? <div className="comparison-table unified-results-table ai-artifact-table"><div className="comparison-head"><span>Modelo</span><span>Artifact</span><span>Readiness</span><span>Modo real</span><span>Tamaño</span></div>{entries.map(([key, model]) => <div className="comparison-row compact-comparison-row" key={key}><span><strong>{key}</strong><small>{String(model.plane ?? "plane n/d")} · {String(model.version ?? "contract-v1")}</small></span><span>{model.artifact?.exists ? "presente" : "faltante"}</span><span><StatusBadge tone={readinessTone(model)}>{readinessLabel(model.readiness)}</StatusBadge></span><span>{boolText(model.availableForRealInference)}</span><span>{model.artifact?.sizeMb ? `${model.artifact.sizeMb} MB` : "—"}</span></div>)}</div> : <div className="panel-hidden-placeholder">Sin detalle de modelos. Verificá que el backend pueda consultar /models del AI Module.</div>}
     </section>
   );
 }
 
+function approvalTone(user: AuthUser) {
+  if (!user.verified) return "amber";
+  if (user.approved === false || user.roles.includes("PENDING_APPROVAL")) return "amber";
+  return "green";
+}
+
 export function SystemDiagnosticsView() {
   const [diagnostics, setDiagnostics] = useState<SystemDiagnostics | null>(null);
+  const [doctor, setDoctor] = useState<AuthUser | null>(null);
+  const [professionals, setProfessionals] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+
+  const isAdmin = Boolean(doctor?.roles?.includes("ADMIN"));
 
   async function refresh() {
     setLoading(true);
     setMessage("");
     try {
-      const response = await getSystemDiagnostics();
-      setDiagnostics(response);
+      const [diagnosticsResponse, currentUser] = await Promise.all([getSystemDiagnostics(), getCurrentDoctor().catch(() => null)]);
+      setDiagnostics(diagnosticsResponse);
+      setDoctor(currentUser);
+      if (currentUser?.roles?.includes("ADMIN")) {
+        setProfessionals(await listProfessionals().catch(() => []));
+      } else {
+        setProfessionals([]);
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo consultar diagnostico");
     } finally {
@@ -153,53 +147,53 @@ export function SystemDiagnosticsView() {
     }
   }
 
+  async function toggleTwoFactor() {
+    if (!doctor) return;
+    setLoading(true);
+    try {
+      const updated = await updateDoctorSettings({ twoFactorEnabled: !doctor.twoFactorEnabled });
+      setDoctor(updated);
+      setMessage(updated.twoFactorEnabled ? "Doble verificación habilitada para el próximo login." : "Doble verificación deshabilitada para el próximo login.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo actualizar seguridad");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function setApproval(user: AuthUser, approved: boolean) {
+    setLoading(true);
+    try {
+      const updated = await updateProfessionalApproval(user.email, approved);
+      setProfessionals((current) => current.map((item) => item.email === updated.email ? updated : item));
+      setMessage(`${updated.fullName} actualizado: ${updated.approved ? "aprobado" : "pendiente"}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo actualizar aprobacion");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => { void refresh(); }, []);
 
   return (
     <div className="view-stack clinical-quiet diagnostics-view">
-      <section className="page-heading compact-heading">
-        <div>
-          <p>System Settings</p>
-          <h1>System Diagnostics</h1>
-        </div>
-        <div className="safety-copy">
-          <strong>Estado tecnico del MVP</strong>
-          <span>Frontend conectado a backend, AI Module y Postgres.</span>
-        </div>
-      </section>
-
+      <section className="page-heading compact-heading"><div><p>System Settings</p><h1>System Diagnostics</h1></div><div className="safety-copy"><strong>Estado tecnico del MVP</strong><span>Frontend conectado a backend, AI Module y Postgres.</span></div></section>
       {message && <div className="toast info">{message}</div>}
+      <section className="panel-card compact-card diagnostics-summary"><div className="section-title"><h2>Resumen operativo</h2><StatusBadge tone={diagnostics?.status === "ok" ? "green" : "amber"}>{diagnostics?.status ?? "consultando"}</StatusBadge></div><div className="diagnostics-actions"><button className="primary-button" disabled={loading} onClick={() => void refresh()} type="button">Actualizar diagnóstico</button><button className="ghost-button" disabled={loading} onClick={() => void warmup()} type="button">Warmup AI Module</button><span className="muted">Último control: {diagnostics?.checkedAt ? new Date(diagnostics.checkedAt).toLocaleString() : "pendiente"}</span></div></section>
+      <section className="diagnostics-grid"><DiagnosticCard title="Backend" block={diagnostics?.backend} /><DiagnosticCard title="AI Module" block={diagnostics?.aiModule} /><DiagnosticCard title="PostgreSQL" block={diagnostics?.database} /><DiagnosticCard title="Auth" block={diagnostics?.auth} /></section>
 
-      <section className="panel-card compact-card diagnostics-summary">
-        <div className="section-title">
-          <h2>Resumen operativo</h2>
-          <StatusBadge tone={diagnostics?.status === "ok" ? "green" : "amber"}>{diagnostics?.status ?? "consultando"}</StatusBadge>
-        </div>
-        <div className="diagnostics-actions">
-          <button className="primary-button" disabled={loading} onClick={() => void refresh()} type="button">Actualizar diagnóstico</button>
-          <button className="ghost-button" disabled={loading} onClick={() => void warmup()} type="button">Warmup AI Module</button>
-          <span className="muted">Último control: {diagnostics?.checkedAt ? new Date(diagnostics.checkedAt).toLocaleString() : "pendiente"}</span>
-        </div>
+      <section className="panel-card compact-card security-settings-card">
+        <div className="section-title"><h2>Configuración de seguridad profesional</h2><StatusBadge tone={doctor?.twoFactorEnabled ? "green" : "blue"}>{doctor?.twoFactorEnabled ? "2FA activo" : "2FA opcional"}</StatusBadge></div>
+        <p className="muted compact-copy">La doble verificación no se fuerza por defecto. Cada profesional puede habilitarla o deshabilitarla desde esta pantalla.</p>
+        <dl className="info-list compact-info"><div><dt>Profesional</dt><dd>{doctor?.fullName ?? "sin datos"}</dd></div><div><dt>Email</dt><dd>{doctor?.email ?? "sin datos"}</dd></div><div><dt>Cuenta aprobada</dt><dd>{doctor?.approved === false ? "no" : "sí"}</dd></div><div><dt>Onboarding</dt><dd>{doctor?.onboardingCompleted ? "completo" : "pendiente"}</dd></div></dl>
+        <div className="review-actions compact-actions"><button className="primary-button" disabled={loading || !doctor} onClick={() => void toggleTwoFactor()} type="button">{doctor?.twoFactorEnabled ? "Deshabilitar doble verificación" : "Habilitar doble verificación"}</button></div>
       </section>
 
-      <section className="diagnostics-grid">
-        <DiagnosticCard title="Backend" block={diagnostics?.backend} />
-        <DiagnosticCard title="AI Module" block={diagnostics?.aiModule} />
-        <DiagnosticCard title="PostgreSQL" block={diagnostics?.database} />
-        <DiagnosticCard title="Auth" block={diagnostics?.auth} />
-      </section>
+      {isAdmin && <section className="panel-card compact-card professional-admin-card"><div className="section-title"><h2>Aprobación de profesionales</h2><StatusBadge tone="blue">admin</StatusBadge></div><p className="muted compact-copy">Los profesionales nuevos quedan con acceso limitado hasta ser aprobados por un administrador.</p><div className="comparison-table unified-results-table professional-table"><div className="comparison-head"><span>Profesional</span><span>Email</span><span>Estado</span><span>Roles</span><span>Acción</span></div>{professionals.map((user) => <div className="comparison-row compact-comparison-row" key={user.email}><span><strong>{user.fullName}</strong><small>{user.licenseNumber || "sin matrícula"} · {user.specialty || "sin especialidad"}</small></span><span>{user.email}</span><span><StatusBadge tone={approvalTone(user)}>{user.approved === false || user.roles.includes("PENDING_APPROVAL") ? "pendiente" : "aprobado"}</StatusBadge></span><span>{user.roles.join(", ")}</span><span><button className="ghost-button table-open-button" disabled={loading || user.roles.includes("ADMIN")} onClick={() => void setApproval(user, !(user.approved === false || user.roles.includes("PENDING_APPROVAL")))} type="button">{user.approved === false || user.roles.includes("PENDING_APPROVAL") ? "Aprobar" : "Pausar"}</button></span></div>)}</div></section>}
 
       <AiArtifactReadiness diagnostics={diagnostics} />
-
-      <section className="panel-card compact-card">
-        <div className="section-title"><h2>Condiciones de seguridad del MVP</h2></div>
-        <ul className="check-list">
-          <li>Revisión profesional requerida: {diagnostics?.humanReviewRequired === false ? "no" : "sí"}</li>
-          <li>No constituye diagnóstico clínico: {diagnostics?.notClinicalDiagnosis === false ? "no" : "sí"}</li>
-          <li>Persistencia activa: {String(diagnostics?.persistence?.mode ?? "sin datos")}</li>
-          <li>Postgres habilitado: {diagnostics?.persistence?.postgresEnabled ? "sí" : "no"}</li>
-        </ul>
-      </section>
+      <section className="panel-card compact-card"><div className="section-title"><h2>Condiciones de seguridad del MVP</h2></div><ul className="check-list"><li>Revisión profesional requerida: {diagnostics?.humanReviewRequired === false ? "no" : "sí"}</li><li>No constituye diagnóstico clínico: {diagnostics?.notClinicalDiagnosis === false ? "no" : "sí"}</li><li>Persistencia activa: {String(diagnostics?.persistence?.mode ?? "sin datos")}</li><li>Postgres habilitado: {diagnostics?.persistence?.postgresEnabled ? "sí" : "no"}</li></ul></section>
     </div>
   );
 }
