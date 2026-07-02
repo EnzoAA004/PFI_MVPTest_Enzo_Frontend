@@ -52,6 +52,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [reviewerValues, setReviewerValues] = useState<Record<string, string>>({});
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
+  const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
 
   const review = useMemo(() => run.review ?? { status: "pendiente" as ReviewStatus }, [run.review]);
   const seriesList = Array.isArray(studyReview?.series) && studyReview.series.length ? studyReview.series : fallbackSeries;
@@ -143,6 +144,29 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     await onSaveReview(status, notes);
   }
 
+  function panelVisible(panelId: string) {
+    return !hiddenPanels[panelId];
+  }
+
+  function togglePanel(panelId: string) {
+    setHiddenPanels((current) => ({ ...current, [panelId]: !current[panelId] }));
+  }
+
+  function PanelTitle({ panelId, title, children }: { panelId: string; title: string; children?: any }) {
+    const visible = panelVisible(panelId);
+    return (
+      <div className="section-title">
+        <h2>{title}</h2>
+        <div className="panel-title-actions">
+          {children}
+          <button className="visibility-toggle" onClick={() => togglePanel(panelId)} type="button" aria-label={visible ? `Ocultar ${title}` : `Mostrar ${title}`}>{visible ? "👁" : "🙈"}</button>
+        </div>
+      </div>
+    );
+  }
+
+  const hiddenPlaceholder = <div className="panel-hidden-placeholder">Información oculta. Usá el ojo para desplegarla.</div>;
+
   return (
     <div className="view-stack review-workspace clinical-quiet">
       <section className="page-heading compact-heading">
@@ -153,38 +177,37 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       <section className="review-grid">
         <aside className="left-column">
           <article className="panel-card compact-card">
-            <div className="section-title"><h2>Case Information</h2><ReviewBadge status={review.status ?? "pendiente"} /></div>
-            <dl className="info-list compact-info">
+            <PanelTitle panelId="case" title="Case Information"><ReviewBadge status={review.status ?? "pendiente"} /></PanelTitle>
+            {panelVisible("case") ? <dl className="info-list compact-info">
               <div><dt>Case ID</dt><dd>{run.caseId ?? studyReview?.caseId}</dd></div>
               <div><dt>Patient ID</dt><dd>{studyReview?.patientId ?? "PAT-0087"}</dd></div>
               <div><dt>Study Date</dt><dd>{studyReview?.studyDate ?? "2026-07-01"}</dd></div>
               <div><dt>Plane</dt><dd>{currentSeries?.plane ?? run.plane}</dd></div>
               <div><dt>Model</dt><dd>{run.modelKey}</dd></div>
               <div><dt>Run ID</dt><dd>{run.runId}</dd></div>
-            </dl>
+            </dl> : hiddenPlaceholder}
           </article>
 
           <article className="panel-card compact-card">
-            <div className="section-title"><h2>AI Output</h2><StatusBadge tone={outputTone(aiOutput.status)}>{aiOutput.status ?? "ai_output_pending"}</StatusBadge></div>
-            <strong>{aiOutput.label ?? "Study review contract ready"}</strong>
-            <p className="muted compact-copy">{aiOutput.description ?? "Workspace visual con datos de-identificados."}</p>
+            <PanelTitle panelId="ai-output" title="AI Output"><StatusBadge tone={outputTone(aiOutput.status)}>{aiOutput.status ?? "ai_output_pending"}</StatusBadge></PanelTitle>
+            {panelVisible("ai-output") ? <><strong>{aiOutput.label ?? "Study review contract ready"}</strong><p className="muted compact-copy">{aiOutput.description ?? "Workspace visual con datos de-identificados."}</p></> : hiddenPlaceholder}
           </article>
 
           <article className="panel-card compact-card">
-            <div className="section-title"><h2>Series</h2></div>
-            <div className="series-list compact-list">
+            <PanelTitle panelId="series" title="Series" />
+            {panelVisible("series") ? <div className="series-list compact-list">
               {seriesList.map((item: any) => (
                 <button className={`series-item ${currentSeries?.id === item.id ? "active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
                   <span className="thumbnail" />
                   <span><strong>{item.name}</strong><small>{item.plane} · {item.sliceCount} slices</small></span>
                 </button>
               ))}
-            </div>
+            </div> : hiddenPlaceholder}
           </article>
 
           <article className="panel-card compact-card">
-            <div className="section-title"><h2>Masks</h2></div>
-            <div className="mask-list compact-mask-list">
+            <PanelTitle panelId="masks" title="Masks" />
+            {panelVisible("masks") ? <div className="mask-list compact-mask-list">
               {masks.map((mask: any) => {
                 const visible = maskVisibility[mask.id] ?? mask.enabled ?? true;
                 return (
@@ -196,7 +219,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   </label>
                 );
               })}
-            </div>
+            </div> : hiddenPlaceholder}
           </article>
         </aside>
 
@@ -229,8 +252,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 onSelectLandmark={setSelectedLandmark}
               />
               <article className="panel-card compact-card legend-card">
-                <div className="section-title"><h2>Legend</h2></div>
-                <div className="legend-grid">{masks.map((mask: any) => <span key={mask.id}><i style={{ background: mask.color }} />{mask.label}</span>)}</div>
+                <PanelTitle panelId="legend" title="Legend" />
+                {panelVisible("legend") ? <div className="legend-grid">{masks.map((mask: any) => <span key={mask.id}><i style={{ background: mask.color }} />{mask.label}</span>)}</div> : hiddenPlaceholder}
               </article>
             </div>
           )}
@@ -238,47 +261,51 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
         <aside className="right-column">
           <section className="panel-card results-panel">
-            <div className="section-title">
-              <h2>Resultados IA y revisión</h2>
-              <StatusBadge tone={hasReviewerDrafts ? "amber" : "blue"}>{hasReviewerDrafts ? "cambios pendientes" : "editable"}</StatusBadge>
-            </div>
-            <p className="muted compact-copy">Vista unica de mediciones: valor IA, ajuste del medico y estado. Se persiste solo al guardar.</p>
-            <div className="comparison-table unified-results-table">
-              <div className="comparison-head"><span>Medición</span><span>IA</span><span>Reviewer</span><span>Estado</span></div>
-              {studyMeasurements.map((item: any) => {
-                const persistedReviewerValue = getPersistedReviewerValue(item.id);
-                const draftValue = reviewerValues[item.id];
-                const inputValue = draftValue ?? item.reviewerValue ?? persistedReviewerValue ?? "";
-                const status = draftValue !== undefined && draftValue !== "" ? "draft" : persistedReviewerValue ? "guardado" : item.status ?? "pendiente";
-                return (
-                  <div className="comparison-row compact-comparison-row" key={item.id}>
-                    <span><strong>{item.label}</strong><small>{item.level ?? "L4-L5"} · {Math.round((item.confidence ?? 0) * 100)}%</small></span>
-                    <span>{item.aiValue ?? item.value} {item.unit}</span>
-                    <input value={inputValue} onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder="sin cambios" />
-                    <span>{status}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="review-actions compact-actions">
-              <button className="primary-button" disabled={!hasReviewerDrafts || saving} onClick={commitReviewerMeasurements} type="button">Guardar medidas</button>
-              <button className="ghost-button" disabled={!hasReviewerDrafts || saving} onClick={() => setReviewerValues({})} type="button">Descartar</button>
-              {hasReviewerDrafts && <span className="muted">{reviewerDraftCount} cambio/s</span>}
-            </div>
+            <PanelTitle panelId="results" title="Resultados IA y revisión"><StatusBadge tone={hasReviewerDrafts ? "amber" : "blue"}>{hasReviewerDrafts ? "cambios pendientes" : "editable"}</StatusBadge></PanelTitle>
+            {panelVisible("results") ? <>
+              <p className="muted compact-copy">Vista unica de mediciones: valor IA, ajuste del medico y estado. Se persiste solo al guardar.</p>
+              <div className="comparison-table unified-results-table">
+                <div className="comparison-head"><span>Medición</span><span>IA</span><span>Reviewer</span><span>Estado</span></div>
+                {studyMeasurements.map((item: any) => {
+                  const persistedReviewerValue = getPersistedReviewerValue(item.id);
+                  const draftValue = reviewerValues[item.id];
+                  const inputValue = draftValue ?? item.reviewerValue ?? persistedReviewerValue ?? "";
+                  const status = draftValue !== undefined && draftValue !== "" ? "draft" : persistedReviewerValue ? "guardado" : item.status ?? "pendiente";
+                  return (
+                    <div className="comparison-row compact-comparison-row" key={item.id}>
+                      <span><strong>{item.label}</strong><small>{item.level ?? "L4-L5"} · {Math.round((item.confidence ?? 0) * 100)}%</small></span>
+                      <span>{item.aiValue ?? item.value} {item.unit}</span>
+                      <input value={inputValue} onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder="sin cambios" />
+                      <span>{status}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="review-actions compact-actions">
+                <button className="primary-button" disabled={!hasReviewerDrafts || saving} onClick={commitReviewerMeasurements} type="button">Guardar medidas</button>
+                <button className="ghost-button" disabled={!hasReviewerDrafts || saving} onClick={() => setReviewerValues({})} type="button">Descartar</button>
+                {hasReviewerDrafts && <span className="muted">{reviewerDraftCount} cambio/s</span>}
+              </div>
+            </> : hiddenPlaceholder}
           </section>
 
           <AgentSummary agentDecision={studyReview?.aiOutput?.agentDecision ?? run.agentDecision} />
           <section className="panel-card notes-card compact-card">
-            <div className="section-title"><h2>Notas y decisión</h2></div>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones profesionales de revision..." />
-            <div className="review-actions compact-actions">
-              <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}><option value="pendiente">pendiente</option><option value="aceptado">aceptado</option><option value="observado">observado</option><option value="descartado">descartado</option></select>
-              <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Save Draft</button>
-              <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button>
-              <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Observe</button>
-            </div>
+            <PanelTitle panelId="decision" title="Notas y decisión" />
+            {panelVisible("decision") ? <>
+              <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones profesionales de revision..." />
+              <div className="review-actions compact-actions">
+                <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}><option value="pendiente">pendiente</option><option value="aceptado">aceptado</option><option value="observado">observado</option><option value="descartado">descartado</option></select>
+                <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Save Draft</button>
+                <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button>
+                <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Observe</button>
+              </div>
+            </> : hiddenPlaceholder}
           </section>
-          <section className="panel-card compact-card collapsible-audit"><div className="section-title"><h2>Audit Trail</h2></div><AuditTrail events={auditTrail.slice(0, 4)} /></section>
+          <section className="panel-card compact-card collapsible-audit">
+            <PanelTitle panelId="audit" title="Audit Trail" />
+            {panelVisible("audit") ? <AuditTrail events={auditTrail.slice(0, 4)} /> : hiddenPlaceholder}
+          </section>
         </aside>
       </section>
       <PrivacyBanner />
