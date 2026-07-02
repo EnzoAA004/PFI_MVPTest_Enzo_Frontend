@@ -10,18 +10,18 @@ import { SpineReconstructionPreview } from "./SpineReconstructionPreview";
 import { VisibilityIcon } from "./VisibilityIcon";
 
 const fallbackSeries: StudySeries[] = [
-  { id: "series-sag-t2", name: "Sagittal T2", plane: "sagittal", sequence: "T2", sliceCount: 96, selectedSlice: 58, status: "ai_output_pending" },
-  { id: "series-sag-t1", name: "Sagittal T1", plane: "sagittal", sequence: "T1", sliceCount: 96, selectedSlice: 58, status: "reference_only" },
+  { id: "series-sag-t2", name: "Sagital T2", plane: "sagittal", sequence: "T2", sliceCount: 96, selectedSlice: 58, status: "ai_output_pending" },
+  { id: "series-sag-t1", name: "Sagital T1", plane: "sagittal", sequence: "T1", sliceCount: 96, selectedSlice: 58, status: "reference_only" },
   { id: "series-ax-t2", name: "Axial T2 L4-L5", plane: "axial", sequence: "T2", sliceCount: 48, selectedSlice: 24, status: "ai_output_pending" },
   { id: "series-ax-t1", name: "Axial T1", plane: "axial", sequence: "T1", sliceCount: 48, selectedSlice: 22, status: "reference_only" },
 ];
 
 const fallbackMasks: StudyMask[] = [
-  { id: "mask-vertebral-body", label: "Vertebral body", className: "vertebral_body", color: "#c8b28a", confidence: 0.86, editable: true, enabled: true, contours: [] },
-  { id: "mask-disc", label: "Intervertebral disc", className: "disc", color: "#2563eb", confidence: 0.82, editable: true, enabled: true, contours: [] },
-  { id: "mask-canal", label: "Spinal canal", className: "spinal_canal", color: "#16a34a", confidence: 0.79, editable: true, enabled: true, contours: [] },
-  { id: "mask-root-left", label: "Left nerve root", className: "nerve_root", color: "#f59e0b", confidence: 0.72, editable: true, enabled: true, contours: [] },
-  { id: "mask-foramen-right", label: "Right foramen", className: "foramen", color: "#8b5cf6", confidence: 0.7, editable: true, enabled: true, contours: [] },
+  { id: "mask-vertebral-body", label: "Cuerpo vertebral", className: "vertebral_body", color: "#c8b28a", confidence: 0.86, editable: true, enabled: true, contours: [] },
+  { id: "mask-disc", label: "Disco intervertebral", className: "disc", color: "#2563eb", confidence: 0.82, editable: true, enabled: true, contours: [] },
+  { id: "mask-canal", label: "Canal espinal", className: "spinal_canal", color: "#16a34a", confidence: 0.79, editable: true, enabled: true, contours: [] },
+  { id: "mask-root-left", label: "Raíz nerviosa izquierda", className: "nerve_root", color: "#f59e0b", confidence: 0.72, editable: true, enabled: true, contours: [] },
+  { id: "mask-foramen-right", label: "Foramen derecho", className: "foramen", color: "#8b5cf6", confidence: 0.7, editable: true, enabled: true, contours: [] },
 ];
 
 type MeasurementRow = {
@@ -53,6 +53,22 @@ function outputTone(status?: string) {
   if (status === "real_inference") return "teal";
   if (status === "degraded") return "amber";
   return "purple";
+}
+
+function outputStatusLabel(status?: string) {
+  if (status === "contract_ready") return "contrato listo";
+  if (status === "real_inference") return "inferencia real";
+  if (status === "reviewed") return "revisado";
+  if (status === "degraded") return "degradado";
+  if (status === "ai_output_pending") return "salida pendiente";
+  return status ?? "sin estado";
+}
+
+function inferenceModeLabel(value?: string) {
+  if (value === "contract") return "modo contrato";
+  if (value === "real") return "modo real";
+  if (value === "mock") return "modo simulado";
+  return value ?? "sin datos";
 }
 
 function traceabilityTone(inferenceMode?: string, artifact?: AiModelArtifact) {
@@ -112,7 +128,7 @@ function normalizeRow(item: any): MeasurementRow {
   const value = item.aiValue ?? item.value ?? "";
   return {
     id: String(item.id ?? item.label ?? "measurement"),
-    label: String(item.label ?? "Medicion"),
+    label: String(item.label ?? "Medición"),
     level: String(item.level ?? (String(item.label ?? "").includes("L5-S1") ? "L5-S1" : "L4-L5")),
     aiValue: value,
     reviewerValue: item.reviewerValue ?? null,
@@ -204,8 +220,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const landmarks = hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [];
   const aiOutput = hasPipelineVisualContract && run.aiOutput ? run.aiOutput : studyReview?.aiOutput ?? {
     status: run.measurementsStatus ?? "ai_output_pending",
-    label: run.measurementsStatus === "pending_real_inference" ? "AI output pending" : "Technical pipeline",
-    description: run.measurementsDescription ?? "Pipeline tecnico preparado para recibir inferencia real.",
+    label: run.measurementsStatus === "pending_real_inference" ? "Salida IA pendiente" : "Salida técnica",
+    description: run.measurementsDescription ?? "Pipeline técnico preparado para recibir inferencia real.",
   };
   const currentSeries = seriesList.find((item: any) => item.id === selectedSeriesId) ?? seriesList.find((item: any) => item.plane === tab.toLowerCase()) ?? seriesList[0];
   const activeSlice = currentSeries ? sliceBySeries[currentSeries.id] ?? currentSeries.selectedSlice ?? 1 : 1;
@@ -344,7 +360,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
   function exportCsv() {
     const payload = exportPayload();
-    const headers = ["Caso", "Run", "Medicion", "Nivel", "Valor IA", "Valor Reviewer", "Delta", "Unidad", "Prioridad", "Estado", "Outlier", "Confianza (%)"];
+    const headers = ["Caso", "Run", "Medición", "Nivel", "Valor IA", "Valor Reviewer", "Delta", "Unidad", "Prioridad", "Estado", "Outlier", "Confianza (%)"];
     const rows = payload.measurements.map((row) => [payload.caseId, payload.runId, row.label, row.level, row.aiValue, row.reviewerValue ?? "sin cambios", row.deltaFormatted, row.unit, row.severity, row.status, row.outlier ? "si" : "no", row.confidence !== undefined ? Math.round(row.confidence * 100) : ""]);
     const csv = "\ufeff" + [headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-mediciones.csv`, csv, "text/csv;charset=utf-8");
@@ -392,53 +408,53 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     <div className="view-stack review-workspace clinical-quiet">
       <section className="page-heading compact-heading">
         <div>
-          <p>Study Review Workspace</p>
+          <p>Espacio de revisión</p>
           <h1>{displayRun.caseId ?? studyReview?.caseId ?? "CASE-DEMO-0142"}</h1>
         </div>
         <div className="safety-copy">
-          <strong>Requiere revision profesional.</strong>
-          <span>Salida asistiva, no diagnostico clinico.</span>
+          <strong>Requiere revisión profesional.</strong>
+          <span>Salida asistiva, no diagnóstico clínico.</span>
         </div>
       </section>
 
       <section className="review-grid">
         <aside className="left-column">
           <article className="panel-card compact-card">
-            <PanelTitle panelId="case" title="Case Information"><ReviewBadge status={review.status ?? "pendiente"} /></PanelTitle>
+            <PanelTitle panelId="case" title="Información del caso"><ReviewBadge status={review.status ?? "pendiente"} /></PanelTitle>
             {panelVisible("case") ? (
               <dl className="info-list compact-info">
-                <div><dt>Case ID</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
-                <div><dt>Subject Ref</dt><dd>{selectedDetail?.study?.patientId ?? run.patientId ?? studyReview?.patientId ?? "PAT-0087"}</dd></div>
-                <div><dt>Study Date</dt><dd>{selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? "2026-07-01"}</dd></div>
-                <div><dt>Plane</dt><dd>{currentSeries?.plane ?? displayRun.plane}</dd></div>
-                <div><dt>Model</dt><dd>{displayRun.modelKey}</dd></div>
-                <div><dt>Run ID</dt><dd>{displayRun.runId}</dd></div>
+                <div><dt>ID caso</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
+                <div><dt>Sujeto ref.</dt><dd>{selectedDetail?.study?.patientId ?? run.patientId ?? studyReview?.patientId ?? "PAT-0087"}</dd></div>
+                <div><dt>Fecha estudio</dt><dd>{selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? "2026-07-01"}</dd></div>
+                <div><dt>Plano</dt><dd>{currentSeries?.plane ?? displayRun.plane}</dd></div>
+                <div><dt>Modelo</dt><dd>{displayRun.modelKey}</dd></div>
+                <div><dt>ID corrida</dt><dd>{displayRun.runId}</dd></div>
               </dl>
             ) : hiddenPlaceholder}
           </article>
 
           <article className="panel-card compact-card">
-            <PanelTitle panelId="ai-output" title="AI Output"><StatusBadge tone={outputTone(aiOutput.status)}>{aiOutput.status ?? "ai_output_pending"}</StatusBadge></PanelTitle>
+            <PanelTitle panelId="ai-output" title="Salida módulo IA"><StatusBadge tone={outputTone(aiOutput.status)}>{outputStatusLabel(aiOutput.status)}</StatusBadge></PanelTitle>
             {panelVisible("ai-output") ? (
               <>
-                <strong>{aiOutput.label ?? "Study review contract ready"}</strong>
+                <strong>{aiOutput.label ?? "Contrato de revisión listo"}</strong>
                 <p className="muted compact-copy">{aiOutput.description ?? "Workspace visual con datos de-identificados."}</p>
               </>
             ) : hiddenPlaceholder}
           </article>
 
           <article className="panel-card compact-card">
-            <PanelTitle panelId="traceability" title="Run Traceability"><StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceMode}</StatusBadge></PanelTitle>
+            <PanelTitle panelId="traceability" title="Trazabilidad de corrida"><StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceModeLabel(inferenceMode)}</StatusBadge></PanelTitle>
             {panelVisible("traceability") ? (
               <>
-                <p className="muted compact-copy">Trazabilidad técnica del análisis recibido desde AI Module. Esta salida es asistiva, revisable y no constituye diagnóstico clínico.</p>
+                <p className="muted compact-copy">Trazabilidad técnica del análisis recibido desde el módulo IA. Esta salida es asistiva, revisable y no constituye diagnóstico clínico.</p>
                 <dl className="info-list compact-info">
-                  <div><dt>Modo inferencia</dt><dd>{inferenceMode}</dd></div>
-                  <div><dt>Modo solicitado</dt><dd>{requestedInferenceMode}</dd></div>
+                  <div><dt>Modo inferencia</dt><dd>{inferenceModeLabel(inferenceMode)}</dd></div>
+                  <div><dt>Modo solicitado</dt><dd>{inferenceModeLabel(requestedInferenceMode)}</dd></div>
                   <div><dt>Modelo</dt><dd>{displayRun.modelKey} · {displayRun.modelVersion ?? modelArtifact?.version ?? "contract-v1"}</dd></div>
-                  <div><dt>Readiness</dt><dd>{readinessLabel(modelReadiness)}</dd></div>
-                  <div><dt>Artifact real</dt><dd>{boolText(artifact?.exists)}</dd></div>
-                  <div><dt>Real inference</dt><dd>{boolText(realInferenceAvailable)}</dd></div>
+                  <div><dt>Estado modelo</dt><dd>{readinessLabel(modelReadiness)}</dd></div>
+                  <div><dt>Modelo real disponible</dt><dd>{boolText(artifact?.exists)}</dd></div>
+                  <div><dt>Inferencia real</dt><dd>{boolText(realInferenceAvailable)}</dd></div>
                   <div><dt>Mediciones</dt><dd>{quality?.measurementCount ?? resultRows.length}</dd></div>
                   <div><dt>Máscaras</dt><dd>{quality?.maskCount ?? masks.length}</dd></div>
                   <div><dt>Landmarks</dt><dd>{quality?.landmarkCount ?? landmarks.length}</dd></div>
@@ -457,7 +473,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 {seriesList.map((item: any) => (
                   <button className={`series-item ${currentSeries?.id === item.id ? "active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
                     <span className="thumbnail" />
-                    <span><strong>{item.name}</strong><small>{item.plane} · {item.sliceCount} slices</small></span>
+                    <span><strong>{item.name}</strong><small>{item.plane} · {item.sliceCount} cortes</small></span>
                   </button>
                 ))}
               </div>
@@ -465,7 +481,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </article>
 
           <article className="panel-card compact-card">
-            <PanelTitle panelId="masks" title="Masks" />
+            <PanelTitle panelId="masks" title="Máscaras" />
             {panelVisible("masks") ? (
               <div className="mask-list compact-mask-list">
                 {masks.map((mask: any) => {
@@ -475,7 +491,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                       <input checked={visible} onChange={() => toggleMask(mask.id)} type="checkbox" />
                       <i style={{ background: mask.color }} />
                       <button onClick={() => setSelectedMask(mask.id)} type="button">{mask.label}</button>
-                      <small>{visible ? "on" : "off"}</small>
+                      <small>{visible ? "visible" : "oculta"}</small>
                     </label>
                   );
                 })}
@@ -486,16 +502,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
         <section className="center-column">
           <div className="workspace-tabs">
-            {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item}</button>)}
+            {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item === "3D Reconstruction" ? "Reconstrucción 3D" : item}</button>)}
           </div>
           <div className="toolbar compact-toolbar">
-            <button className={editMode ? "active" : ""} onClick={() => setEditMode((value) => !value)} type="button">Edit Mask</button>
-            <button onClick={() => setSelectedLandmark("L4-L5")} type="button">Add Landmark</button>
-            <button type="button">Recalculate</button>
-            <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Overlay</button>
-            <label className="opacity-control">Opacity <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
+            <button className={editMode ? "active" : ""} onClick={() => setEditMode((value) => !value)} type="button">Editar máscara</button>
+            <button onClick={() => setSelectedLandmark("L4-L5")} type="button">Agregar landmark</button>
+            <button type="button">Recalcular</button>
+            <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Superposición</button>
+            <label className="opacity-control">Opacidad <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state compact-copy">Series: <strong>{currentSeries?.name}</strong> · Slice: <strong>{activeSlice}</strong> · Mask: <strong>{selectedMask}</strong> · Landmark: <strong>{selectedLandmark}</strong></div>
+          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Corte: <strong>{activeSlice}</strong> · Máscara: <strong>{selectedMask}</strong> · Landmark: <strong>{selectedLandmark}</strong></div>
           {tab === "3D Reconstruction" ? (
             <article className="panel-card full-viewer"><SpineReconstructionPreview /></article>
           ) : (
@@ -517,7 +533,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 onSelectLandmark={setSelectedLandmark}
               />
               <article className="panel-card compact-card legend-card">
-                <PanelTitle panelId="legend" title="Legend" />
+                <PanelTitle panelId="legend" title="Leyenda" />
                 {panelVisible("legend") ? <div className="legend-grid">{masks.map((mask: any) => <span key={mask.id}><i style={{ background: mask.color }} />{mask.label}</span>)}</div> : hiddenPlaceholder}
               </article>
             </div>
@@ -557,7 +573,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <PanelTitle panelId="decision" title="Notas y decisión" />
             {panelVisible("decision") ? (
               <>
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones profesionales de revision..." />
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones profesionales de revisión..." />
                 <div className="review-actions compact-actions">
                   <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
                     <option value="pendiente">pendiente</option>
@@ -565,9 +581,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     <option value="observado">observado</option>
                     <option value="descartado">descartado</option>
                   </select>
-                  <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Save Draft</button>
-                  <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button>
-                  <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Observe</button>
+                  <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Guardar borrador</button>
+                  <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Aprobar</button>
+                  <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Observar</button>
                 </div>
                 <div className="review-actions compact-actions export-actions">
                   <button className="ghost-button" onClick={exportHtml} type="button">Exportar informe</button>
@@ -579,7 +595,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </section>
 
           <section className="panel-card compact-card collapsible-audit">
-            <PanelTitle panelId="audit" title="Audit Trail" />
+            <PanelTitle panelId="audit" title="Auditoría" />
             {panelVisible("audit") ? <AuditTrail events={auditTrail.slice(0, 4)} /> : hiddenPlaceholder}
           </section>
         </aside>
