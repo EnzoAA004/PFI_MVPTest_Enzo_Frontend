@@ -1,16 +1,28 @@
 import { API_BASE_URL } from "./api";
-import { authHeaders } from "./authClient";
+import { authHeaders, refreshDoctorSession } from "./authClient";
 import type { AuditEvent, Measurement, ReviewStatusResponse } from "./appTypes";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+function requestInit(init?: RequestInit): RequestInit {
+  return {
     ...init,
     headers: {
       "Content-Type": "application/json",
       ...authHeaders(),
       ...init?.headers,
     },
-  });
+  };
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response = await fetch(`${API_BASE_URL}${path}`, requestInit(init));
+  if (response.status === 401) {
+    try {
+      await refreshDoctorSession();
+      response = await fetch(`${API_BASE_URL}${path}`, requestInit(init));
+    } catch {
+      // Keep the original failure behavior below.
+    }
+  }
   if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
   return (await response.json()) as T;
 }
