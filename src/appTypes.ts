@@ -1,7 +1,7 @@
 export type Plane = "sagittal" | "axial";
 export type ReviewStatus = "pendiente" | "aceptado" | "observado" | "descartado";
 export type Priority = "alta" | "media" | "baja";
-export type ViewKey = "dashboard" | "review" | "history";
+export type ViewKey = "dashboard" | "review" | "history" | "settings";
 
 export type PipelineRunRequest = {
   caseId: string;
@@ -172,4 +172,27 @@ export type RegisterRequest = {
   licenseNumber?: string;
   specialty?: string;
   institution?: string;
+};
+
+export type DiagnosticBlock = {
+  available?: boolean;
+  connected?: boolean;
+  enabled?: boolean;
+  status?: string;
+  mode?: string;
+  service?: string;
+  message?: string;
+  response?: Record<string, unknown>;
+};
+
+export type SystemDiagnostics = {
+  status: string;
+  checkedAt?: string;
+  backend?: DiagnosticBlock;
+  aiModule?: DiagnosticBlock;
+  database?: DiagnosticBlock;
+  auth?: DiagnosticBlock;
+  persistence?: DiagnosticBlock & { postgresEnabled?: boolean };
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
 };
