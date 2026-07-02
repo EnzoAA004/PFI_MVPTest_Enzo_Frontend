@@ -3,7 +3,7 @@ import "./mri-theme.css";
 import { useEffect, useMemo, useState } from "react";
 import { getDemoStudyReview, getHealth, getModels, getStudies, getSystemDiagnostics, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { logoutDoctor } from "./authClient";
-import { loadAuthSession } from "./authStorage";
+import { hydrateAuthSession, loadAuthSession } from "./authStorage";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
 import { DashboardView } from "./components/DashboardView";
@@ -48,6 +48,7 @@ function LoadingState({ title, detail }: { title: string; detail: string }) {
 
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
+  const [authBootstrapping, setAuthBootstrapping] = useState(true);
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [health, setHealth] = useState("consultando");
   const [models, setModels] = useState<AiModel[]>([]);
@@ -96,6 +97,20 @@ function App() {
           : patientStudies;
   const shouldShowDataLoading = bootstrapLoading && backendStudies.length === 0;
   const historySubjectRef = patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? "PAT-0087";
+
+  useEffect(() => {
+    let cancelled = false;
+    async function restoreSession() {
+      try {
+        const restored = await hydrateAuthSession();
+        if (!cancelled && restored) setSession(restored);
+      } finally {
+        if (!cancelled) setAuthBootstrapping(false);
+      }
+    }
+    void restoreSession();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -224,6 +239,7 @@ function App() {
     } finally { setSaving(false); }
   }
 
+  if (authBootstrapping) return <main className="auth-page"><LoadingState title="Restaurando sesión" detail="Buscando sesión profesional en almacenamiento asíncrono del navegador." /></main>;
   if (!session) return <AuthView onAuthenticated={setSession} />;
 
   return (
