@@ -8,6 +8,7 @@ import { AuthView } from "./components/AuthView";
 import { DashboardView } from "./components/DashboardView";
 import { PatientHistoryView } from "./components/PatientHistoryView";
 import { StudyReviewView } from "./components/StudyReviewView";
+import { SystemDiagnosticsView } from "./components/SystemDiagnosticsView";
 import { initialAuditTrail, patientStudies, worklistStudies } from "./data/mockStudies";
 import { sampleRun } from "./mock/sampleRun";
 import { appendBackendAudit, getBackendReviewSnapshot, saveBackendMeasurements } from "./reviewPersistenceApi";
@@ -224,6 +225,7 @@ function App() {
         />
       )}
       {activeView === "history" && <PatientHistoryView studies={history.patientStudies.length ? history.patientStudies : patientStudies} />}
+      {activeView === "settings" && <SystemDiagnosticsView />}
     </AppShell>
   );
 }
