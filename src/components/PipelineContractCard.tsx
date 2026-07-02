@@ -21,20 +21,49 @@ function statusLabel(schema: PipelineContractSchema | null, loading: boolean) {
   return schema?.status ?? (loading ? "consultando" : "sin datos");
 }
 
+function schemaJson(schema: PipelineContractSchema) {
+  return JSON.stringify(schema, null, 2);
+}
+
+function downloadSchema(schema: PipelineContractSchema) {
+  const filename = `pfi-pipeline-contract-${schema.schemaVersion ?? "schema"}.json`.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const blob = new Blob([schemaJson(schema)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function PipelineContractCard() {
   const [schema, setSchema] = useState<PipelineContractSchema | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
 
   async function refresh() {
     setLoading(true);
     setError("");
+    setCopyMessage("");
     try {
       setSchema(await getPipelineContractSchema());
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "No se pudo consultar el contrato del pipeline");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function copySchema() {
+    if (!schema) return;
+    try {
+      await navigator.clipboard.writeText(schemaJson(schema));
+      setCopyMessage("Contrato copiado al portapapeles.");
+    } catch {
+      window.prompt("Copiar contrato JSON", schemaJson(schema));
     }
   }
 
@@ -56,6 +85,7 @@ export function PipelineContractCard() {
       </div>
 
       {error && <div className="panel-hidden-placeholder">{error}</div>}
+      {copyMessage && <div className="panel-hidden-placeholder">{copyMessage}</div>}
       {schema?.degradedMode && <div className="panel-hidden-placeholder">Fallback servido por backend: {schema.message ?? "AI Module no disponible al consultar el contrato."}</div>}
 
       <dl className="info-list compact-info">
@@ -88,6 +118,8 @@ export function PipelineContractCard() {
 
       <div className="review-actions compact-actions">
         <button className="ghost-button" disabled={loading} onClick={() => void refresh()} type="button">Actualizar contrato</button>
+        <button className="ghost-button" disabled={!schema} onClick={() => void copySchema()} type="button">Copiar JSON</button>
+        <button className="ghost-button" disabled={!schema} onClick={() => schema && downloadSchema(schema)} type="button">Descargar JSON</button>
       </div>
     </section>
   );
