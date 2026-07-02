@@ -43,6 +43,15 @@ function renderTimeline(studies: PatientStudy[]) {
 
 export function PatientHistoryView({ studies }: PatientHistoryViewProps) {
   const [activeTab, setActiveTab] = useState<HistoryTab>("overview");
+  const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
+  const visible = (id: string) => !hiddenPanels[id];
+  const toggle = (id: string) => setHiddenPanels((current) => ({ ...current, [id]: !current[id] }));
+  const hidden = <div className="panel-hidden-placeholder">Información oculta. Usá el ojo para desplegarla.</div>;
+
+  function PanelTitle({ id, title, children }: { id: string; title: string; children?: any }) {
+    const isVisible = visible(id);
+    return <div className="section-title"><h2>{title}</h2><div className="panel-title-actions">{children}<button className="visibility-toggle" onClick={() => toggle(id)} type="button" aria-label={isVisible ? `Ocultar ${title}` : `Mostrar ${title}`}>{isVisible ? "👁" : "🙈"}</button></div></div>;
+  }
 
   return (
     <div className="view-stack clinical-quiet">
@@ -61,27 +70,27 @@ export function PatientHistoryView({ studies }: PatientHistoryViewProps) {
 
       {activeTab === "overview" && (
         <section className="history-grid quiet-history-grid">
-          <article className="panel-card compact-card"><div className="section-title"><h2>Timeline de estudios</h2></div>{renderTimeline(studies)}</article>
-          <article className="panel-card compact-card"><div className="section-title"><h2>Tendencias principales</h2><span>AI initial vs Reviewer final</span></div><div className="trend-grid"><div><strong>Lordosis Angle</strong><TrendChart studies={studies} metric="lordosisAngle" /></div><div><strong>Central Canal Diameter</strong><TrendChart studies={studies} metric="canalDiameter" /></div></div></article>
+          <article className="panel-card compact-card"><PanelTitle id="timeline" title="Timeline de estudios" />{visible("timeline") ? renderTimeline(studies) : hidden}</article>
+          <article className="panel-card compact-card"><PanelTitle id="trends" title="Tendencias principales"><span>AI initial vs Reviewer final</span></PanelTitle>{visible("trends") ? <div className="trend-grid"><div><strong>Lordosis Angle</strong><TrendChart studies={studies} metric="lordosisAngle" /></div><div><strong>Central Canal Diameter</strong><TrendChart studies={studies} metric="canalDiameter" /></div></div> : hidden}</article>
         </section>
       )}
 
       {activeTab === "measurements" && (
-        <section className="panel-card compact-card"><div className="section-title"><h2>Key Measurements AI vs Reviewer</h2><span>Solo metricas derivadas</span></div><div className="table-wrap"><table className="worklist-table"><thead><tr><th>Study</th><th>Metric</th><th>AI Initial</th><th>Reviewer Final</th><th>Delta</th></tr></thead><tbody>{studies.slice(0, 4).map((study, index) => <tr key={study.caseId}><td>{study.caseId}</td><td>L4-L5 Disc Height</td><td>{(study.metrics.l45DiscHeight + 0.4).toFixed(1)} mm</td><td>{study.metrics.l45DiscHeight.toFixed(1)} mm</td><td className={index === 1 ? "delta-alert" : ""}>-0.4 mm</td></tr>)}</tbody></table></div></section>
+        <section className="panel-card compact-card"><PanelTitle id="measurement-history" title="Key Measurements AI vs Reviewer"><span>Solo metricas derivadas</span></PanelTitle>{visible("measurement-history") ? <div className="table-wrap"><table className="worklist-table"><thead><tr><th>Study</th><th>Metric</th><th>AI Initial</th><th>Reviewer Final</th><th>Delta</th></tr></thead><tbody>{studies.slice(0, 4).map((study, index) => <tr key={study.caseId}><td>{study.caseId}</td><td>L4-L5 Disc Height</td><td>{(study.metrics.l45DiscHeight + 0.4).toFixed(1)} mm</td><td>{study.metrics.l45DiscHeight.toFixed(1)} mm</td><td className={index === 1 ? "delta-alert" : ""}>-0.4 mm</td></tr>)}</tbody></table></div> : hidden}</section>
       )}
 
       {activeTab === "activity" && (
         <section className="history-grid quiet-history-grid two">
-          <article className="panel-card compact-card"><div className="section-title"><h2>Study Repository</h2></div>{renderTimeline(studies)}</article>
-          <article className="panel-card compact-card"><div className="section-title"><h2>Audit summary</h2></div><ul className="check-list"><li>Revision profesional requerida</li><li>Cambios guardados en backend/Postgres</li><li>Exportaciones restringidas</li><li>Datos de-identificados</li></ul></article>
+          <article className="panel-card compact-card"><PanelTitle id="repository" title="Study Repository" />{visible("repository") ? renderTimeline(studies) : hidden}</article>
+          <article className="panel-card compact-card"><PanelTitle id="audit-summary" title="Audit summary" />{visible("audit-summary") ? <ul className="check-list"><li>Revision profesional requerida</li><li>Cambios guardados en backend/Postgres</li><li>Exportaciones restringidas</li><li>Datos de-identificados</li></ul> : hidden}</article>
         </section>
       )}
 
       {activeTab === "governance" && (
         <>
           <section className="history-grid two">
-            <article className="panel-card compact-card"><div className="section-title"><h2>Data Governance & Privacy</h2></div><ul className="check-list"><li>Academic/research use only</li><li>Data de-identified</li><li>No direct identifiers</li><li>Export restricted</li><li>Human review required</li><li>Retention policy configurable</li></ul><div className="export-rules"><span>Raw images <strong>Not permitted</strong></span><span>Full reports <strong>Not permitted</strong></span><span>Per-patient export <strong>Not permitted</strong></span><span>Derived metrics and de-identified visuals <strong>Permitted</strong></span></div></article>
-            <article className="panel-card compact-card"><div className="section-title"><h2>Study Library</h2><span>Research/testing sources only</span></div><div className="library-grid quiet-library"><article><strong>SPIDER public dataset</strong><p>Fuente publica para investigacion y pruebas de segmentacion.</p></article><article><strong>VerSe de-identified/external</strong><p>Referencia externa de-identificada para benchmarking academico.</p></article><article><strong>LumbarDISC</strong><p>Dataset complementario de clasificacion, no datos clinicos internos.</p></article></div></article>
+            <article className="panel-card compact-card"><PanelTitle id="governance" title="Data Governance & Privacy" />{visible("governance") ? <><ul className="check-list"><li>Academic/research use only</li><li>Data de-identified</li><li>No direct identifiers</li><li>Export restricted</li><li>Human review required</li><li>Retention policy configurable</li></ul><div className="export-rules"><span>Raw images <strong>Not permitted</strong></span><span>Full reports <strong>Not permitted</strong></span><span>Per-patient export <strong>Not permitted</strong></span><span>Derived metrics and de-identified visuals <strong>Permitted</strong></span></div></> : hidden}</article>
+            <article className="panel-card compact-card"><PanelTitle id="library" title="Study Library"><span>Research/testing sources only</span></PanelTitle>{visible("library") ? <div className="library-grid quiet-library"><article><strong>SPIDER public dataset</strong><p>Fuente publica para investigacion y pruebas de segmentacion.</p></article><article><strong>VerSe de-identified/external</strong><p>Referencia externa de-identificada para benchmarking academico.</p></article><article><strong>LumbarDISC</strong><p>Dataset complementario de clasificacion, no datos clinicos internos.</p></article></div> : hidden}</article>
           </section>
           <PrivacyBanner />
         </>
