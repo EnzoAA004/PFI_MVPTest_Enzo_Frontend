@@ -7,3 +7,5 @@
 .selectable-worklist .clickable-row:hover{background:#f8fbff;box-shadow:inset 3px 0 0 #2563eb}
 .selectable-worklist .clickable-row:focus-visible{outline:2px solid #2563eb;outline-offset:-2px;background:#eff6ff}
 .table-open-button{font-size:.78rem!important;min-height:30px!important;padding:6px 10px!important;white-space:nowrap!important}
+.clinical-loading-state{align-items:center;display:flex;gap:16px;margin:18px 0;min-height:170px;padding:28px!important}.clinical-loading-state h2{font-size:1.05rem;margin:0 0 6px}.clinical-loading-state p{color:#64748b;margin:0}.clinical-spinner{animation:clinicalSpin .9s linear infinite;border:3px solid #dbeafe;border-top-color:#2563eb;border-radius:999px;display:inline-block;height:34px;width:34px}@keyframes clinicalSpin{to{transform:rotate(360deg)}}
+.delta-value{font-weight:800}.delta-neutral{color:#64748b}.delta-low{color:#047857}.delta-medium{color:#b45309}.delta-high{color:#b91c1c}.comparison-row.outlier-row{background:#fff7ed;border-color:#fed7aa}.delta-chip{border-radius:999px;padding:4px 7px;background:#f8fafc;border:1px solid #e2e8f0}
