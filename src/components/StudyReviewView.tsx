@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import type { AiRunResponse, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse } from "../appTypes";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
-import { MeasurementsPanel } from "./MeasurementsPanel";
 import { MriSliceViewer } from "./MriSliceViewer";
 import { PrivacyBanner } from "./PrivacyBanner";
 import { ReviewBadge, StatusBadge } from "./StatusBadge";
@@ -40,15 +39,7 @@ interface StudyReviewViewProps {
   onSaveReview: (status: ReviewStatus, notes: string) => Promise<ReviewStatusResponse | undefined>;
 }
 
-export function StudyReviewView({
-  run,
-  studyReview,
-  measurements,
-  auditTrail,
-  saving,
-  onMeasurementsChange,
-  onSaveReview,
-}: StudyReviewViewProps) {
+export function StudyReviewView({ run, studyReview, measurements, auditTrail, saving, onMeasurementsChange, onSaveReview }: StudyReviewViewProps) {
   const [tab, setTab] = useState<"Sagittal" | "Axial" | "3D Reconstruction">("Sagittal");
   const [selectedSeriesId, setSelectedSeriesId] = useState("");
   const [sliceBySeries, setSliceBySeries] = useState<Record<string, number>>({});
@@ -113,92 +104,87 @@ export function StudyReviewView({
     return persisted?.value ?? "";
   }
 
+  function toMeasurement(item: any): Measurement {
+    const existing = measurements.find((measurement) => measurement.id === item.id);
+    const reviewerValue = reviewerValues[item.id];
+    return {
+      id: item.id,
+      label: item.label,
+      value: reviewerValue ?? existing?.value ?? item.value ?? item.aiValue ?? "",
+      unit: item.unit ?? existing?.unit ?? "",
+      confidence: item.confidence ?? existing?.confidence,
+      plane: existing?.plane ?? run.plane,
+      source: reviewerValue !== undefined && reviewerValue !== "" ? "Reviewer" : existing?.source ?? "AI",
+      status: reviewerValue !== undefined && reviewerValue !== "" ? "editado" : existing?.status ?? "pendiente",
+      outlier: Boolean(item.outlier ?? existing?.outlier),
+      placeholder: existing?.placeholder,
+    };
+  }
+
   function commitReviewerMeasurements() {
     if (!hasReviewerDrafts) return;
-    const changedIds = new Set(Object.keys(reviewerValues).filter((key) => reviewerValues[key] !== ""));
-    const nextMeasurements = measurements.map((item) =>
-      changedIds.has(item.id)
-        ? { ...item, value: reviewerValues[item.id], source: "Reviewer" as const, status: "editado" as const }
-        : item,
-    );
-    onMeasurementsChange(nextMeasurements, `${changedIds.size} medicion/es guardadas por Reviewer desde AI vs Reviewer`);
+    const existingIds = new Set(measurements.map((item) => item.id));
+    const updated = measurements.map((item) => {
+      const reviewerValue = reviewerValues[item.id];
+      return reviewerValue !== undefined && reviewerValue !== ""
+        ? { ...item, value: reviewerValue, source: "Reviewer" as const, status: "editado" as const }
+        : item;
+    });
+    const appended = studyMeasurements
+      .filter((item: any) => reviewerValues[item.id] !== undefined && reviewerValues[item.id] !== "" && !existingIds.has(item.id))
+      .map(toMeasurement);
+    onMeasurementsChange([...updated, ...appended], `${reviewerDraftCount} medicion/es guardadas por Reviewer desde Resultados IA`);
     setReviewerValues({});
   }
 
   async function save(status: ReviewStatus) {
     setReviewStatus(status);
-    if (hasReviewerDrafts) {
-      commitReviewerMeasurements();
-    }
+    if (hasReviewerDrafts) commitReviewerMeasurements();
     await onSaveReview(status, notes);
   }
 
   return (
-    <div className="view-stack review-workspace">
-      <section className="page-heading">
+    <div className="view-stack review-workspace clinical-quiet">
+      <section className="page-heading compact-heading">
         <div><p>Study Review Workspace</p><h1>{run.caseId ?? studyReview?.caseId ?? "CASE-DEMO-0142"}</h1></div>
-        <div className="safety-copy"><strong>Requiere revision profesional.</strong><span>Not for clinical diagnosis. Human review required.</span></div>
+        <div className="safety-copy"><strong>Requiere revision profesional.</strong><span>Salida asistiva, no diagnostico clinico.</span></div>
       </section>
 
       <section className="review-grid">
         <aside className="left-column">
-          <article className="panel-card">
-            <div className="section-title">
-              <h2>Case Information</h2>
-              <ReviewBadge status={review.status ?? "pendiente"} />
-            </div>
-            <dl className="info-list">
+          <article className="panel-card compact-card">
+            <div className="section-title"><h2>Case Information</h2><ReviewBadge status={review.status ?? "pendiente"} /></div>
+            <dl className="info-list compact-info">
               <div><dt>Case ID</dt><dd>{run.caseId ?? studyReview?.caseId}</dd></div>
               <div><dt>Patient ID</dt><dd>{studyReview?.patientId ?? "PAT-0087"}</dd></div>
               <div><dt>Study Date</dt><dd>{studyReview?.studyDate ?? "2026-07-01"}</dd></div>
-              <div><dt>Modality</dt><dd>MRI</dd></div>
               <div><dt>Plane</dt><dd>{currentSeries?.plane ?? run.plane}</dd></div>
-              <div><dt>Model Key</dt><dd>{run.modelKey}</dd></div>
+              <div><dt>Model</dt><dd>{run.modelKey}</dd></div>
               <div><dt>Run ID</dt><dd>{run.runId}</dd></div>
-              <div><dt>Reviewer</dt><dd>{review.reviewer || "Reviewer"}</dd></div>
             </dl>
           </article>
 
-          <article className="panel-card">
-            <div className="section-title">
-              <h2>AI Output</h2>
-              <StatusBadge tone={outputTone(aiOutput.status)}>{aiOutput.status ?? "ai_output_pending"}</StatusBadge>
-            </div>
+          <article className="panel-card compact-card">
+            <div className="section-title"><h2>AI Output</h2><StatusBadge tone={outputTone(aiOutput.status)}>{aiOutput.status ?? "ai_output_pending"}</StatusBadge></div>
             <strong>{aiOutput.label ?? "Study review contract ready"}</strong>
-            <p className="muted">{aiOutput.description ?? "Visual workspace using fallback/mock data until real inference is available."}</p>
+            <p className="muted compact-copy">{aiOutput.description ?? "Workspace visual con datos de-identificados."}</p>
           </article>
 
-          <article className="panel-card">
-            <div className="section-title"><h2>Patient-Safe Metadata</h2><StatusBadge tone="teal">De-identified</StatusBadge></div>
-            <dl className="info-list">
-              <div><dt>Age at study</dt><dd>{studyReview?.metadata?.ageAtStudy ?? "No informado"}</dd></div>
-              <div><dt>Sex</dt><dd>{studyReview?.metadata?.sex ?? "No informado"}</dd></div>
-              <div><dt>Body Region</dt><dd>{studyReview?.metadata?.bodyRegion ?? "Lumbar Spine"}</dd></div>
-              <div><dt>Study Description</dt><dd>{studyReview?.metadata?.studyDescription ?? "Lumbar spine MRI"}</dd></div>
-              <div><dt>Series Count</dt><dd>{seriesList.length}</dd></div>
-              <div><dt>Image Resolution</dt><dd>{studyReview?.metadata?.imageResolution ?? "Mock 512 x 512"}</dd></div>
-            </dl>
-            <p className="muted">Metadata seguro y de-identificado para demo academica.</p>
-          </article>
-
-          <article className="panel-card">
-            <div className="section-title"><h2>Series Navigator</h2></div>
-            <div className="series-list">
+          <article className="panel-card compact-card">
+            <div className="section-title"><h2>Series</h2></div>
+            <div className="series-list compact-list">
               {seriesList.map((item: any) => (
                 <button className={`series-item ${currentSeries?.id === item.id ? "active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
                   <span className="thumbnail" />
-                  <span>
-                    <strong>{item.name}</strong>
-                    <small>{item.plane} · {item.sequence} · {item.sliceCount} slices · {item.status}</small>
-                  </span>
+                  <span><strong>{item.name}</strong><small>{item.plane} · {item.sliceCount} slices</small></span>
                 </button>
               ))}
             </div>
           </article>
 
-          <article className="panel-card">
-            <div className="section-title"><h2>Mask classes</h2></div>
-            <div className="mask-list">
+          <article className="panel-card compact-card">
+            <div className="section-title"><h2>Masks</h2></div>
+            <div className="mask-list compact-mask-list">
               {masks.map((mask: any) => {
                 const visible = maskVisibility[mask.id] ?? mask.enabled ?? true;
                 return (
@@ -206,7 +192,7 @@ export function StudyReviewView({
                     <input checked={visible} onChange={() => toggleMask(mask.id)} type="checkbox" />
                     <i style={{ background: mask.color }} />
                     <button onClick={() => setSelectedMask(mask.id)} type="button">{mask.label}</button>
-                    <small>{Math.round((mask.confidence ?? 0) * 100)}% · {visible ? "visible" : "hidden"}</small>
+                    <small>{visible ? "on" : "off"}</small>
                   </label>
                 );
               })}
@@ -216,20 +202,16 @@ export function StudyReviewView({
 
         <section className="center-column">
           <div className="workspace-tabs">{(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item}</button>)}</div>
-          <div className="toolbar">
+          <div className="toolbar compact-toolbar">
             <button className={editMode ? "active" : ""} onClick={() => setEditMode((value) => !value)} type="button">Edit Mask</button>
             <button onClick={() => setSelectedLandmark("L4-L5")} type="button">Add Landmark</button>
             <button type="button">Recalculate</button>
-            <button type="button">Undo</button>
-            <button onClick={() => void save("aceptado")} type="button">Approve</button>
-            <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Toggle AI Overlay</button>
-            <label className="opacity-control">Overlay <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
+            <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Overlay</button>
+            <label className="opacity-control">Opacity <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state">
-            Series: <strong>{currentSeries?.name}</strong> · Slice: <strong>{activeSlice}</strong> · Selected mask: <strong>{selectedMask}</strong> · Selected landmark: <strong>{selectedLandmark}</strong> · Overlay opacity: <strong>{overlayOpacity}%</strong>
-          </div>
+          <div className="edit-state compact-copy">Series: <strong>{currentSeries?.name}</strong> · Slice: <strong>{activeSlice}</strong> · Mask: <strong>{selectedMask}</strong> · Landmark: <strong>{selectedLandmark}</strong></div>
           {tab === "3D Reconstruction" ? <article className="panel-card full-viewer"><SpineReconstructionPreview /></article> : (
-            <div className="viewer-stack">
+            <div className="viewer-stack compact-viewer-stack">
               <MriSliceViewer
                 variant={currentSeries?.plane === "axial" ? "axial" : "sagittal"}
                 series={currentSeries}
@@ -246,59 +228,57 @@ export function StudyReviewView({
                 onSelectMask={setSelectedMask}
                 onSelectLandmark={setSelectedLandmark}
               />
-              <article className="panel-card">
-                <div className="section-title"><h2>Segmentation legend</h2></div>
-                <div className="legend-grid">
-                  {masks.map((mask: any) => <span key={mask.id}><i style={{ background: mask.color }} />{mask.label}</span>)}
-                </div>
+              <article className="panel-card compact-card legend-card">
+                <div className="section-title"><h2>Legend</h2></div>
+                <div className="legend-grid">{masks.map((mask: any) => <span key={mask.id}><i style={{ background: mask.color }} />{mask.label}</span>)}</div>
               </article>
             </div>
           )}
         </section>
 
         <aside className="right-column">
-          <section className="panel-card">
+          <section className="panel-card results-panel">
             <div className="section-title">
-              <h2>AI vs Reviewer</h2>
-              <StatusBadge tone={hasReviewerDrafts ? "amber" : "blue"}>{hasReviewerDrafts ? "draft" : "editable"}</StatusBadge>
+              <h2>Resultados IA y revisión</h2>
+              <StatusBadge tone={hasReviewerDrafts ? "amber" : "blue"}>{hasReviewerDrafts ? "cambios pendientes" : "editable"}</StatusBadge>
             </div>
-            <p className="muted">Las mediciones editadas se guardan en backend/Postgres solo al hacer clic en Guardar cambios o aprobar la revision.</p>
-            <div className="comparison-table">
-              <div className="comparison-head"><span>Metric</span><span>AI value</span><span>Reviewer</span><span>Status</span></div>
+            <p className="muted compact-copy">Vista unica de mediciones: valor IA, ajuste del medico y estado. Se persiste solo al guardar.</p>
+            <div className="comparison-table unified-results-table">
+              <div className="comparison-head"><span>Medición</span><span>IA</span><span>Reviewer</span><span>Estado</span></div>
               {studyMeasurements.map((item: any) => {
                 const persistedReviewerValue = getPersistedReviewerValue(item.id);
                 const draftValue = reviewerValues[item.id];
                 const inputValue = draftValue ?? item.reviewerValue ?? persistedReviewerValue ?? "";
                 const status = draftValue !== undefined && draftValue !== "" ? "draft" : persistedReviewerValue ? "guardado" : item.status ?? "pendiente";
                 return (
-                  <div className="comparison-row" key={item.id}>
+                  <div className="comparison-row compact-comparison-row" key={item.id}>
                     <span><strong>{item.label}</strong><small>{item.level ?? "L4-L5"} · {Math.round((item.confidence ?? 0) * 100)}%</small></span>
                     <span>{item.aiValue ?? item.value} {item.unit}</span>
-                    <input value={inputValue} onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder="review" />
+                    <input value={inputValue} onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder="sin cambios" />
                     <span>{status}</span>
                   </div>
                 );
               })}
             </div>
-            <div className="review-actions">
-              <button className="primary-button" disabled={!hasReviewerDrafts || saving} onClick={commitReviewerMeasurements} type="button">Guardar cambios de medidas</button>
-              <button className="ghost-button" disabled={!hasReviewerDrafts || saving} onClick={() => setReviewerValues({})} type="button">Descartar cambios</button>
-              {hasReviewerDrafts && <span className="muted">{reviewerDraftCount} cambio/s pendiente/s</span>}
+            <div className="review-actions compact-actions">
+              <button className="primary-button" disabled={!hasReviewerDrafts || saving} onClick={commitReviewerMeasurements} type="button">Guardar medidas</button>
+              <button className="ghost-button" disabled={!hasReviewerDrafts || saving} onClick={() => setReviewerValues({})} type="button">Descartar</button>
+              {hasReviewerDrafts && <span className="muted">{reviewerDraftCount} cambio/s</span>}
             </div>
           </section>
-          <MeasurementsPanel measurements={measurements} inferenceStatus={run.measurementsStatus} description={run.measurementsDescription} onChange={onMeasurementsChange} />
+
           <AgentSummary agentDecision={studyReview?.aiOutput?.agentDecision ?? run.agentDecision} />
-          <section className="panel-card notes-card">
-            <div className="section-title"><h2>Notes</h2></div>
+          <section className="panel-card notes-card compact-card">
+            <div className="section-title"><h2>Notas y decisión</h2></div>
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Observaciones profesionales de revision..." />
-            <div className="review-actions">
+            <div className="review-actions compact-actions">
               <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}><option value="pendiente">pendiente</option><option value="aceptado">aceptado</option><option value="observado">observado</option><option value="descartado">descartado</option></select>
               <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Save Draft</button>
-              <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve & Complete</button>
-              <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Mark Observed</button>
+              <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button>
+              <button className="warning-button" disabled={saving} onClick={() => void save("observado")} type="button">Observe</button>
             </div>
           </section>
-          <section className="panel-card"><div className="section-title"><h2>Audit Trail</h2></div><AuditTrail events={auditTrail} /></section>
+          <section className="panel-card compact-card collapsible-audit"><div className="section-title"><h2>Audit Trail</h2></div><AuditTrail events={auditTrail.slice(0, 4)} /></section>
         </aside>
       </section>
       <PrivacyBanner />
