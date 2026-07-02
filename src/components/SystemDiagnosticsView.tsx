@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { getSystemDiagnostics, warmupSystem } from "../api";
 import { getCurrentDoctor, listProfessionals, updateDoctorSettings, updateProfessionalApproval } from "../authClient";
 import type { AiArtifactSummary, AiModelDiagnostic, AiModelsDiagnostics, AuthUser, DiagnosticBlock, SystemDiagnostics } from "../appTypes";
+import { PipelineContractCard } from "./PipelineContractCard";
 import { StatusBadge } from "./StatusBadge";
 import { ToggleSwitch } from "./ToggleSwitch";
 
@@ -198,6 +199,7 @@ export function SystemDiagnosticsView() {
       {isAdmin && <section className="panel-card compact-card professional-admin-card"><div className="section-title"><h2>Aprobación de profesionales</h2><StatusBadge tone="blue">admin</StatusBadge></div><p className="muted compact-copy">Los profesionales nuevos quedan con acceso limitado hasta ser aprobados por un administrador.</p><div className="comparison-table unified-results-table professional-table"><div className="comparison-head"><span>Profesional</span><span>Email</span><span>Estado</span><span>Roles</span><span>Aprobación</span></div>{professionals.map((user) => <div className="comparison-row compact-comparison-row" key={user.email}><span><strong>{user.fullName}</strong><small>{user.licenseNumber || "sin matrícula"} · {user.specialty || "sin especialidad"}</small></span><span>{user.email}</span><span><StatusBadge tone={approvalTone(user)}>{isPending(user) ? "pendiente" : "aprobado"}</StatusBadge></span><span>{user.roles.join(", ")}</span><span><button type="button" role="switch" aria-checked={!isPending(user)} aria-label={`Aprobación ${user.fullName}`} className={!isPending(user) ? "ios-switch is-on compact-switch" : "ios-switch is-off compact-switch"} disabled={loading || user.roles.includes("ADMIN")} onClick={() => void setApproval(user, isPending(user))}><span className="ios-switch-thumb" /></button></span></div>)}</div></section>}
 
       <AiArtifactReadiness diagnostics={diagnostics} />
+      <PipelineContractCard />
       <section className="panel-card compact-card"><div className="section-title"><h2>Condiciones de seguridad del MVP</h2></div><ul className="check-list"><li>Revisión profesional requerida: {diagnostics?.humanReviewRequired === false ? "no" : "sí"}</li><li>No constituye diagnóstico clínico: {diagnostics?.notClinicalDiagnosis === false ? "no" : "sí"}</li><li>Persistencia activa: {String(diagnostics?.persistence?.mode ?? "sin datos")}</li><li>Postgres habilitado: {diagnostics?.persistence?.postgresEnabled ? "sí" : "no"}</li></ul></section>
     </div>
   );
