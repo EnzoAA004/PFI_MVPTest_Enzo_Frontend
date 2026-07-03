@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getMultiplanarContract } from "../multiplanarApi";
+import { getMultiplanarContract, syncRealModelArtifacts } from "../multiplanarApi";
 import { panelOrder, readyPlaneCount, type MultiplanarContract } from "../multiplanarTypes";
 import { StatusBadge } from "./StatusBadge";
 
@@ -12,6 +12,7 @@ function labelForPanel(panel: string) {
 export function MultiplanarWorkspaceCard() {
   const [contract, setContract] = useState<MultiplanarContract | null>(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState("");
 
   async function refresh() {
@@ -24,6 +25,20 @@ export function MultiplanarWorkspaceCard() {
       setContract({ status: "multiplanar_unavailable", workspaceMode: "dual_plane_with_3d_context", humanReviewRequired: true, notClinicalDiagnosis: true });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function syncModels() {
+    setSyncing(true);
+    setMessage("Sincronizando modelos reales desde artifact externo...");
+    try {
+      const result = await syncRealModelArtifacts(false);
+      setMessage(`Sync finalizado: ${String(result.status ?? "sin_estado")}. Modo=${String(result.defaultInferenceMode ?? "contract")}`);
+      await refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo sincronizar modelos reales");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -59,7 +74,8 @@ export function MultiplanarWorkspaceCard() {
         })}
       </div>
       <div className="diagnostics-actions">
-        <button className="ghost-button" disabled={loading} onClick={() => void refresh()} type="button">Actualizar workspace</button>
+        <button className="ghost-button" disabled={loading || syncing} onClick={() => void refresh()} type="button">Actualizar workspace</button>
+        <button className="ghost-button" disabled={loading || syncing} onClick={() => void syncModels()} type="button">Sincronizar modelos reales</button>
       </div>
     </section>
   );
