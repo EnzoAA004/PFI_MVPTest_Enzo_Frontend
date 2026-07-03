@@ -65,6 +65,7 @@ export function AiMvpCompletionCard() {
   const percent = asNumber(state.completion?.completionPercent);
   const completed = asStringArray(state.roadmap?.completed);
   const pending = asStringArray(state.roadmap?.pending);
+  const criteria = asStringArray(state.roadmap?.acceptanceCriteria);
   const metrics = metricLabels(state.evaluationContract?.metrics);
   const requiredEvidence = asStringArray(state.evaluationContract?.requiredEvidence);
   const reportCount = asNumber(state.evaluationSummary?.reportCount);
@@ -93,10 +94,17 @@ export function AiMvpCompletionCard() {
         </div>
       </div>
       <div className="comparison-table unified-results-table ai-completion-table">
-        <div className="comparison-head"><span>Métricas</span><span>Evidencia requerida</span></div>
+        <div className="comparison-head"><span>Criterios de aceptación</span><span>Evidencia requerida</span></div>
+        <div className="comparison-row compact-comparison-row">
+          <span>{criteria.length ? criteria.join(", ") : "sin datos"}</span>
+          <span>{requiredEvidence.length ? requiredEvidence.join(", ") : "sin datos"}</span>
+        </div>
+      </div>
+      <div className="comparison-table unified-results-table ai-completion-table">
+        <div className="comparison-head"><span>Métricas</span><span>Reportes</span></div>
         <div className="comparison-row compact-comparison-row">
           <span>{metrics.length ? metrics.join(", ") : "sin datos"}</span>
-          <span>{requiredEvidence.length ? requiredEvidence.join(", ") : "sin datos"}</span>
+          <span>{reportCount ? `${reportCount} reporte(s) persistido(s)` : "sin reportes"}</span>
         </div>
       </div>
       <div className="diagnostics-actions">
