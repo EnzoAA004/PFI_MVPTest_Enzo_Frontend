@@ -17,6 +17,20 @@ function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.map(String) : [];
 }
 
+function metricLabels(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === "string") return item;
+    if (item && typeof item === "object") {
+      const metric = item as Record<string, unknown>;
+      const key = String(metric.key ?? "metric");
+      const category = metric.category ? ` (${String(metric.category)})` : "";
+      return `${key}${category}`;
+    }
+    return String(item);
+  });
+}
+
 function toneForPercent(value: number) {
   if (value >= 85) return "green";
   if (value >= 60) return "amber";
@@ -51,7 +65,8 @@ export function AiMvpCompletionCard() {
   const percent = asNumber(state.completion?.completionPercent);
   const completed = asStringArray(state.roadmap?.completed);
   const pending = asStringArray(state.roadmap?.pending);
-  const metrics = asStringArray(state.evaluationContract?.metrics);
+  const metrics = metricLabels(state.evaluationContract?.metrics);
+  const requiredEvidence = asStringArray(state.evaluationContract?.requiredEvidence);
   const reportCount = asNumber(state.evaluationSummary?.reportCount);
 
   return (
@@ -75,6 +90,13 @@ export function AiMvpCompletionCard() {
         <div className="comparison-row compact-comparison-row">
           <span>{completed.length ? completed.join(", ") : "sin datos"}</span>
           <span>{pending.length ? pending.join(", ") : "sin datos"}</span>
+        </div>
+      </div>
+      <div className="comparison-table unified-results-table ai-completion-table">
+        <div className="comparison-head"><span>Métricas</span><span>Evidencia requerida</span></div>
+        <div className="comparison-row compact-comparison-row">
+          <span>{metrics.length ? metrics.join(", ") : "sin datos"}</span>
+          <span>{requiredEvidence.length ? requiredEvidence.join(", ") : "sin datos"}</span>
         </div>
       </div>
       <div className="diagnostics-actions">
