@@ -1,4 +1,4 @@
-import type { AiCompletionResponse, AiEvaluationSummary, AiRoadmap } from "./appTypes";
+import type { AiCompletionResponse, AiEvaluationContract, AiEvaluationSummary, AiRoadmap } from "./appTypes";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
@@ -21,6 +21,19 @@ export function roadmapFromCompletion(completion: AiCompletionResponse): AiRoadm
 
 export function latestRunEvidence(completion: AiCompletionResponse, summary?: AiEvaluationSummary): string {
   return String(completion.latestRunId || summary?.latestRunId || "");
+}
+
+export function evaluationEvidence(summary?: AiEvaluationSummary, contract?: AiEvaluationContract) {
+  const reportCount = typeof summary?.reportCount === "number" ? summary.reportCount : 0;
+  return {
+    status: "evaluation_evidence_ready",
+    latestRunId: String(summary?.latestRunId || ""),
+    reportCount,
+    hasReports: Boolean(summary?.hasReports ?? reportCount > 0),
+    requiredEvidence: stringArray(contract?.requiredEvidence),
+    humanReviewRequired: true,
+    notClinicalDiagnosis: true,
+  };
 }
 
 export function roadmapLists(roadmap?: AiRoadmap) {
