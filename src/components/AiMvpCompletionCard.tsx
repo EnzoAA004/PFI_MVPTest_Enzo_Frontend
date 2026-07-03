@@ -1,27 +1,21 @@
 import { useEffect, useState } from "react";
 import { getAiCompletion, getAiEvaluationContract, getAiEvaluationSummary, getAiRoadmap } from "../api";
+import { latestRunEvidence, roadmapFromCompletion, roadmapLists } from "../aiCompletionUtils";
+import type { AiCompletionResponse, AiEvaluationContract, AiEvaluationSummary, AiRoadmap } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
 
 type ApiState = {
-  completion?: Record<string, unknown>;
-  roadmap?: Record<string, unknown>;
-  evaluationContract?: Record<string, unknown>;
-  evaluationSummary?: Record<string, unknown>;
+  completion?: AiCompletionResponse;
+  roadmap?: AiRoadmap;
+  evaluationContract?: AiEvaluationContract;
+  evaluationSummary?: AiEvaluationSummary;
 };
 
 function asNumber(value: unknown, fallback = 0) {
   return typeof value === "number" ? value : fallback;
 }
 
-function asStringArray(value: unknown) {
-  return Array.isArray(value) ? value.map(String) : [];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
-}
-
-async function safeFetch(factory: () => Promise<Record<string, unknown>>, fallback: Record<string, unknown>) {
+async function safeFetch<T>(factory: () => Promise<T>, fallback: T) {
   try {
     return await factory();
   } catch {
@@ -57,12 +51,12 @@ export function AiMvpCompletionCard() {
   async function refresh() {
     setLoading(true);
     setMessage("");
-    const completion = await safeFetch(getAiCompletion, { status: "unavailable", completionPercent: 0 });
-    const roadmapFallback = asRecord(completion.roadmap) ?? { currentMode: "contract", completed: [], pending: [] };
+    const completion = await safeFetch(getAiCompletion as () => Promise<AiCompletionResponse>, { status: "unavailable", completionPercent: 0 });
+    const roadmapFallback = roadmapFromCompletion(completion);
     const [roadmap, evaluationContract, evaluationSummary] = await Promise.all([
-      safeFetch(getAiRoadmap, roadmapFallback),
-      safeFetch(getAiEvaluationContract, { status: "unavailable", metrics: [], requiredEvidence: [] }),
-      safeFetch(getAiEvaluationSummary, { status: "unavailable", reportCount: 0 }),
+      safeFetch(getAiRoadmap as () => Promise<AiRoadmap>, roadmapFallback),
+      safeFetch(getAiEvaluationContract as () => Promise<AiEvaluationContract>, { status: "unavailable", metrics: [], requiredEvidence: [] }),
+      safeFetch(getAiEvaluationSummary as () => Promise<AiEvaluationSummary>, { status: "unavailable", reportCount: 0 }),
     ]);
     setState({ completion, roadmap, evaluationContract, evaluationSummary });
     if (completion.status === "unavailable") setMessage("Completitud no disponible; se muestran valores de fallback.");
@@ -72,12 +66,11 @@ export function AiMvpCompletionCard() {
   useEffect(() => { void refresh(); }, []);
 
   const percent = asNumber(state.completion?.completionPercent);
-  const completed = asStringArray(state.roadmap?.completed);
-  const pending = asStringArray(state.roadmap?.pending);
-  const criteria = asStringArray(state.roadmap?.acceptanceCriteria);
+  const { completed, pending, criteria } = roadmapLists(state.roadmap);
   const metrics = metricLabels(state.evaluationContract?.metrics);
-  const requiredEvidence = asStringArray(state.evaluationContract?.requiredEvidence);
+  const requiredEvidence = Array.isArray(state.evaluationContract?.requiredEvidence) ? state.evaluationContract.requiredEvidence.map(String) : [];
   const reportCount = asNumber(state.evaluationSummary?.reportCount);
+  const latestRunId = latestRunEvidence(state.completion ?? {}, state.evaluationSummary);
 
   return (
     <section className="panel-card compact-card ai-completion-card">
@@ -93,6 +86,7 @@ export function AiMvpCompletionCard() {
         <div><dt>Estado</dt><dd>{String(state.completion?.status ?? "consultando")}</dd></div>
         <div><dt>Modo actual</dt><dd>{String(state.roadmap?.currentMode ?? "contract")}</dd></div>
         <div><dt>Reportes recientes</dt><dd>{reportCount}</dd></div>
+        <div><dt>Último run</dt><dd>{latestRunId || "sin datos"}</dd></div>
         <div><dt>Métricas definidas</dt><dd>{metrics.length || "sin datos"}</dd></div>
       </dl>
       <div className="comparison-table unified-results-table ai-completion-table">
