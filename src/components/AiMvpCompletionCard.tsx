@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAiCompletion, getAiEvaluationContract, getAiEvaluationSummary, getAiRoadmap } from "../api";
-import { latestRunEvidence, roadmapFromCompletion, roadmapLists } from "../aiCompletionUtils";
+import { evaluationEvidence, roadmapFromCompletion, roadmapLists } from "../aiCompletionUtils";
 import type { AiCompletionResponse, AiEvaluationContract, AiEvaluationSummary, AiRoadmap } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
 
@@ -68,9 +68,7 @@ export function AiMvpCompletionCard() {
   const percent = asNumber(state.completion?.completionPercent);
   const { completed, pending, criteria } = roadmapLists(state.roadmap);
   const metrics = metricLabels(state.evaluationContract?.metrics);
-  const requiredEvidence = Array.isArray(state.evaluationContract?.requiredEvidence) ? state.evaluationContract.requiredEvidence.map(String) : [];
-  const reportCount = asNumber(state.evaluationSummary?.reportCount);
-  const latestRunId = latestRunEvidence(state.completion ?? {}, state.evaluationSummary);
+  const evidence = evaluationEvidence(state.evaluationSummary, state.evaluationContract);
 
   return (
     <section className="panel-card compact-card ai-completion-card">
@@ -85,8 +83,8 @@ export function AiMvpCompletionCard() {
       <dl className="info-list compact-info">
         <div><dt>Estado</dt><dd>{String(state.completion?.status ?? "consultando")}</dd></div>
         <div><dt>Modo actual</dt><dd>{String(state.roadmap?.currentMode ?? "contract")}</dd></div>
-        <div><dt>Reportes recientes</dt><dd>{reportCount}</dd></div>
-        <div><dt>Último run</dt><dd>{latestRunId || "sin datos"}</dd></div>
+        <div><dt>Reportes recientes</dt><dd>{evidence.reportCount}</dd></div>
+        <div><dt>Último run</dt><dd>{evidence.latestRunId || "sin datos"}</dd></div>
         <div><dt>Métricas definidas</dt><dd>{metrics.length || "sin datos"}</dd></div>
       </dl>
       <div className="comparison-table unified-results-table ai-completion-table">
@@ -100,14 +98,14 @@ export function AiMvpCompletionCard() {
         <div className="comparison-head"><span>Criterios de aceptación</span><span>Evidencia requerida</span></div>
         <div className="comparison-row compact-comparison-row">
           <span>{criteria.length ? criteria.join(", ") : "sin datos"}</span>
-          <span>{requiredEvidence.length ? requiredEvidence.join(", ") : "sin datos"}</span>
+          <span>{evidence.requiredEvidence.length ? evidence.requiredEvidence.join(", ") : "sin datos"}</span>
         </div>
       </div>
       <div className="comparison-table unified-results-table ai-completion-table">
         <div className="comparison-head"><span>Métricas</span><span>Reportes</span></div>
         <div className="comparison-row compact-comparison-row">
           <span>{metrics.length ? metrics.join(", ") : "sin datos"}</span>
-          <span>{reportCount ? `${reportCount} reporte(s) persistido(s)` : "sin reportes"}</span>
+          <span>{evidence.hasReports ? `${evidence.reportCount} reporte(s) persistido(s)` : "sin reportes"}</span>
         </div>
       </div>
       <div className="diagnostics-actions">
