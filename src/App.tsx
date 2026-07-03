@@ -22,7 +22,7 @@ import { fetchStudyDetail } from "./studyApi";
 import { fetchSubjectHistory } from "./subjectHistoryApi";
 import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, StudiesSummary, StudyRow, SystemDiagnostics, ViewKey } from "./appTypes";
 
-type InferenceMode = "contract" | "real";
+type InferenceMode = "contract" | "real_baseline";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
@@ -35,7 +35,7 @@ function inferenceModeFromDiagnostics(diagnostics?: SystemDiagnostics | null): I
   const summary = asRecord(aiModule?.artifactSummary) ?? asRecord(response?.artifactSummary) ?? asRecord(models?.summary);
   const defaultMode = String(summary?.defaultInferenceMode ?? aiModule?.defaultInferenceMode ?? "contract");
   const readyForRealInference = summary?.readyForRealInference === true;
-  return defaultMode === "real" && readyForRealInference ? "real" : "contract";
+  return defaultMode === "real_baseline" && readyForRealInference ? "real_baseline" : "contract";
 }
 
 function metricsForStudy(study: StudyRow, index: number) {
