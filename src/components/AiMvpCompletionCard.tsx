@@ -17,6 +17,18 @@ function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.map(String) : [];
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
+}
+
+async function safeFetch(factory: () => Promise<Record<string, unknown>>, fallback: Record<string, unknown>) {
+  try {
+    return await factory();
+  } catch {
+    return fallback;
+  }
+}
+
 function metricLabels(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
@@ -45,19 +57,16 @@ export function AiMvpCompletionCard() {
   async function refresh() {
     setLoading(true);
     setMessage("");
-    try {
-      const [completion, roadmap, evaluationContract, evaluationSummary] = await Promise.all([
-        getAiCompletion(),
-        getAiRoadmap(),
-        getAiEvaluationContract(),
-        getAiEvaluationSummary(),
-      ]);
-      setState({ completion, roadmap, evaluationContract, evaluationSummary });
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo consultar completitud del MVP");
-    } finally {
-      setLoading(false);
-    }
+    const completion = await safeFetch(getAiCompletion, { status: "unavailable", completionPercent: 0 });
+    const roadmapFallback = asRecord(completion.roadmap) ?? { currentMode: "contract", completed: [], pending: [] };
+    const [roadmap, evaluationContract, evaluationSummary] = await Promise.all([
+      safeFetch(getAiRoadmap, roadmapFallback),
+      safeFetch(getAiEvaluationContract, { status: "unavailable", metrics: [], requiredEvidence: [] }),
+      safeFetch(getAiEvaluationSummary, { status: "unavailable", reportCount: 0 }),
+    ]);
+    setState({ completion, roadmap, evaluationContract, evaluationSummary });
+    if (completion.status === "unavailable") setMessage("Completitud no disponible; se muestran valores de fallback.");
+    setLoading(false);
   }
 
   useEffect(() => { void refresh(); }, []);
