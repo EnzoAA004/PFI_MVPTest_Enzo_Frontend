@@ -438,3 +438,42 @@ export type SystemDiagnostics = {
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
 };
+
+export type AiEvaluationMetric = {
+  key: string;
+  category?: string;
+  direction?: string;
+  required?: boolean;
+};
+
+export type AiRoadmap = {
+  currentMode?: string;
+  completed?: string[];
+  pending?: string[];
+  acceptanceCriteria?: string[];
+};
+
+export type AiCompletionResponse = Record<string, unknown> & {
+  status?: string;
+  completionPercent?: number;
+  latestRunId?: string;
+  roadmap?: AiRoadmap;
+  reports?: Record<string, unknown>;
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+};
+
+export type AiEvaluationContract = Record<string, unknown> & {
+  status?: string;
+  schemaVersion?: string;
+  metrics?: AiEvaluationMetric[];
+  requiredEvidence?: string[];
+};
+
+export type AiEvaluationSummary = Record<string, unknown> & {
+  status?: string;
+  reportCount?: number;
+  hasReports?: boolean;
+  latestRunId?: string;
+  reports?: Record<string, unknown>;
+};
