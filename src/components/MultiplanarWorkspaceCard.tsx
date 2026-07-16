@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from "react";
-import { BackendApiError, getMultiplanarContract, runMultiplanarAnalysis, syncRealModelArtifacts, uploadAiInput } from "../multiplanarApi";
-import type { InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
+import { aiAssetUrl, BackendApiError, getMultiplanarContract, runMultiplanarAnalysis, syncRealModelArtifacts, uploadAiInput } from "../multiplanarApi";
+import type { AssetName, InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
 import { panelOrder, readyPlaneCount, type MultiplanarContract } from "../multiplanarTypes";
 import type { Plane } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
@@ -8,6 +8,7 @@ import { StatusBadge } from "./StatusBadge";
 const allowedInputExtensions = [".npy", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".mha", ".mhd", ".dcm"];
 const uploadAccept = allowedInputExtensions.join(",");
 const uploadPlanes: Plane[] = ["sagittal", "axial"];
+const renderAssetNames: AssetName[] = ["input.png", "overlay.png", "mask-preview.png"];
 
 type PlaneUploadState = {
   fileName?: string;
@@ -41,6 +42,7 @@ function apiErrorMessage(error: unknown, action: string) {
 export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null }) {
   const [contract, setContract] = useState<MultiplanarContract | null>(null);
   const [lastRun, setLastRun] = useState<MultiplanarRunResponse | null>(null);
+  const [failedAssetUrls, setFailedAssetUrls] = useState<Record<string, boolean>>({});
   const [uploadedInputs, setUploadedInputs] = useState<Record<Plane, PlaneUploadState>>(emptyUploadState);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -140,6 +142,7 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
           selectedFromWorkspace: true,
         },
       });
+      setFailedAssetUrls({});
       setLastRun(result);
       setMessage(`Run ${String(result.runId ?? "sin_id")} finalizado. Solicitado=${String(result.requestedInferenceMode ?? inferenceMode)} · efectivo=${String(result.effectiveInferenceMode ?? "contract")}`);
     } catch (error) {
@@ -151,6 +154,7 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
 
   useEffect(() => {
     setLastRun(null);
+    setFailedAssetUrls({});
     setUploadedInputs(emptyUploadState);
     if (caseId) void refresh();
     else {
@@ -239,6 +243,44 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
                 <div className="comparison-row compact-comparison-row" key={`run-${plane}`}>
                   <span>{labelForPanel(plane)}</span>
                   <span>{planeRun ? `runId: ${planeRun.runId} · modo: ${planeRun.effectiveInferenceMode}` : "sin run de plano"}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {lastRun && (
+          <div className="comparison-table unified-results-table ai-completion-table">
+            <div className="comparison-head"><span>Assets backend</span><span>Vista básica</span></div>
+            {uploadPlanes.map((plane) => {
+              const planeRun = lastRun.planes?.[plane];
+              if (!planeRun) return null;
+              return (
+                <div className="comparison-row compact-comparison-row" key={`assets-${plane}`}>
+                  <span>
+                    <strong>{labelForPanel(plane)}</strong>
+                    <small>runId: {planeRun.runId}</small>
+                  </span>
+                  <span style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                    {renderAssetNames.map((assetName) => {
+                      const url = aiAssetUrl(planeRun.runId, plane, assetName);
+                      const failed = failedAssetUrls[url];
+                      return (
+                        <span key={assetName} style={{ display: "grid", gap: 6 }}>
+                          <small>{assetName}</small>
+                          {failed ? (
+                            <span className="panel-hidden-placeholder">Asset no disponible desde backend.</span>
+                          ) : (
+                            <img
+                              alt={`${labelForPanel(plane)} ${assetName}`}
+                              onError={() => setFailedAssetUrls((current) => ({ ...current, [url]: true }))}
+                              src={url}
+                              style={{ background: "#f8fafc", border: "1px solid var(--border-color, #d7dde5)", borderRadius: 8, maxHeight: 180, objectFit: "contain", width: "100%" }}
+                            />
+                          )}
+                        </span>
+                      );
+                    })}
+                  </span>
                 </div>
               );
             })}
