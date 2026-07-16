@@ -1,9 +1,26 @@
-import { useEffect, useState } from "react";
-import { getMultiplanarContract, runMultiplanarAnalysis, syncRealModelArtifacts } from "../multiplanarApi";
-import type { MultiplanarRunResponse } from "../multiplanarRunTypes";
+import { useEffect, useState, type ChangeEvent } from "react";
+import { BackendApiError, getMultiplanarContract, runMultiplanarAnalysis, syncRealModelArtifacts, uploadAiInput } from "../multiplanarApi";
+import type { InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
 import { panelOrder, readyPlaneCount, type MultiplanarContract } from "../multiplanarTypes";
+import type { Plane } from "../appTypes";
 import { MultiplanarReviewView } from "./MultiplanarReviewView";
 import { StatusBadge } from "./StatusBadge";
+
+const allowedInputExtensions = [".npy", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".mha", ".mhd", ".dcm"];
+const uploadAccept = allowedInputExtensions.join(",");
+const uploadPlanes: Plane[] = ["sagittal", "axial"];
+
+type PlaneUploadState = {
+  fileName?: string;
+  status: "idle" | "uploading" | "uploaded" | "error";
+  input?: InputResponse;
+  error?: string;
+};
+
+const emptyUploadState: Record<Plane, PlaneUploadState> = {
+  sagittal: { status: "idle" },
+  axial: { status: "idle" },
+};
 
 function labelForPanel(panel: string) {
   if (panel === "sagittal") return "Sagital";
@@ -11,9 +28,21 @@ function labelForPanel(panel: string) {
   return "3D futuro";
 }
 
+function hasAllowedExtension(fileName: string) {
+  const lowerName = fileName.toLowerCase();
+  return allowedInputExtensions.some((extension) => lowerName.endsWith(extension));
+}
+
+function uploadErrorMessage(error: unknown) {
+  if (error instanceof BackendApiError) return `Backend respondio ${error.status} al cargar el archivo (${error.path}).`;
+  if (error instanceof Error) return error.message;
+  return "No se pudo cargar el archivo.";
+}
+
 export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null }) {
   const [contract, setContract] = useState<MultiplanarContract | null>(null);
   const [lastRun, setLastRun] = useState<MultiplanarRunResponse | null>(null);
+  const [uploadedInputs, setUploadedInputs] = useState<Record<Plane, PlaneUploadState>>(emptyUploadState);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [running, setRunning] = useState(false);
@@ -44,6 +73,44 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
     } finally {
       setSyncing(false);
     }
+  }
+
+  async function handleUpload(plane: Plane, file?: File) {
+    if (!caseId || !file) return;
+    if (!hasAllowedExtension(file.name)) {
+      setUploadedInputs((current) => ({
+        ...current,
+        [plane]: {
+          fileName: file.name,
+          status: "error",
+          error: `Extension no permitida. Usar: ${allowedInputExtensions.join(", ")}`,
+        },
+      }));
+      return;
+    }
+
+    setUploadedInputs((current) => ({
+      ...current,
+      [plane]: { fileName: file.name, status: "uploading" },
+    }));
+    try {
+      const input = await uploadAiInput(file, caseId, plane);
+      setUploadedInputs((current) => ({
+        ...current,
+        [plane]: { fileName: file.name, status: "uploaded", input },
+      }));
+      setMessage(`${labelForPanel(plane)} cargado: ${input.inputId}`);
+    } catch (error) {
+      setUploadedInputs((current) => ({
+        ...current,
+        [plane]: { fileName: file.name, status: "error", error: uploadErrorMessage(error) },
+      }));
+    }
+  }
+
+  function handleFileChange(plane: Plane, event: ChangeEvent<HTMLInputElement>) {
+    void handleUpload(plane, event.target.files?.[0]);
+    event.target.value = "";
   }
 
   async function runAnalysis() {
@@ -78,6 +145,7 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
 
   useEffect(() => {
     setLastRun(null);
+    setUploadedInputs(emptyUploadState);
     if (caseId) void refresh();
     else {
       setContract(null);
@@ -121,6 +189,27 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
           <div><dt>Modo</dt><dd>{String(contract?.workspaceMode ?? "dual_plane_with_3d_context")}</dd></div>
           <div><dt>Revisión humana</dt><dd>{contract?.humanReviewRequired === false ? "no" : "sí"}</dd></div>
         </dl>
+        <div className="comparison-table unified-results-table ai-completion-table">
+          <div className="comparison-head"><span>Entrada RM</span><span>Subida</span></div>
+          {uploadPlanes.map((plane) => {
+            const upload = uploadedInputs[plane];
+            const disabled = loading || syncing || running || upload.status === "uploading";
+            return (
+              <div className="comparison-row compact-comparison-row" key={plane}>
+                <span>
+                  <strong>{labelForPanel(plane)}</strong>
+                  <small>{upload.fileName ?? "sin archivo seleccionado"}</small>
+                </span>
+                <span>
+                  <input aria-label={`Cargar RM ${labelForPanel(plane)}`} accept={uploadAccept} disabled={disabled} onChange={(event) => handleFileChange(plane, event)} type="file" />
+                  {upload.status === "uploading" && <progress aria-label={`Subiendo ${labelForPanel(plane)}`} />}
+                  {upload.status === "uploaded" && <small>inputId: {upload.input?.inputId}</small>}
+                  {upload.status === "error" && <small className="delta-alert">{upload.error}</small>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
         <div className="comparison-table unified-results-table ai-completion-table">
           <div className="comparison-head"><span>Panel</span><span>Preparación</span></div>
           {panelOrder().map((panel) => {
