@@ -98,6 +98,7 @@ function App() {
   const [studiesSummary, setStudiesSummary] = useState<StudiesSummary | undefined>();
   const [patientHistoryResponse, setPatientHistoryResponse] = useState<PatientHistoryResponse | null>(null);
   const [selectedRun, setSelectedRun] = useState<AiRunResponse>(() => normalizeRun(sampleRun));
+  const [workspaceCaseId, setWorkspaceCaseId] = useState<string | null>(() => loadSelectedStudyDetail()?.study?.caseId ?? null);
   const [studyReview, setStudyReview] = useState<any | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>(() => normalizeRun(sampleRun).normalizedMeasurements ?? []);
   const [auditTrail, setAuditTrail] = useState<AuditEvent[]>(initialAuditTrail);
@@ -238,6 +239,7 @@ function App() {
 
   function handleOpenReview(study: StudyRow) {
     saveSelectedStudyFallback(study);
+    setWorkspaceCaseId(study.caseId);
     setSelectedRun(runFromStudy(study));
     setMeasurements([]);
     setStudyReview(null);
@@ -246,6 +248,7 @@ function App() {
       saveSelectedStudyDetail(detail);
       if (detail.measurements?.length) setMeasurements(detail.measurements);
       const firstRun = detail.runs?.[0];
+      setWorkspaceCaseId(detail.study.caseId);
       if (firstRun) {
         setSelectedRun((current) => normalizeRun({
           ...current,
@@ -359,7 +362,7 @@ function App() {
       {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} onOpenReview={handleOpenReview} />)}
       {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
       {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source} summary={patientHistoryResponse?.summary} governance={patientHistoryResponse?.governance} />)}
-      {activeView === "settings" && <><AiMvpCompletionCard /><MultiplanarWorkspaceCard /><SystemDiagnosticsView /></>}
+      {activeView === "settings" && <><AiMvpCompletionCard /><MultiplanarWorkspaceCard caseId={workspaceCaseId} /><SystemDiagnosticsView /></>}
     </AppShell>
   );
 }

@@ -11,7 +11,7 @@ function labelForPanel(panel: string) {
   return "3D futuro";
 }
 
-export function MultiplanarWorkspaceCard({ caseId = "CASE-DEMO-0142" }: { caseId?: string }) {
+export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null }) {
   const [contract, setContract] = useState<MultiplanarContract | null>(null);
   const [lastRun, setLastRun] = useState<MultiplanarRunResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -47,6 +47,10 @@ export function MultiplanarWorkspaceCard({ caseId = "CASE-DEMO-0142" }: { caseId
   }
 
   async function runAnalysis() {
+    if (!caseId) {
+      setMessage("Seleccioná un estudio de la worklist antes de ejecutar el workspace multiplanar.");
+      return;
+    }
     setRunning(true);
     const inferenceMode = contract?.readyForRealBaseline ? "real_baseline" : "contract";
     setMessage(`Ejecutando ${caseId} en modo solicitado ${inferenceMode}...`);
@@ -72,11 +76,33 @@ export function MultiplanarWorkspaceCard({ caseId = "CASE-DEMO-0142" }: { caseId
     }
   }
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    setLastRun(null);
+    if (caseId) void refresh();
+    else {
+      setContract(null);
+      setMessage("");
+    }
+  }, [caseId]);
 
   const ready = readyPlaneCount(contract ?? undefined);
   const status = String(contract?.status ?? "consultando");
   const planes = contract?.planes ?? {};
+
+  if (!caseId) {
+    return (
+      <section className="panel-card compact-card">
+        <div className="section-title">
+          <h2>Workspace multiplanar</h2>
+          <StatusBadge tone="amber">sin caso</StatusBadge>
+        </div>
+        <p className="muted compact-copy">
+          Seleccioná un estudio en la worklist para vincular este workspace a un caso real.
+        </p>
+        <div className="panel-hidden-placeholder">No hay caso seleccionado. El workspace no usa un demo silencioso.</div>
+      </section>
+    );
+  }
 
   return (
     <>
