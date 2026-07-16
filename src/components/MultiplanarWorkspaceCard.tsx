@@ -3,7 +3,6 @@ import { BackendApiError, getMultiplanarContract, runMultiplanarAnalysis, syncRe
 import type { InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
 import { panelOrder, readyPlaneCount, type MultiplanarContract } from "../multiplanarTypes";
 import type { Plane } from "../appTypes";
-import { MultiplanarReviewView } from "./MultiplanarReviewView";
 import { StatusBadge } from "./StatusBadge";
 
 const allowedInputExtensions = [".npy", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".mha", ".mhd", ".dcm"];
@@ -33,10 +32,10 @@ function hasAllowedExtension(fileName: string) {
   return allowedInputExtensions.some((extension) => lowerName.endsWith(extension));
 }
 
-function uploadErrorMessage(error: unknown) {
-  if (error instanceof BackendApiError) return `Backend respondio ${error.status} al cargar el archivo (${error.path}).`;
+function apiErrorMessage(error: unknown, action: string) {
+  if (error instanceof BackendApiError) return `Backend respondio ${error.status} al ${action} (${error.path}).`;
   if (error instanceof Error) return error.message;
-  return "No se pudo cargar el archivo.";
+  return `No se pudo ${action}.`;
 }
 
 export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null }) {
@@ -103,7 +102,7 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
     } catch (error) {
       setUploadedInputs((current) => ({
         ...current,
-        [plane]: { fileName: file.name, status: "error", error: uploadErrorMessage(error) },
+        [plane]: { fileName: file.name, status: "error", error: apiErrorMessage(error, "cargar el archivo") },
       }));
     }
   }
@@ -118,16 +117,23 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
       setMessage("Seleccioná un estudio de la worklist antes de ejecutar el workspace multiplanar.");
       return;
     }
+    const sagittalInputId = uploadedInputs.sagittal.input?.inputId;
+    const axialInputId = uploadedInputs.axial.input?.inputId;
+    if (!sagittalInputId || !axialInputId) {
+      setMessage("Cargá inputs sagital y axial antes de ejecutar el análisis multiplanar.");
+      return;
+    }
     setRunning(true);
     const inferenceMode = contract?.readyForRealBaseline ? "real_baseline" : "contract";
     setMessage(`Ejecutando ${caseId} en modo solicitado ${inferenceMode}...`);
     try {
       const result = await runMultiplanarAnalysis({
         caseId,
-        sagittalInputPath: `demo/${caseId}/sagittal`,
-        axialInputPath: `demo/${caseId}/axial`,
+        sagittalInputId,
+        axialInputId,
         sagittalModelKey: "sagittal_spider",
         axialModelKey: "axial_t2_alkafri",
+        allowContractFallback: false,
         metadata: {
           source: "frontend-multiplanar-workspace",
           inferenceMode,
@@ -137,7 +143,7 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
       setLastRun(result);
       setMessage(`Run ${String(result.runId ?? "sin_id")} finalizado. Solicitado=${String(result.requestedInferenceMode ?? inferenceMode)} · efectivo=${String(result.effectiveInferenceMode ?? "contract")}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo ejecutar análisis multiplanar");
+      setMessage(apiErrorMessage(error, "ejecutar análisis multiplanar"));
     } finally {
       setRunning(false);
     }
@@ -156,6 +162,7 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
   const ready = readyPlaneCount(contract ?? undefined);
   const status = String(contract?.status ?? "consultando");
   const planes = contract?.planes ?? {};
+  const canRunAnalysis = Boolean(uploadedInputs.sagittal.input?.inputId && uploadedInputs.axial.input?.inputId);
 
   if (!caseId) {
     return (
@@ -220,13 +227,29 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
             return <div className="comparison-row compact-comparison-row" key={panel}><span>{labelForPanel(panel)}</span><span>{detail}</span></div>;
           })}
         </div>
+        {lastRun && (
+          <div className="comparison-table unified-results-table ai-completion-table">
+            <div className="comparison-head"><span>Run multiplanar</span><span>Resumen</span></div>
+            <div className="comparison-row compact-comparison-row"><span>runId</span><span>{lastRun.runId}</span></div>
+            <div className="comparison-row compact-comparison-row"><span>traceId</span><span>{lastRun.traceId ?? "sin trace"}</span></div>
+            <div className="comparison-row compact-comparison-row"><span>Modo workspace</span><span>{lastRun.effectiveInferenceMode}</span></div>
+            {uploadPlanes.map((plane) => {
+              const planeRun = lastRun.planes?.[plane];
+              return (
+                <div className="comparison-row compact-comparison-row" key={`run-${plane}`}>
+                  <span>{labelForPanel(plane)}</span>
+                  <span>{planeRun ? `runId: ${planeRun.runId} · modo: ${planeRun.effectiveInferenceMode}` : "sin run de plano"}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div className="diagnostics-actions">
           <button className="ghost-button" disabled={loading || syncing || running} onClick={() => void refresh()} type="button">Actualizar workspace</button>
           <button className="ghost-button" disabled={loading || syncing || running} onClick={() => void syncModels()} type="button">Sincronizar modelos reales</button>
-          <button className="primary-button" disabled={loading || syncing || running} onClick={() => void runAnalysis()} type="button">{running ? "Ejecutando..." : "Ejecutar análisis multiplanar"}</button>
+          <button className="primary-button" disabled={loading || syncing || running || !canRunAnalysis} onClick={() => void runAnalysis()} type="button">{running ? "Ejecutando..." : "Ejecutar análisis"}</button>
         </div>
       </section>
-      {lastRun && <MultiplanarReviewView run={lastRun} />}
     </>
   );
 }
