@@ -24,6 +24,43 @@ export type AssetRef = {
 
 export type PlaneAssetRefs = Partial<Record<AssetName, AssetRef>>;
 
+export type ModelPoint = {
+  x: number;
+  y: number;
+};
+
+export type MultiplanarLandmark = Record<string, unknown> & {
+  id?: string;
+  label?: string;
+  className?: string;
+  classLabel?: string;
+  classId?: string | number;
+  x?: number;
+  y?: number;
+  centroid?: ModelPoint;
+  center?: ModelPoint;
+  coordinateSpace?: string;
+};
+
+export type MultiplanarMeasurementValue = Record<string, unknown> & {
+  id?: string;
+  label?: string;
+  className?: string;
+  classLabel?: string;
+  value?: number | string;
+  unit?: string;
+  level?: string;
+  axis?: string;
+  coordinateSpace?: string;
+};
+
+export type MultiplanarMeasurements = Record<string, unknown> & {
+  values?: MultiplanarMeasurementValue[];
+  coordinateSpace?: string;
+  measurementsDerivedFromPredictionMask?: boolean;
+  measurementsDerivedFromContours?: boolean;
+};
+
 export type RuntimeStatus = {
   status?: string;
   effectiveInferenceMode?: string;
@@ -48,10 +85,14 @@ export type MultiplanarReview = {
   recommendations?: string[];
 };
 
-export type MultiplanarPlaneRun = AiRunResponse & RuntimeStatus & {
+export type MultiplanarPlaneRun = Omit<AiRunResponse, "landmarks" | "measurements"> & RuntimeStatus & {
   runId: string;
   effectiveInferenceMode: string;
   assets?: PlaneAssetRefs;
+  landmarks?: MultiplanarLandmark[];
+  measurements?: MultiplanarMeasurements | MultiplanarMeasurementValue[];
+  coordinateSpace?: string;
+  measurementsDerivedFromPredictionMask?: boolean;
 };
 
 export type WorkspaceAssetRefs = Partial<Record<Plane | "workspace", PlaneAssetRefs>>;

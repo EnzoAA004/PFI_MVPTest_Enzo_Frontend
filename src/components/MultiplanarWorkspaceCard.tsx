@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { aiAssetUrl, BackendApiError, getMultiplanarContract, runMultiplanarAnalysis, syncRealModelArtifacts, uploadAiInput } from "../multiplanarApi";
-import type { InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
+import type { MultiplanarLandmark, MultiplanarMeasurementValue, MultiplanarPlaneRun, InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
 import { panelOrder, readyPlaneCount, type MultiplanarContract } from "../multiplanarTypes";
 import type { Plane } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
@@ -9,6 +9,7 @@ const allowedInputExtensions = [".npy", ".png", ".jpg", ".jpeg", ".bmp", ".tif",
 const uploadAccept = allowedInputExtensions.join(",");
 const uploadPlanes: Plane[] = ["sagittal", "axial"];
 const defaultOverlayOpacity: Record<Plane, number> = { sagittal: 0.65, axial: 0.65 };
+const modelSpaceSize = 256;
 
 type PlaneUploadState = {
   fileName?: string;
@@ -37,6 +38,72 @@ function apiErrorMessage(error: unknown, action: string) {
   if (error instanceof BackendApiError) return `Backend respondio ${error.status} al ${action} (${error.path}).`;
   if (error instanceof Error) return error.message;
   return `No se pudo ${action}.`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function asNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function pointFromUnknown(value: unknown): { x: number; y: number } | undefined {
+  const record = asRecord(value);
+  const x = asNumber(record.x);
+  const y = asNumber(record.y);
+  return x !== undefined && y !== undefined ? { x, y } : undefined;
+}
+
+function landmarkPoint(landmark: MultiplanarLandmark): { x: number; y: number } | undefined {
+  const direct = pointFromUnknown(landmark);
+  if (direct) return direct;
+  const centroid = pointFromUnknown(landmark.centroid);
+  if (centroid) return centroid;
+  const center = pointFromUnknown(landmark.center);
+  if (center) return center;
+  const record = asRecord(landmark);
+  const centroidX = asNumber(record.centroidX ?? record.cx ?? record.x_px);
+  const centroidY = asNumber(record.centroidY ?? record.cy ?? record.y_px);
+  if (centroidX !== undefined && centroidY !== undefined) return { x: centroidX, y: centroidY };
+  const coordinates = Array.isArray(record.coordinates) ? record.coordinates : Array.isArray(record.point) ? record.point : undefined;
+  if (!coordinates) return undefined;
+  const x = asNumber(coordinates[0]);
+  const y = asNumber(coordinates[1]);
+  return x !== undefined && y !== undefined ? { x, y } : undefined;
+}
+
+function landmarkLabel(landmark: MultiplanarLandmark, index: number): string {
+  return String(landmark.label ?? landmark.classLabel ?? landmark.className ?? landmark.classId ?? landmark.id ?? `LM-${index + 1}`);
+}
+
+function normalizedLandmarks(landmarks?: MultiplanarLandmark[]) {
+  return (landmarks ?? []).flatMap((landmark, index) => {
+    const point = landmarkPoint(landmark);
+    if (!point) return [];
+    return [{
+      key: String(landmark.id ?? `${landmarkLabel(landmark, index)}-${index}`),
+      label: landmarkLabel(landmark, index),
+      left: Math.max(0, Math.min(100, (point.x / modelSpaceSize) * 100)),
+      top: Math.max(0, Math.min(100, (point.y / modelSpaceSize) * 100)),
+      coordinateSpace: String(landmark.coordinateSpace ?? "model_space_256"),
+    }];
+  });
+}
+
+function measurementRows(planeRun: MultiplanarPlaneRun): MultiplanarMeasurementValue[] {
+  if (Array.isArray(planeRun.measurements)) return planeRun.measurements;
+  return planeRun.measurements?.values ?? [];
+}
+
+function measurementCoordinateSpace(planeRun: MultiplanarPlaneRun, row?: MultiplanarMeasurementValue): string {
+  const measurementsCoordinateSpace = !Array.isArray(planeRun.measurements) ? planeRun.measurements?.coordinateSpace : undefined;
+  return String(row?.coordinateSpace ?? measurementsCoordinateSpace ?? planeRun.coordinateSpace ?? "model_space_256");
+}
+
+function measurementsDerivedFromMask(planeRun: MultiplanarPlaneRun): boolean {
+  const measurements = Array.isArray(planeRun.measurements) ? undefined : planeRun.measurements;
+  return planeRun.measurementsDerivedFromPredictionMask ?? measurements?.measurementsDerivedFromPredictionMask ?? measurements?.measurementsDerivedFromContours ?? true;
 }
 
 export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null }) {
@@ -269,6 +336,8 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
               const overlayUrl = aiAssetUrl(planeRun.runId, plane, "overlay.png");
               const inputFailed = failedAssetUrls[inputUrl];
               const overlayFailed = failedAssetUrls[overlayUrl];
+              const landmarks = normalizedLandmarks(planeRun.landmarks);
+              const rows = measurementRows(planeRun);
               return (
                 <article className="panel-card compact-card" key={`viewer-${plane}`}>
                   <div className="section-title">
@@ -284,6 +353,34 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
                     {!inputFailed && !overlayFailed && (
                       <img alt={`${labelForPanel(plane)} overlay`} onError={() => setFailedAssetUrls((current) => ({ ...current, [overlayUrl]: true }))} src={overlayUrl} style={{ height: "100%", inset: 0, maxHeight: 360, objectFit: "contain", opacity: overlayOpacity[plane], pointerEvents: "none", position: "absolute", width: "100%" }} />
                     )}
+                    {!inputFailed && landmarks.map((landmark) => (
+                      <span
+                        aria-label={`${labelForPanel(plane)} landmark ${landmark.label}`}
+                        key={landmark.key}
+                        title={`${landmark.label} · ${landmark.coordinateSpace}`}
+                        style={{
+                          alignItems: "center",
+                          background: "#ffffff",
+                          border: "2px solid #0f766e",
+                          borderRadius: "999px",
+                          boxShadow: "0 2px 8px rgba(15, 23, 42, 0.22)",
+                          color: "#0f172a",
+                          display: "flex",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          height: 20,
+                          justifyContent: "center",
+                          left: `${landmark.left}%`,
+                          lineHeight: 1,
+                          position: "absolute",
+                          top: `${landmark.top}%`,
+                          transform: "translate(-50%, -50%)",
+                          width: 20,
+                        }}
+                      >
+                        {landmark.label.slice(0, 2)}
+                      </span>
+                    ))}
                   </div>
                   {overlayFailed && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend.</div>}
                   <label className="compact-copy" style={{ display: "grid", gap: 6, marginTop: 10 }}>
@@ -294,6 +391,41 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
                     <div><dt>Run plano</dt><dd>{planeRun.runId}</dd></div>
                     <div><dt>Modo efectivo</dt><dd>{planeRun.effectiveInferenceMode}</dd></div>
                   </dl>
+                  <div className="table-wrap" style={{ marginTop: 10 }}>
+                    <table className="worklist-table">
+                      <thead>
+                        <tr>
+                          <th>Medición</th>
+                          <th>Valor</th>
+                          <th>Unidad</th>
+                          <th>Nivel/eje</th>
+                          <th>Coordinate space</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.length ? rows.map((row, index) => {
+                          const label = String(row.label ?? row.classLabel ?? row.className ?? row.id ?? `Medición ${index + 1}`);
+                          const levelAxis = [row.level, row.axis].filter(Boolean).map(String).join(" / ");
+                          return (
+                            <tr key={String(row.id ?? `${label}-${index}`)}>
+                              <td>{label}</td>
+                              <td>{String(row.value ?? "N/A")}</td>
+                              <td>{String(row.unit ?? "")}</td>
+                              <td>{levelAxis || "N/A"}</td>
+                              <td>{measurementCoordinateSpace(planeRun, row)}</td>
+                            </tr>
+                          );
+                        }) : (
+                          <tr>
+                            <td colSpan={5}>Sin mediciones disponibles para este plano.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="muted compact-copy">
+                    Mediciones automáticas derivadas de la máscara del modelo: {measurementsDerivedFromMask(planeRun) ? "sí" : "no"}. Requieren revisión profesional; no constituyen diagnóstico.
+                  </p>
                 </article>
               );
             })}
