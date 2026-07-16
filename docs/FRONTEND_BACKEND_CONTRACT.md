@@ -90,6 +90,83 @@ Respuesta:
 
 Devuelve el mismo contrato de `AiRunResponse`. El frontend lo usa para refrescar el panel de agente, evidencia visual y mediciones luego de ejecutar el pipeline.
 
+## `POST /api/ai/inputs`
+
+Payload multipart:
+
+- `file`: archivo de imagen de entrada.
+- `caseId`: identificador de caso.
+- `plane`: `sagittal` o `axial`.
+
+Respuesta `InputResponse`:
+
+```json
+{
+  "inputId": "input-001",
+  "caseId": "CASE-DEMO-0142",
+  "plane": "sagittal",
+  "format": "png",
+  "size": 123456
+}
+```
+
+## `POST /api/ai/multiplanar/run`
+
+Payload `MultiplanarRunRequest`:
+
+```json
+{
+  "caseId": "CASE-DEMO-0142",
+  "sagittalInputId": "input-sag-001",
+  "axialInputId": "input-ax-001",
+  "sagittalModelKey": "sagittal_spider",
+  "axialModelKey": "axial_t2_alkafri",
+  "allowContractFallback": true,
+  "metadata": {
+    "source": "frontend-multiplanar-workspace"
+  }
+}
+```
+
+Respuesta `MultiplanarRunResponse`:
+
+```json
+{
+  "runId": "multiplanar-run-001",
+  "traceId": "trace-001",
+  "effectiveInferenceMode": "contract",
+  "planes": {
+    "sagittal": {
+      "runId": "sagittal-run-001",
+      "effectiveInferenceMode": "contract",
+      "assets": {
+        "input.png": {
+          "runId": "sagittal-run-001",
+          "plane": "sagittal",
+          "assetName": "input.png",
+          "url": "/api/ai/assets/sagittal-run-001/sagittal/input.png"
+        }
+      }
+    },
+    "axial": {
+      "runId": "axial-run-001",
+      "effectiveInferenceMode": "contract",
+      "assets": {}
+    }
+  },
+  "assets": {},
+  "review": {
+    "status": "pendiente",
+    "humanReviewRequired": true,
+    "notClinicalDiagnosis": true
+  }
+}
+```
+
+## `GET /api/ai/assets/{runId}/{plane}/{assetName}`
+
+`assetName` servibles: `input.png`, `overlay.png`, `mask-preview.png`.
+
 ## `PATCH /api/ai/review/{runId}`
 
 Payload:
