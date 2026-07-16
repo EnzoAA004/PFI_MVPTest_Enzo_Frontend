@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { aiAssetUrl, BackendApiError, getMultiplanarContract, runMultiplanarAnalysis, syncRealModelArtifacts, uploadAiInput } from "../multiplanarApi";
-import type { AssetName, InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
+import type { InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
 import { panelOrder, readyPlaneCount, type MultiplanarContract } from "../multiplanarTypes";
 import type { Plane } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
@@ -8,7 +8,7 @@ import { StatusBadge } from "./StatusBadge";
 const allowedInputExtensions = [".npy", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".mha", ".mhd", ".dcm"];
 const uploadAccept = allowedInputExtensions.join(",");
 const uploadPlanes: Plane[] = ["sagittal", "axial"];
-const renderAssetNames: AssetName[] = ["input.png", "overlay.png", "mask-preview.png"];
+const defaultOverlayOpacity: Record<Plane, number> = { sagittal: 0.65, axial: 0.65 };
 
 type PlaneUploadState = {
   fileName?: string;
@@ -43,6 +43,7 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
   const [contract, setContract] = useState<MultiplanarContract | null>(null);
   const [lastRun, setLastRun] = useState<MultiplanarRunResponse | null>(null);
   const [failedAssetUrls, setFailedAssetUrls] = useState<Record<string, boolean>>({});
+  const [overlayOpacity, setOverlayOpacity] = useState<Record<Plane, number>>(defaultOverlayOpacity);
   const [uploadedInputs, setUploadedInputs] = useState<Record<Plane, PlaneUploadState>>(emptyUploadState);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -155,6 +156,7 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
   useEffect(() => {
     setLastRun(null);
     setFailedAssetUrls({});
+    setOverlayOpacity(defaultOverlayOpacity);
     setUploadedInputs(emptyUploadState);
     if (caseId) void refresh();
     else {
@@ -249,39 +251,50 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
           </div>
         )}
         {lastRun && (
-          <div className="comparison-table unified-results-table ai-completion-table">
-            <div className="comparison-head"><span>Assets backend</span><span>Vista básica</span></div>
+          <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", marginTop: 14 }}>
             {uploadPlanes.map((plane) => {
               const planeRun = lastRun.planes?.[plane];
-              if (!planeRun) return null;
+              if (!planeRun) {
+                return (
+                  <article className="panel-card compact-card" key={`viewer-${plane}`}>
+                    <div className="section-title">
+                      <h3>{labelForPanel(plane)}</h3>
+                      <StatusBadge tone="amber">no disponible</StatusBadge>
+                    </div>
+                    <div className="panel-hidden-placeholder">Plano no disponible en este run.</div>
+                  </article>
+                );
+              }
+              const inputUrl = aiAssetUrl(planeRun.runId, plane, "input.png");
+              const overlayUrl = aiAssetUrl(planeRun.runId, plane, "overlay.png");
+              const inputFailed = failedAssetUrls[inputUrl];
+              const overlayFailed = failedAssetUrls[overlayUrl];
               return (
-                <div className="comparison-row compact-comparison-row" key={`assets-${plane}`}>
-                  <span>
-                    <strong>{labelForPanel(plane)}</strong>
-                    <small>runId: {planeRun.runId}</small>
-                  </span>
-                  <span style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-                    {renderAssetNames.map((assetName) => {
-                      const url = aiAssetUrl(planeRun.runId, plane, assetName);
-                      const failed = failedAssetUrls[url];
-                      return (
-                        <span key={assetName} style={{ display: "grid", gap: 6 }}>
-                          <small>{assetName}</small>
-                          {failed ? (
-                            <span className="panel-hidden-placeholder">Asset no disponible desde backend.</span>
-                          ) : (
-                            <img
-                              alt={`${labelForPanel(plane)} ${assetName}`}
-                              onError={() => setFailedAssetUrls((current) => ({ ...current, [url]: true }))}
-                              src={url}
-                              style={{ background: "#f8fafc", border: "1px solid var(--border-color, #d7dde5)", borderRadius: 8, maxHeight: 180, objectFit: "contain", width: "100%" }}
-                            />
-                          )}
-                        </span>
-                      );
-                    })}
-                  </span>
-                </div>
+                <article className="panel-card compact-card" key={`viewer-${plane}`}>
+                  <div className="section-title">
+                    <h3>{labelForPanel(plane)}</h3>
+                    <StatusBadge tone={planeRun.effectiveInferenceMode === "real_baseline" ? "green" : "blue"}>{planeRun.effectiveInferenceMode}</StatusBadge>
+                  </div>
+                  <div style={{ background: "#f8fafc", border: "1px solid var(--border-color, #d7dde5)", borderRadius: 8, minHeight: 240, overflow: "hidden", position: "relative" }}>
+                    {inputFailed ? (
+                      <div className="panel-hidden-placeholder" style={{ minHeight: 240 }}>input.png no disponible desde backend.</div>
+                    ) : (
+                      <img alt={`${labelForPanel(plane)} input`} onError={() => setFailedAssetUrls((current) => ({ ...current, [inputUrl]: true }))} src={inputUrl} style={{ display: "block", height: "100%", maxHeight: 360, objectFit: "contain", width: "100%" }} />
+                    )}
+                    {!inputFailed && !overlayFailed && (
+                      <img alt={`${labelForPanel(plane)} overlay`} onError={() => setFailedAssetUrls((current) => ({ ...current, [overlayUrl]: true }))} src={overlayUrl} style={{ height: "100%", inset: 0, maxHeight: 360, objectFit: "contain", opacity: overlayOpacity[plane], pointerEvents: "none", position: "absolute", width: "100%" }} />
+                    )}
+                  </div>
+                  {overlayFailed && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend.</div>}
+                  <label className="compact-copy" style={{ display: "grid", gap: 6, marginTop: 10 }}>
+                    <span>Opacidad overlay: {Math.round(overlayOpacity[plane] * 100)}%</span>
+                    <input max="1" min="0" onChange={(event) => setOverlayOpacity((current) => ({ ...current, [plane]: Number(event.target.value) }))} step="0.05" type="range" value={overlayOpacity[plane]} />
+                  </label>
+                  <dl className="info-list compact-info">
+                    <div><dt>Run plano</dt><dd>{planeRun.runId}</dd></div>
+                    <div><dt>Modo efectivo</dt><dd>{planeRun.effectiveInferenceMode}</dd></div>
+                  </dl>
+                </article>
               );
             })}
           </div>
