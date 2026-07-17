@@ -1,8 +1,22 @@
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import type { Plane, StudyLandmark } from "../appTypes";
+import { aiAssetUrl } from "../multiplanarApi";
+
+type ViewerMode = "pan" | "window";
+type AssetState = "idle" | "loading" | "loaded" | "failed";
+type WindowPreset = {
+  id: string;
+  label: string;
+  brightness: number;
+  contrast: number;
+};
+
 type Props = {
   variant: "sagittal" | "axial";
+  runId?: string;
   series?: any;
   masks?: any[];
-  landmarks?: any[];
+  landmarks?: StudyLandmark[];
   maskVisibility?: Record<string, boolean>;
   sliceIndex?: number;
   overlayEnabled: boolean;
@@ -13,30 +27,228 @@ type Props = {
   onSelectMask: (mask: string) => void;
   onSelectLandmark: (landmark: string) => void;
   onSliceChange?: (slice: number) => void;
+  onOverlayAvailableChange?: (available: boolean) => void;
 };
 
-const labelsByPlane = {
-  sagittal: ["L1", "L2", "L3", "L4", "L5", "S1"],
-  axial: ["A", "B", "C", "D", "E"],
-};
+const windowPresets: WindowPreset[] = [
+  { id: "neutral", label: "Neutral PNG", brightness: 100, contrast: 100 },
+  { id: "soft", label: "Soft tissue approx.", brightness: 108, contrast: 118 },
+  { id: "bone", label: "Bone approx.", brightness: 96, contrast: 138 },
+];
 
-export function MriSliceViewer({ variant, series, masks = [], landmarks = [], maskVisibility = {}, sliceIndex, overlayEnabled, overlayOpacity = 0.74, editMode, selectedMask = "", selectedLandmark, onSelectMask, onSelectLandmark, onSliceChange }: Props) {
-  const isSagittal = variant === "sagittal";
-  const sliceCount = series?.sliceCount ?? (isSagittal ? 96 : 48);
-  const currentSlice = sliceIndex ?? series?.selectedSlice ?? (isSagittal ? 58 : 24);
-  const visibleMasks = masks.filter((mask) => maskVisibility[mask.id] ?? mask.enabled ?? true);
-  const marks = landmarks.length ? landmarks : labelsByPlane[variant].map((label, index) => ({ id: label, label, x: isSagittal ? 61 - index * 2.4 : 30 + index * 12.5, y: isSagittal ? 15 + index * 12.8 : 34 + index * 8.2 }));
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function pointPercent(value: number) {
+  return clamp(value, 0, 256) / 256 * 100;
+}
+
+function coordinateSpaceFrom(series?: any, landmarks?: StudyLandmark[]) {
+  const fromSeries = typeof series?.coordinateSpace === "string" ? series.coordinateSpace : undefined;
+  const fromLandmark = landmarks?.find((landmark: any) => typeof landmark.coordinateSpace === "string") as any;
+  return fromSeries ?? fromLandmark?.coordinateSpace;
+}
+
+function useAssetState(url: string | undefined, disabled = false) {
+  const [state, setState] = useState<AssetState>(disabled || !url ? "idle" : "loading");
+
+  useEffect(() => {
+    if (disabled || !url) {
+      setState("idle");
+      return;
+    }
+    let cancelled = false;
+    setState("loading");
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) setState("failed");
+    }, 2500);
+    const image = new Image();
+    image.onload = () => {
+      if (!cancelled) {
+        window.clearTimeout(timeout);
+        setState("loaded");
+      }
+    };
+    image.onerror = () => {
+      if (!cancelled) {
+        window.clearTimeout(timeout);
+        setState("failed");
+      }
+    };
+    image.src = url;
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [disabled, url]);
+
+  return state;
+}
+
+export function MriSliceViewer({
+  variant,
+  runId,
+  series,
+  landmarks = [],
+  overlayEnabled,
+  overlayOpacity = 0.74,
+  selectedLandmark,
+  onSelectLandmark,
+  onOverlayAvailableChange,
+}: Props) {
+  const plane = variant as Plane;
+  const inputUrl = series?.imageUrl ?? (runId ? aiAssetUrl(runId, plane, "input.png") : undefined);
+  const overlayUrl = series?.overlayUrl ?? (runId ? aiAssetUrl(runId, plane, "overlay.png") : undefined);
+  const inputState = useAssetState(inputUrl);
+  const overlayState = useAssetState(overlayUrl, inputState !== "loaded");
+  const [mode, setMode] = useState<ViewerMode>("pan");
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ x: number; y: number; brightness: number; contrast: number; panX: number; panY: number } | null>(null);
+  const coordinateSpace = coordinateSpaceFrom(series, landmarks);
+  const realLandmarks = useMemo(() => landmarks.filter((landmark) => Number.isFinite(landmark.x) && Number.isFinite(landmark.y)), [landmarks]);
+  const imageLoaded = inputState === "loaded";
+  const overlayLoaded = overlayState === "loaded";
+  const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+  const filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+
+  useEffect(() => {
+    onOverlayAvailableChange?.(overlayLoaded);
+  }, [onOverlayAvailableChange, overlayLoaded]);
+
+  function applyPreset(preset: WindowPreset) {
+    setBrightness(preset.brightness);
+    setContrast(preset.contrast);
+  }
+
+  function fitImage() {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }
+
+  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!imageLoaded) return;
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -0.08 : 0.08;
+    setZoom((value) => clamp(Number((value + direction).toFixed(2)), 0.5, 4));
+  }
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!imageLoaded || event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      brightness,
+      contrast,
+      panX: pan.x,
+      panY: pan.y,
+    };
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (mode === "window") {
+      setContrast(clamp(drag.contrast + dx * 0.65, 45, 220));
+      setBrightness(clamp(drag.brightness - dy * 0.65, 45, 180));
+      return;
+    }
+    setPan({ x: drag.panX + dx, y: drag.panY + dy });
+  }
+
+  function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
+    dragRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may already be released by the browser.
+    }
+  }
 
   return (
-    <div className={`mri-viewer ${variant}`}>
-      <div className="viewer-caption"><div><strong>{series?.name ?? (isSagittal ? "Sagittal T2" : "Axial T2")}</strong><span>{editMode ? "Mask editing enabled" : "AI overlay review mode"}</span></div><div className="dicom-meta"><em>Slice {currentSlice} / {sliceCount}</em><em>W 1500</em><em>L 450</em></div></div>
-      <div className={`slice-canvas ${isSagittal ? "sagittal-canvas" : "axial-canvas"}`}>
-        <div className="scan-noise" /><div className="scan-ruler vertical" /><div className="scan-ruler horizontal" />
-        {overlayEnabled && <div className="overlay-layer" style={{ opacity: overlayOpacity }}>{visibleMasks.length ? visibleMasks.map((mask) => <button key={mask.id} className={`mask ${selectedMask === mask.id ? "selected-mask" : ""}`} style={{ background: mask.color }} onClick={() => onSelectMask(mask.id)} type="button" />) : <><button className="mask mask-canal" onClick={() => onSelectMask("canal")} type="button" /><button className="mask mask-disc" onClick={() => onSelectMask("disc") } type="button" /><button className="mask mask-root" onClick={() => onSelectMask("root")} type="button" /></>}</div>}
-        {marks.map((mark: any) => <button className={`landmark ${selectedLandmark === mark.id || selectedLandmark === mark.label ? "selected" : ""}`} key={mark.id} onClick={() => onSelectLandmark(mark.id)} style={{ top: `${mark.y}%`, left: `${mark.x}%` }} type="button">{String(mark.label).slice(0, 6)}</button>)}
-        <div className="ruler"><span /><em>{isSagittal ? "13.8 mm" : "14.2 mm"}</em></div><div className="orientation-markers"><span>{isSagittal ? "A" : "R"}</span><span>{isSagittal ? "P" : "L"}</span></div>
+    <div className={`mri-viewer real-asset-viewer ${variant}`}>
+      <div className="viewer-caption">
+        <div>
+          <strong>{series?.name ?? (variant === "sagittal" ? "Sagittal asset" : "Axial asset")}</strong>
+          <span>{imageLoaded ? "Real backend asset" : inputState === "failed" ? "Imagen no disponible desde backend" : "Verificando asset real"}</span>
+        </div>
+        <div className="dicom-meta">
+          <em>Single served PNG</em>
+          <em>W/L approx. {Math.round(contrast)} / {Math.round(brightness)}</em>
+          {coordinateSpace && <em>{coordinateSpace}</em>}
+        </div>
       </div>
-      <div className="viewer-footer"><span>{overlayEnabled ? "AI overlay" : "Overlay disabled"}</span><input className="slice-range" min="1" max={sliceCount} value={currentSlice} onChange={(event) => onSliceChange?.(Number(event.target.value))} type="range" /><span>{overlayEnabled ? `${Math.round(overlayOpacity * 100)}% opacity` : "disabled"}</span></div>
+
+      <div className="viewer-controls" role="toolbar" aria-label="2D viewer controls">
+        <select aria-label="Window and level preset" onChange={(event) => {
+          const preset = windowPresets.find((item) => item.id === event.target.value);
+          if (preset) applyPreset(preset);
+        }} defaultValue="neutral">
+          {windowPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+        </select>
+        <button className={mode === "window" ? "active" : ""} disabled={!imageLoaded} onClick={() => setMode("window")} type="button">W/L drag</button>
+        <button className={mode === "pan" ? "active" : ""} disabled={!imageLoaded} onClick={() => setMode("pan")} type="button">Pan</button>
+        <button disabled={!imageLoaded} onClick={() => setZoom((value) => clamp(Number((value - 0.2).toFixed(2)), 0.5, 4))} type="button">-</button>
+        <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
+        <button disabled={!imageLoaded} onClick={() => setZoom((value) => clamp(Number((value + 0.2).toFixed(2)), 0.5, 4))} type="button">+</button>
+        <button disabled={!imageLoaded} onClick={fitImage} type="button">Fit</button>
+      </div>
+
+      <p className="viewer-limit-note">W/L is an approximate brightness/contrast filter over an 8-bit PNG asset. DICOM windowing and multi-slice navigation require AI-009.</p>
+
+      <div
+        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"}`}
+        onPointerCancel={handlePointerUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onWheel={handleWheel}
+      >
+        {inputState === "loaded" && inputUrl ? (
+          <div className="asset-transform" style={{ transform }}>
+            <img alt={`${series?.name ?? variant} input asset`} className="mri-asset-img" draggable={false} src={inputUrl} style={{ filter }} />
+            {overlayEnabled && overlayLoaded && overlayUrl && (
+              <img alt={`${series?.name ?? variant} AI overlay asset`} className="mri-overlay-img" draggable={false} src={overlayUrl} style={{ opacity: overlayOpacity, transform: "translateZ(0)" }} />
+            )}
+            {realLandmarks.map((landmark) => (
+              <button
+                aria-label={`Landmark ${landmark.label}`}
+                className={`asset-landmark ${selectedLandmark === landmark.id || selectedLandmark === landmark.label ? "selected" : ""}`}
+                key={landmark.id}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectLandmark(landmark.id);
+                }}
+                style={{ left: `${pointPercent(landmark.x)}%`, top: `${pointPercent(landmark.y)}%` }}
+                type="button"
+              >
+                {landmark.label.slice(0, 4)}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="asset-empty-state">
+            <strong>{inputState === "failed" ? "Imagen no disponible desde backend" : "Verificando input.png real"}</strong>
+            <span>No se renderiza una resonancia simulada. El visor espera el asset real `input.png` del run.</span>
+          </div>
+        )}
+      </div>
+
+      <div className="viewer-footer real-viewer-footer">
+        <span>{overlayLoaded ? "overlay.png disponible" : overlayState === "failed" ? "overlay.png no disponible" : "overlay pendiente"}</span>
+        <span>{overlayEnabled && overlayLoaded ? `${Math.round(overlayOpacity * 100)}% opacity` : "AI Overlay deshabilitado si falta asset"}</span>
+        <span>Single slice served</span>
+      </div>
+      {overlayState === "failed" && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend. No se muestra superposición simulada.</div>}
+      {!coordinateSpace && <div className="panel-hidden-placeholder">Espacio de coordenadas no informado por backend; no se inventa model_256/original.</div>}
     </div>
   );
 }

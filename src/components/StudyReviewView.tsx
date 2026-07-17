@@ -203,13 +203,13 @@ function artifactFrom(run: AiRunResponse): AiModelArtifact | undefined {
 export function StudyReviewView({ run, studyReview, measurements, auditTrail, saving, onBackToStudies, onMeasurementsChange, onSaveReview }: StudyReviewViewProps) {
   const [tab, setTab] = useState<"Sagittal" | "Axial" | "3D Reconstruction">("Sagittal");
   const [selectedSeriesId, setSelectedSeriesId] = useState("");
-  const [sliceBySeries, setSliceBySeries] = useState<Record<string, number>>({});
   const [maskVisibility, setMaskVisibility] = useState<Record<string, boolean>>({});
   const [overlayEnabled, setOverlayEnabled] = useState(true);
   const [overlayOpacity, setOverlayOpacity] = useState(74);
   const [editMode, setEditMode] = useState(false);
   const [selectedMask, setSelectedMask] = useState("mask-disc");
   const [selectedLandmark, setSelectedLandmark] = useState("L4");
+  const [overlayAvailableByPlane, setOverlayAvailableByPlane] = useState<Record<string, boolean>>({});
   const [reviewerValues, setReviewerValues] = useState<Record<string, string>>({});
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
@@ -245,7 +245,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     description: run.measurementsDescription ?? "Pipeline técnico preparado para recibir inferencia real.",
   };
   const currentSeries = seriesList.find((item: any) => item.id === selectedSeriesId) ?? seriesList.find((item: any) => item.plane === tab.toLowerCase()) ?? seriesList[0];
-  const activeSlice = currentSeries ? sliceBySeries[currentSeries.id] ?? currentSeries.selectedSlice ?? 1 : 1;
+  const activePlane = currentSeries?.plane === "axial" ? "axial" : "sagittal";
+  const overlayAvailable = overlayAvailableByPlane[activePlane] === true;
 
   const studyMeasurements: MeasurementRow[] = hasPipelineVisualContract && pipelineMeasurements.length
     ? pipelineMeasurements.map((item) => normalizeRow({ ...item, aiValue: item.aiValue ?? item.value, reviewerValue: item.reviewerValue ?? null, confidence: item.confidence ?? 0.72 }))
@@ -531,7 +532,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 {seriesList.map((item: any, index) => (
                   <button className={`series-item ${currentSeries?.id === item.id ? "active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
                     <span className="thumbnail neutral-thumbnail" aria-hidden="true"><em>{String(index + 1).padStart(2, "0")}</em></span>
-                    <span><strong>{item.name}</strong><small>{item.sliceCount} images</small></span>
+                    <span><strong>{item.name}</strong><small>single served asset</small></span>
                   </button>
                 ))}
               </div>
@@ -643,7 +644,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <button disabled title={futureFeatureTitle} type="button">Recalculate</button>
             <button disabled title={futureFeatureTitle} type="button">Undo</button>
             <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button>
-            <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">AI Overlay</button>
+            <button className={overlayEnabled && overlayAvailable ? "active" : ""} disabled={!overlayAvailable} onClick={() => setOverlayEnabled((value) => !value)} title={overlayAvailable ? "Toggle overlay.png real" : "overlay.png no disponible desde backend"} type="button">AI Overlay</button>
             <label className="opacity-control">Opacity <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
           </div>
           <div className="toolbar compact-toolbar legacy-toolbar" hidden>
@@ -653,7 +654,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Superposición</button>
             <label className="opacity-control">Opacidad <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Corte: <strong>{activeSlice}</strong> · Máscara: <strong>{selectedMask}</strong> · Landmark: <strong>{selectedLandmark}</strong></div>
+          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Asset servido: <strong>input.png único</strong> · Overlay: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong></div>
           {tab === "3D Reconstruction" ? (
             <article className="panel-card full-viewer"><SpineReconstructionPreview /></article>
           ) : (
@@ -661,22 +662,33 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               <MriSliceViewer
                 variant={currentSeries?.plane === "axial" ? "axial" : "sagittal"}
                 series={currentSeries}
+                runId={displayRun.runId}
                 masks={masks}
                 landmarks={landmarks}
                 maskVisibility={maskVisibility}
                 selectedMask={selectedMask}
-                sliceIndex={activeSlice}
-                onSliceChange={(slice) => currentSeries && setSliceBySeries((current) => ({ ...current, [currentSeries.id]: slice }))}
                 overlayEnabled={overlayEnabled}
                 overlayOpacity={overlayOpacity / 100}
                 editMode={editMode}
                 selectedLandmark={selectedLandmark}
                 onSelectMask={setSelectedMask}
                 onSelectLandmark={setSelectedLandmark}
+                onOverlayAvailableChange={(available) => setOverlayAvailableByPlane((current) => ({ ...current, [activePlane]: available }))}
               />
               <article className="panel-card compact-card legend-card">
                 <PanelTitle panelId="legend" title="Leyenda" />
-                {panelVisible("legend") ? <div className="legend-grid">{masks.map((mask: any) => <span key={mask.id}><i style={{ background: maskTokenVar(mask) }} />{mask.label}</span>)}</div> : hiddenPlaceholder}
+                {panelVisible("legend") ? (
+                  <>
+                    <div className="legend-grid layer-legend-grid">
+                      {masks.map((mask: any) => (
+                        <button disabled key={mask.id} title="Requiere mascaras por clase desde backend (FE-007/AI-017); hoy solo hay overlay.png combinado." type="button">
+                          <i style={{ background: maskTokenVar(mask) }} />{mask.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="viewer-limit-note">Layer visibility by class requires per-class masks from backend. Current viewer uses combined overlay.png when available.</p>
+                  </>
+                ) : hiddenPlaceholder}
               </article>
             </div>
           )}

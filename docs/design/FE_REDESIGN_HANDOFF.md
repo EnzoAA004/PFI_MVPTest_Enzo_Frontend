@@ -27,8 +27,8 @@ Plataforma web para radiólogos / centros / hospitales que asiste el análisis e
 |---|---|---|---|
 | 0 | FE-RD-000 | Consolidar design system (tokens + unificar CSS + componentes base) | APROBADA Y CERRADA (build 1831; 7 CSS→src/design/*; 0 hex en CSS nuevo; !important 47→0; smoke test OK; 5 mask-tokens agregados). |
 | 1 | FE-RD-001 | App shell + Dashboard | APROBADA (sidebar+header+dashboard a nivel mockup; contadores/stat cards reales; sparklines omitidos por honestidad; preview segmentación real o vacío honesto; a11y 0 violaciones). Decisión aplicada: quitar línea "AI Confidence not reported". |
-| 2 | FE-RD-002 | Case Review (layout + paneles) | EN CURSO (brief: FE-RD-002_BRIEF.md) |
-| 3 | FE-RD-003 | Visores radiológicos 2D (W/L, zoom/pan, capas) | PENDIENTE |
+| 2 | FE-RD-002 | Case Review (layout + paneles) | APROBADA (layout 3 col a nivel mockup; leyenda cableada a mask-tokens; toolbar futura deshabilitada honesta; mediciones editables se mantienen; build 1831). Deuda: limpiar bloques legacy duplicados ocultos. |
+| 3 | FE-RD-003 | Visores radiológicos 2D (W/L, zoom/pan, capas) | EN CURSO (brief: FE-RD-003_BRIEF.md) — el visor actual es SIMULADO (gradientes CSS + slice/WL hardcodeados); esta fase lo pasa a asset real u honesto. |
 | 4 | FE-RD-004 | Landmarks y mediciones editables | PENDIENTE |
 | 5 | FE-RD-005 | Patient longitudinal (estados honestos) | PENDIENTE |
 | 6 | FE-RD-006 | Vista 3D honesta (atlas genérico) | PENDIENTE |
