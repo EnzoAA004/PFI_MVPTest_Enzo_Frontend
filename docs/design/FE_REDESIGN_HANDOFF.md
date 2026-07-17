@@ -25,8 +25,8 @@ Plataforma web para radiólogos / centros / hospitales que asiste el análisis e
 ## 4. Fases y estado (actualizar a medida que se cierran)
 | Fase | Ticket | Descripción | Estado |
 |---|---|---|---|
-| 0 | FE-RD-000 | Consolidar design system (tokens + unificar CSS + componentes base) | PENDIENTE |
-| 1 | FE-RD-001 | App shell + Dashboard | PENDIENTE |
+| 0 | FE-RD-000 | Consolidar design system (tokens + unificar CSS + componentes base) | APROBADA (build 1831 OK; 7 CSS→src/design/*; 0 hex en CSS nuevo; !important 47→0). Pendiente ajuste: smoke test visual + completar 5 mask-tokens. |
+| 1 | FE-RD-001 | App shell + Dashboard | EN CURSO (brief: FE-RD-001_BRIEF.md) |
 | 2 | FE-RD-002 | Case Review (layout + paneles) | PENDIENTE |
 | 3 | FE-RD-003 | Visores radiológicos 2D (W/L, zoom/pan, capas) | PENDIENTE |
 | 4 | FE-RD-004 | Landmarks y mediciones editables | PENDIENTE |

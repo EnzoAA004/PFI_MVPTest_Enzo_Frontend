@@ -140,6 +140,7 @@ function App() {
           : patientStudies;
   const shouldShowDataLoading = bootstrapLoading && backendStudies.length === 0;
   const historySubjectRef = patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? "PAT-0087";
+  const reviewQueueCount = studies.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
   const pendingApproval = Boolean(session && (session.user.approved === false || session.user.roles.includes("PENDING_APPROVAL")));
   const needsOnboarding = Boolean(session && session.user.approved !== false && !session.user.roles.includes("PENDING_APPROVAL") && session.user.onboardingCompleted === false);
 
@@ -354,11 +355,11 @@ function App() {
   if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
 
   return (
-    <AppShell activeView={activeView} onChangeView={setActiveView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onRunDemo={handleRunDemo} loading={loading} userName={session.user.fullName} onLogout={logout}>
+    <AppShell activeView={activeView} onChangeView={setActiveView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onRunDemo={handleRunDemo} loading={loading} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
       {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
-      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} onOpenReview={handleOpenReview} />)}
+      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => setActiveView("settings")} onOpenReview={handleOpenReview} />)}
       {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
       {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source} summary={patientHistoryResponse?.summary} governance={patientHistoryResponse?.governance} />)}
       {activeView === "settings" && <><AiMvpCompletionCard /><DemoReadinessPanel /><MultiplanarWorkspaceCard caseId={workspaceCaseId} /><SystemDiagnosticsView /></>}

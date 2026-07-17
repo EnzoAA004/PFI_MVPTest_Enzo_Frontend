@@ -12,7 +12,7 @@ export function StatusBadge({ children, tone = "slate" }: StatusBadgeProps) {
 }
 
 export function PriorityBadge({ priority }: { priority: Priority }) {
-  const tone = priority === "alta" ? "red" : priority === "baja" ? "green" : "amber";
+  const tone = priority === "alta" ? "red" : priority === "baja" ? "slate" : "amber";
   return <StatusBadge tone={tone}>{priority}</StatusBadge>;
 }
 

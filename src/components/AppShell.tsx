@@ -15,12 +15,13 @@ interface AppShellProps {
   loading: boolean;
   userName?: string;
   onLogout?: () => void;
+  reviewQueueCount: number;
 }
 
-export function AppShell({ activeView, onChangeView, children, health, modelCount, aiModuleAvailable, degradedMode, currentRunId, onRunDemo, loading, userName, onLogout }: AppShellProps) {
+export function AppShell({ activeView, onChangeView, children, health, modelCount, aiModuleAvailable, degradedMode, currentRunId, onRunDemo, loading, userName, onLogout, reviewQueueCount }: AppShellProps) {
   return (
     <div className="app-layout">
-      <Sidebar activeView={activeView} onChangeView={onChangeView} />
+      <Sidebar activeView={activeView} onChangeView={onChangeView} reviewQueueCount={reviewQueueCount} systemOnline={aiModuleAvailable && !degradedMode} />
       <main className="main-panel">
         <Header activeView={activeView} health={health} modelCount={modelCount} aiModuleAvailable={aiModuleAvailable} degradedMode={degradedMode} currentRunId={currentRunId} onRunDemo={onRunDemo} loading={loading} userName={userName} onLogout={onLogout} />
         {children}

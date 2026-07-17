@@ -1,6 +1,8 @@
 import { API_BASE_URL } from "../api";
 import { authHeaders, refreshDoctorSession } from "../authClient";
 import type { ViewKey } from "../appTypes";
+import { Bell, Command, LogOut, Search, ShieldCheck, UserCircle } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { StatusBadge } from "./StatusBadge";
 
 interface HeaderProps {
@@ -155,10 +157,22 @@ function renderTechnicalReportHtml(payload: any) {
 }
 
 export function Header({ activeView, health, modelCount, aiModuleAvailable, degradedMode, currentRunId, onRunDemo, loading, userName, onLogout }: HeaderProps) {
+  const searchRef = useRef<HTMLInputElement>(null);
   const backendTone = degradedMode ? "amber" : aiModuleAvailable ? "green" : "red";
   const showTechnicalReport = activeView === "review" && Boolean(currentRunId);
   const technicalReportUrl = currentRunId ? `${API_BASE_URL}/api/ai/agent/report/${currentRunId}` : "";
   const runButtonText = loading ? "Ejecutando..." : "Ejecutar análisis";
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   async function fetchTechnicalReportPayload() {
     let response = await fetch(technicalReportUrl, {
@@ -218,15 +232,20 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
   return (
     <header className="top-header">
       <div className="search-box">
-        <span aria-hidden="true">⌕</span>
-        <input placeholder="Buscar estudios, casos o pacientes..." />
+        <Search aria-hidden size={18} />
+        <input ref={searchRef} placeholder="Search studies, cases, or patients..." aria-label="Search studies, cases, or patients" />
+        <kbd><Command aria-hidden size={12} />K</kbd>
       </div>
       <div className="header-actions">
-        <StatusBadge tone="teal">Academic / De-identified Data</StatusBadge>
+        <span className="mode-badge"><ShieldCheck aria-hidden size={16} />Academic / De-identified Data</span>
         <StatusBadge tone={backendTone}>
           {degradedMode ? "Modo degradado" : `Backend ${health}`} / {modelCount} models
         </StatusBadge>
-        <small title={API_BASE_URL}>{userName ?? "Reviewer"}</small>
+        <button className="icon-button" aria-label="Notifications" type="button"><Bell aria-hidden size={18} /></button>
+        <div className="profile-chip" title={API_BASE_URL}>
+          <UserCircle aria-hidden size={28} />
+          <span><strong>{userName ?? "Reviewer"}</strong><small>Reviewer</small></span>
+        </div>
         {showTechnicalReport && (
           <>
             <button className="ghost-button" onClick={() => void copyRunId()} title={currentRunId} type="button">
@@ -240,7 +259,7 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
         <button className="primary-button" disabled={loading} onClick={onRunDemo} title="Ejecutar análisis sobre el caso seleccionado o el demo por defecto" type="button">
           {runButtonText}
         </button>
-        {onLogout && <button className="ghost-button" onClick={onLogout} type="button">Salir</button>}
+        {onLogout && <button className="icon-button" aria-label="Salir" onClick={onLogout} type="button"><LogOut aria-hidden size={18} /></button>}
       </div>
     </header>
   );
