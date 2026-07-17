@@ -2904,6 +2904,247 @@ body {
 .ai-honesty-row {
   margin: 10px 0;
 }
+
+/* FE-RD-005 Patient longitudinal honest states */
+.patient-longitudinal-view {
+  gap: var(--sp-4);
+}
+.patient-history-header {
+  align-items: center;
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: auto minmax(180px, .7fr) minmax(360px, 1.6fr) auto;
+}
+.patient-avatar {
+  align-items: center;
+  background: var(--info-bg);
+  border-radius: var(--radius-pill);
+  color: var(--primary);
+  display: inline-flex;
+  font-size: var(--fs-h1);
+  font-weight: 900;
+  height: 58px;
+  justify-content: center;
+  width: 58px;
+}
+.patient-header-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.patient-header-grid {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(5, minmax(78px, 1fr));
+  margin: 0;
+}
+.patient-header-grid div {
+  display: grid;
+  gap: var(--sp-1);
+}
+.patient-header-grid dt {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.patient-header-grid dd {
+  font-weight: 900;
+  margin: 0;
+}
+.patient-overview-grid {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: minmax(280px, .88fr) minmax(520px, 1.55fr) minmax(260px, .82fr);
+}
+.patient-trends-panel,
+.longitudinal-measurements-table {
+  grid-column: span 1;
+}
+.patient-overview-grid > .panel-card:nth-child(3) {
+  grid-column: 2;
+}
+.patient-side-stack {
+  display: grid;
+  gap: var(--sp-4);
+  grid-column: 3;
+  grid-row: 1 / span 2;
+}
+.honest-empty-state {
+  align-content: center;
+  min-height: 118px;
+}
+.honest-empty-state strong,
+.honest-empty-state span {
+  display: block;
+}
+.honest-empty-state span {
+  color: var(--text-muted);
+  margin-top: var(--sp-1);
+}
+.patient-timeline article {
+  grid-template-columns: auto 1fr auto auto;
+}
+.trend-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  margin: 0;
+  padding: var(--sp-3);
+}
+.trend-card figcaption {
+  align-items: center;
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: space-between;
+}
+.trend-card figcaption span {
+  color: var(--text-success-strong);
+  font-size: var(--fs-small);
+  font-weight: 900;
+}
+.longitudinal-measurements-table small {
+  color: var(--text-muted);
+  display: block;
+  margin-top: var(--sp-1);
+}
+.study-library-card {
+  grid-column: 1 / -1;
+}
+
+/* FE-RD-006 honest generic 3D atlas */
+.generic-spine-preview {
+  background: linear-gradient(160deg, var(--surface-dark), color-mix(in srgb, var(--surface-dark) 72%, var(--surface)));
+  border-radius: var(--radius-card);
+  display: grid;
+  gap: var(--sp-3);
+  min-height: 420px;
+  padding: var(--sp-3);
+}
+.three-d-controls {
+  align-items: center;
+  justify-content: flex-end;
+}
+.surface-mode-pill {
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface-dark));
+  border: 1px solid color-mix(in srgb, var(--primary) 44%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--surface);
+  font-size: var(--fs-small);
+  font-weight: 900;
+  padding: var(--sp-2) var(--sp-3);
+}
+.generic-spine-canvas-wrap {
+  background: radial-gradient(circle at 50% 25%, color-mix(in srgb, var(--surface) 94%, transparent), color-mix(in srgb, var(--info-bg) 58%, transparent) 34%, color-mix(in srgb, var(--surface-dark) 12%, var(--bg-app)));
+  border: 1px solid color-mix(in srgb, var(--surface) 55%, transparent);
+  border-radius: var(--radius-card);
+  min-height: 330px;
+  overflow: hidden;
+  position: relative;
+}
+.generic-spine-canvas {
+  display: block;
+  height: 100%;
+  min-height: 330px;
+  outline: none;
+  touch-action: none;
+  width: 100%;
+}
+.generic-spine-canvas:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--focus-ring);
+}
+.three-d-loading-state {
+  align-items: center;
+  color: var(--text-muted);
+  display: grid;
+  inset: 0;
+  justify-items: center;
+  padding: var(--sp-4);
+  position: absolute;
+  text-align: center;
+}
+.generic-spine-label {
+  background: color-mix(in srgb, var(--surface) 92%, var(--info-bg));
+  border: 1px solid var(--border-info);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary-strong);
+  font-size: var(--fs-small);
+  font-weight: 900;
+  left: var(--sp-3);
+  max-width: calc(100% - var(--sp-6));
+  padding: var(--sp-2) var(--sp-3);
+  position: absolute;
+  top: var(--sp-3);
+}
+.spine-level-labels {
+  display: grid;
+  gap: var(--sp-1);
+  position: absolute;
+  right: var(--sp-3);
+  top: 28%;
+}
+.spine-level-labels span {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 900;
+  min-width: 34px;
+  padding: var(--sp-1) var(--sp-2);
+  text-align: center;
+}
+.three-d-disabled-panel {
+  background: color-mix(in srgb, var(--surface) 92%, var(--bg-app));
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-card);
+  color: var(--text);
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+}
+.three-d-disabled-panel div {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  justify-content: space-between;
+}
+.three-d-disabled-panel span,
+.three-d-disabled-panel p {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  margin: 0;
+}
+.three-d-disabled-panel ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.three-d-disabled-panel li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  font-weight: 900;
+  padding: var(--sp-1) var(--sp-2);
+}
+.three-d-mode-b-state {
+  font-variant-numeric: tabular-nums;
+}
+.full-viewer .generic-spine-preview {
+  min-height: 640px;
+}
+.full-viewer .generic-spine-canvas-wrap {
+  min-height: 460px;
+}
+.full-viewer .generic-spine-canvas {
+  min-height: 460px;
+}
 @media (max-width: 1280px) {
   .review-workspace .review-grid {
     grid-template-columns: minmax(250px, 290px) minmax(0, 1fr);
@@ -2911,6 +3152,15 @@ body {
   .review-workspace .right-column {
     grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .patient-history-header,
+  .patient-overview-grid {
+    grid-template-columns: 1fr;
+  }
+  .patient-overview-grid > .panel-card:nth-child(3),
+  .patient-side-stack {
+    grid-column: auto;
+    grid-row: auto;
   }
 }
 @media (max-width: 1180px) {
@@ -2924,6 +3174,9 @@ body {
 @media (max-width: 760px) {
   .review-workspace .page-heading {
     display: grid;
+  }
+  .patient-header-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .measurement-review-head {
     display: none;

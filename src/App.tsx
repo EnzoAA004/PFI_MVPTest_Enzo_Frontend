@@ -13,7 +13,7 @@ import { PatientHistoryView } from "./components/PatientHistoryView";
 import { PendingApprovalView } from "./components/PendingApprovalView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { SystemDiagnosticsView } from "./components/SystemDiagnosticsView";
-import { initialAuditTrail, patientStudies, worklistStudies } from "./data/mockStudies";
+import { initialAuditTrail, worklistStudies } from "./data/mockStudies";
 import { sampleRun } from "./mock/sampleRun";
 import { appendBackendAudit, getBackendReviewSnapshot, saveBackendMeasurements } from "./reviewPersistenceApi";
 import { loadSelectedStudyDetail, saveSelectedStudyDetail, saveSelectedStudyFallback } from "./selectedStudyStorage";
@@ -38,13 +38,8 @@ function inferenceModeFromDiagnostics(diagnostics?: SystemDiagnostics | null): I
   return defaultMode === "real_baseline" && readyForRealInference ? "real_baseline" : "contract";
 }
 
-function metricsForStudy(study: StudyRow, index: number) {
-  const seed = Math.abs((study.caseId.charCodeAt(study.caseId.length - 1) || index) + index) % 7;
-  return { lordosisAngle: 41 + seed * 1.8, canalDiameter: 11 + seed * 0.45, averageDiscHeight: 7.4 + seed * 0.25, l45DiscHeight: 7.1 + seed * 0.35 };
-}
-
-function toPatientStudy(study: StudyRow, index: number): PatientStudy {
-  return { caseId: study.caseId, studyDate: study.studyDate, planes: study.plane, modelVersion: study.modelKey, reviewStatus: study.reviewStatus, priority: study.priority, metrics: metricsForStudy(study, index) };
+function toPatientStudy(study: StudyRow): PatientStudy {
+  return { caseId: study.caseId, studyDate: study.studyDate, planes: study.plane, modelVersion: study.modelKey, reviewStatus: study.reviewStatus, priority: study.priority };
 }
 
 function runFromStudy(study: StudyRow): AiRunResponse {
@@ -128,16 +123,18 @@ function App() {
       };
     });
   }, [backendStudies, bootstrapLoading, safeRun]);
-  const backendPatientStudies = useMemo(() => studies.map(toPatientStudy), [studies]);
+  const backendPatientStudies = useMemo(() => {
+    if (!backendStudies.length) return [];
+    const subjectRef = patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId;
+    return studies.filter((study) => !subjectRef || study.patientId === subjectRef).map(toPatientStudy);
+  }, [backendStudies, patientHistoryResponse?.subjectRef, studies]);
   const visiblePatientStudies = patientHistoryResponse?.studies?.length
     ? patientHistoryResponse.studies
     : backendPatientStudies.length
       ? backendPatientStudies
       : bootstrapLoading
         ? []
-        : history.patientStudies.length
-          ? history.patientStudies
-          : patientStudies;
+        : [];
   const shouldShowDataLoading = bootstrapLoading && backendStudies.length === 0;
   const historySubjectRef = patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? "PAT-0087";
   const reviewQueueCount = studies.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
@@ -361,7 +358,7 @@ function App() {
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => setActiveView("settings")} onOpenReview={handleOpenReview} />)}
       {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => setActiveView("dashboard")} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
-      {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source} summary={patientHistoryResponse?.summary} governance={patientHistoryResponse?.governance} />)}
+      {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (backendPatientStudies.length ? "studies-index-no-longitudinal-model" : "no-longitudinal-backend-data")} summary={patientHistoryResponse?.summary} governance={patientHistoryResponse?.governance} />)}
       {activeView === "settings" && <><AiMvpCompletionCard /><DemoReadinessPanel /><MultiplanarWorkspaceCard caseId={workspaceCaseId} /><SystemDiagnosticsView /></>}
     </AppShell>
   );

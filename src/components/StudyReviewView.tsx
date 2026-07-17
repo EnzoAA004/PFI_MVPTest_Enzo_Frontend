@@ -476,12 +476,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   async function save(status: ReviewStatus) {
     setReviewStatus(status);
     if (hasMeasurementDrafts) commitReviewerMeasurements();
-    const landmarkNote = landmarkDraftCount > 0
-      ? `Landmark reviewer corrections (versioning pending BE-008/FE-010, ${activeCoordinateSpace ?? "coordinate-space-missing"}): ${Object.values(landmarkDrafts).map((landmark) => `${landmark.label} x=${landmark.x.toFixed(1)} y=${landmark.y.toFixed(1)}`).join("; ")}`
-      : "";
-    const reviewNotes = landmarkNote ? `${notes.trim()}${notes.trim() ? "\n\n" : ""}${landmarkNote}` : notes;
-    await onSaveReview(status, reviewNotes);
-    if (landmarkDraftCount > 0) setLandmarkDrafts({});
+    await onSaveReview(status, notes);
   }
 
   function panelVisible(panelId: string) {
@@ -699,9 +694,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Superposición</button>
             <label className="opacity-control">Opacidad <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Asset servido: <strong>input.png unico</strong> · Overlay: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong> · Borradores Reviewer: <strong>{reviewerDraftCount} medicion/es, {landmarkDraftCount} landmark/s</strong> · Versionado: <strong>pendiente BE-008/FE-010</strong></div>
+          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Asset servido: <strong>input.png unico</strong> · Overlay: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong> · Borradores Reviewer: <strong>{reviewerDraftCount} medicion/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
           {tab === "3D Reconstruction" ? (
-            <article className="panel-card full-viewer"><SpineReconstructionPreview /></article>
+            <article className="panel-card full-viewer"><SpineReconstructionPreview threeD={displayRun.threeD} /></article>
           ) : (
             <div className="viewer-stack compact-viewer-stack">
               <MriSliceViewer
@@ -774,7 +769,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 </div>
               ))}
             </div>
-            {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medicion/es y {landmarkDraftCount} landmark/s en borrador. Correccion enviada en la revision; versionado pendiente BE-008/FE-010.</p>}
+            {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medicion/es y {landmarkDraftCount} landmark/s en borrador. Mediciones persisten por el flujo existente; landmarks quedan en borrador local no persistido, pendiente BE-008/FE-010 + AI-011.</p>}
           </section>
 
           <section className="panel-card results-panel legacy-results-panel" hidden>

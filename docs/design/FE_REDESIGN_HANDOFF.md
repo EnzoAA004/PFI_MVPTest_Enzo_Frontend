@@ -29,9 +29,10 @@ Plataforma web para radiólogos / centros / hospitales que asiste el análisis e
 | 1 | FE-RD-001 | App shell + Dashboard | APROBADA (sidebar+header+dashboard a nivel mockup; contadores/stat cards reales; sparklines omitidos por honestidad; preview segmentación real o vacío honesto; a11y 0 violaciones). Decisión aplicada: quitar línea "AI Confidence not reported". |
 | 2 | FE-RD-002 | Case Review (layout + paneles) | APROBADA (layout 3 col a nivel mockup; leyenda cableada a mask-tokens; toolbar futura deshabilitada honesta; mediciones editables se mantienen; build 1831). Deuda: limpiar bloques legacy duplicados ocultos. |
 | 3 | FE-RD-003 | Visores radiológicos 2D (W/L, zoom/pan, capas) | APROBADA (visor pasa a asset real input/overlay; simulación CSS eliminada; W/L aproximado documentado; zoom/pan/fit; visibilidad por clase deshabilitada honesta; slider falso removido). Deps reportadas: AI-009/AI-011/AI-017. |
-| 4 | FE-RD-004 | Landmarks y mediciones editables | EN CURSO (brief: FE-RD-004_BRIEF.md) — depende de BE-007/BE-008/FE-010; si no están, edición local + envío en revisión y persistencia versionada marcada pendiente. |
-| 5 | FE-RD-005 | Patient longitudinal (estados honestos) | PENDIENTE |
-| 6 | FE-RD-006 | Vista 3D honesta (atlas genérico) | PENDIENTE |
+| 4 | FE-RD-004 | Landmarks y mediciones editables | APROBADA con fix pendiente (Reset to AI cableado; mediciones persisten vía PUT .../measurements; landmarks move/add gated por coordinateSpace; versionado marcado pendiente). FIX: no anexar landmarks al campo de notas → borrador local marcado "no persistido". |
+| 5 | FE-RD-005 | Patient longitudinal (estados honestos) | APROBADA (datos inventados eliminados: +0.4/delta/serie AI-initial; Key Measurements solo dato real; empty states honestos; provenance declara "no fabricated series"; build 1831). Incluyó fix Parte A de FE-RD-004 (landmarks fuera de notas). |
+| 6 | FE-RD-006 | Vista 3D honesta (atlas genérico) | APROBADA (three@0.185.1 lazy-loaded; atlas procedural rotable con tokens; etiqueta persistente "no paciente-específico"; toggle Volume removido; Modo B deshabilitado con requiredInputs reales; build 1834). Chunk warning three: aceptado (code-split). |
+| 7 | FE-RD-007 | Limpieza de bloques legacy (deuda) | EN CURSO (brief: FE-RD-007_BRIEF.md) — quitar paneles/JSX/CSS legacy duplicados ocultos desde Fase 2, sin tocar export/reportes ni lógica. |
 Orden recomendado: 0 → 1 → 2 → 3 → 4; 5 en paralelo tras 0/1; 6 al final. Mayor impacto visual: 0, 1, 2.
 
 ## 5. Entorno del frontend (gotchas al revisar)

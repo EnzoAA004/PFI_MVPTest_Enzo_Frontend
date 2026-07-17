@@ -221,6 +221,11 @@ export type AiRunResponse = {
   degradedMode?: boolean;
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
+  threeD?: {
+    enabled?: boolean;
+    status?: string;
+    requiredInputs?: string[];
+  };
 };
 
 export type AiModel = {
@@ -303,11 +308,13 @@ export type PatientStudy = {
   modelVersion: string;
   reviewStatus: ReviewStatus;
   priority: Priority;
-  metrics: {
-    lordosisAngle: number;
-    canalDiameter: number;
-    averageDiscHeight: number;
-    l45DiscHeight: number;
+  metrics?: {
+    lordosisAngle?: number;
+    canalDiameter?: number;
+    averageDiscHeight?: number;
+    l45DiscHeight?: number;
+    aiInitial?: Record<string, number>;
+    reviewerFinal?: Record<string, number>;
   };
 };
 

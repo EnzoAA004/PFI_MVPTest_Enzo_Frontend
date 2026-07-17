@@ -13,14 +13,13 @@ function mapReviewStatus(value?: string): ReviewStatus {
   return "pendiente";
 }
 
-function metricNumber(value: unknown, fallback: number) {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+function metricNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function normalizeHistoryStudy(value: unknown, index: number): PatientStudy {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const metrics = record.metrics && typeof record.metrics === "object" ? record.metrics as Record<string, unknown> : {};
-  const seed = index + 1;
   return {
     caseId: typeof record.caseId === "string" ? record.caseId : `CASE-HISTORY-${index + 1}`,
     studyDate: typeof record.studyDate === "string" ? record.studyDate : "",
@@ -29,10 +28,10 @@ function normalizeHistoryStudy(value: unknown, index: number): PatientStudy {
     reviewStatus: mapReviewStatus(typeof record.reviewStatus === "string" ? record.reviewStatus : undefined),
     priority: mapPriority(typeof record.priority === "string" ? record.priority : undefined),
     metrics: {
-      lordosisAngle: metricNumber(metrics.lordosisAngle, 41 + seed * 1.8),
-      canalDiameter: metricNumber(metrics.canalDiameter, 11 + seed * 0.4),
-      averageDiscHeight: metricNumber(metrics.averageDiscHeight, 7.4 + seed * 0.2),
-      l45DiscHeight: metricNumber(metrics.l45DiscHeight, 7.1 + seed * 0.3),
+      lordosisAngle: metricNumber(metrics.lordosisAngle),
+      canalDiameter: metricNumber(metrics.canalDiameter),
+      averageDiscHeight: metricNumber(metrics.averageDiscHeight),
+      l45DiscHeight: metricNumber(metrics.l45DiscHeight),
     },
   };
 }

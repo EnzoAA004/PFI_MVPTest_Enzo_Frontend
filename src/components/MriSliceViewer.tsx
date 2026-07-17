@@ -312,7 +312,7 @@ export function MriSliceViewer({
       </div>
       {overlayState === "failed" && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend. No se muestra superposición simulada.</div>}
       {!coordinateSpace && <div className="panel-hidden-placeholder">Espacio de coordenadas no informado por backend; mover/agregar landmarks queda deshabilitado para no inventar model_256/original.</div>}
-      {coordinateSpace && landmarkEditMode && <div className="panel-hidden-placeholder">Correcciones de landmarks en borrador Reviewer; se envian con la revision existente. Versionado pendiente BE-008/FE-010.</div>}
+      {coordinateSpace && landmarkEditMode && <div className="panel-hidden-placeholder">Correcciones de landmarks en borrador local no persistido. Pendiente BE-008/FE-010 + AI-011.</div>}
     </div>
   );
 }
