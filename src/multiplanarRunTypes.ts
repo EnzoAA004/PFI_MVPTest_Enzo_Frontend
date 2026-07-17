@@ -109,6 +109,29 @@ export type RunReviewResponse = {
   measurementCorrections?: ReviewMeasurementCorrection[];
 };
 
+export type DiagnosticEndpointResponse = Record<string, unknown> & {
+  status?: string;
+  message?: string;
+  service?: string;
+  proxiedByBackend?: boolean;
+  readyForDemo?: boolean;
+  readyForRealInference?: boolean;
+  defaultInferenceMode?: string;
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+};
+
+export type DiagnosticEndpointName = "health" | "readiness" | "models" | "modelsVerify" | "runtime" | "systemDiagnostics" | "sync";
+
+export type DiagnosticEndpointResult = {
+  name: DiagnosticEndpointName;
+  endpoint: string;
+  method: "GET" | "POST";
+  available: boolean;
+  response?: DiagnosticEndpointResponse;
+  error?: string;
+};
+
 export type MultiplanarPlaneRun = Omit<AiRunResponse, "landmarks" | "measurements"> & RuntimeStatus & {
   runId: string;
   effectiveInferenceMode: string;

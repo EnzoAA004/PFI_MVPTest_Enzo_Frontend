@@ -1,6 +1,6 @@
 import { API_BASE_URL } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
-import type { AssetName, InputResponse, MultiplanarRunPayload, MultiplanarRunResponse, RunReviewRequest, RunReviewResponse } from "./multiplanarRunTypes";
+import type { AssetName, DiagnosticEndpointResponse, InputResponse, MultiplanarRunPayload, MultiplanarRunResponse, RunReviewRequest, RunReviewResponse } from "./multiplanarRunTypes";
 import type { MultiplanarContract } from "./multiplanarTypes";
 import type { Plane } from "./appTypes";
 
@@ -60,6 +60,30 @@ export async function uploadAiInput(file: File, caseId: string, plane: Plane): P
 
 export async function getMultiplanarContract(): Promise<MultiplanarContract> {
   return multiplanarRequest<MultiplanarContract>("/api/ai/multiplanar/contract");
+}
+
+export async function getAiHealthStatus(): Promise<DiagnosticEndpointResponse> {
+  return multiplanarRequest<DiagnosticEndpointResponse>("/api/ai/health");
+}
+
+export async function getAiReadinessStatus(): Promise<DiagnosticEndpointResponse> {
+  return multiplanarRequest<DiagnosticEndpointResponse>("/api/ai/readiness");
+}
+
+export async function getAiModelsStatus(): Promise<DiagnosticEndpointResponse> {
+  return multiplanarRequest<DiagnosticEndpointResponse>("/api/ai/models");
+}
+
+export async function verifyAiModelsStatus(): Promise<DiagnosticEndpointResponse> {
+  return multiplanarRequest<DiagnosticEndpointResponse>("/api/ai/models/verify");
+}
+
+export async function getAiRuntimeStatus(): Promise<DiagnosticEndpointResponse> {
+  return multiplanarRequest<DiagnosticEndpointResponse>("/api/ai/models/runtime");
+}
+
+export async function getSystemDiagnosticsStatus(): Promise<DiagnosticEndpointResponse> {
+  return multiplanarRequest<DiagnosticEndpointResponse>("/api/system/diagnostics");
 }
 
 export async function syncRealModelArtifacts(force = false): Promise<ModelSyncResponse> {
