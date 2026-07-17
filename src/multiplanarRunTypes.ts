@@ -85,6 +85,30 @@ export type MultiplanarReview = {
   recommendations?: string[];
 };
 
+export type RunReviewStatus = "accepted" | "observed" | "rejected" | "edited";
+
+export type ReviewMeasurementCorrection = Record<string, string | number | boolean | null | undefined> & {
+  measurementId?: string;
+  value?: number | string | null;
+  unit?: string;
+  comment?: string;
+};
+
+export type RunReviewRequest = {
+  reviewStatus: RunReviewStatus;
+  reviewer: string;
+  comments?: string;
+  measurementCorrections?: ReviewMeasurementCorrection[];
+};
+
+export type RunReviewResponse = {
+  reviewStatus: RunReviewStatus;
+  reviewer: string;
+  reviewedAt?: string;
+  comments?: string;
+  measurementCorrections?: ReviewMeasurementCorrection[];
+};
+
 export type MultiplanarPlaneRun = Omit<AiRunResponse, "landmarks" | "measurements"> & RuntimeStatus & {
   runId: string;
   effectiveInferenceMode: string;

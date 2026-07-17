@@ -1,6 +1,6 @@
-import { useEffect, useState, type ChangeEvent } from "react";
-import { aiAssetUrl, BackendApiError, getMultiplanarContract, runMultiplanarAnalysis, syncRealModelArtifacts, uploadAiInput } from "../multiplanarApi";
-import type { MultiplanarLandmark, MultiplanarMeasurementValue, MultiplanarPlaneRun, InputResponse, MultiplanarRunResponse } from "../multiplanarRunTypes";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { aiAssetUrl, BackendApiError, getMultiplanarContract, getRunReview, runMultiplanarAnalysis, submitRunReview, syncRealModelArtifacts, uploadAiInput } from "../multiplanarApi";
+import type { MultiplanarLandmark, MultiplanarMeasurementValue, MultiplanarPlaneRun, InputResponse, MultiplanarRunResponse, RunReviewResponse, RunReviewStatus } from "../multiplanarRunTypes";
 import { panelOrder, readyPlaneCount, type MultiplanarContract } from "../multiplanarTypes";
 import type { Plane } from "../appTypes";
 import { StatusBadge } from "./StatusBadge";
@@ -10,6 +10,7 @@ const uploadAccept = allowedInputExtensions.join(",");
 const uploadPlanes: Plane[] = ["sagittal", "axial"];
 const defaultOverlayOpacity: Record<Plane, number> = { sagittal: 0.65, axial: 0.65 };
 const modelSpaceSize = 256;
+const reviewStatuses: RunReviewStatus[] = ["accepted", "observed", "rejected"];
 
 type PlaneUploadState = {
   fileName?: string;
@@ -112,6 +113,12 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
   const [failedAssetUrls, setFailedAssetUrls] = useState<Record<string, boolean>>({});
   const [overlayOpacity, setOverlayOpacity] = useState<Record<Plane, number>>(defaultOverlayOpacity);
   const [uploadedInputs, setUploadedInputs] = useState<Record<Plane, PlaneUploadState>>(emptyUploadState);
+  const [runReview, setRunReview] = useState<RunReviewResponse | null>(null);
+  const [reviewStatus, setReviewStatus] = useState<RunReviewStatus>("accepted");
+  const [reviewer, setReviewer] = useState("");
+  const [comments, setComments] = useState("");
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewMessage, setReviewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [running, setRunning] = useState(false);
@@ -182,6 +189,50 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
     event.target.value = "";
   }
 
+  async function refreshRunReview(runId: string) {
+    try {
+      const review = await getRunReview(runId);
+      setRunReview(review);
+      setReviewStatus(review.reviewStatus);
+      setReviewer(review.reviewer);
+      setComments(review.comments ?? "");
+      setReviewMessage("");
+    } catch (error) {
+      if (error instanceof BackendApiError && error.status === 404) {
+        setRunReview(null);
+        setReviewMessage("Sin revisión profesional guardada para este run.");
+        return;
+      }
+      setReviewMessage(apiErrorMessage(error, "consultar revisión profesional"));
+    }
+  }
+
+  async function handleSubmitReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!lastRun) return;
+    const trimmedReviewer = reviewer.trim();
+    const trimmedComments = comments.trim();
+    if (!trimmedReviewer) {
+      setReviewMessage("El reviewer es obligatorio.");
+      return;
+    }
+    setReviewSaving(true);
+    setReviewMessage("Guardando revisión profesional...");
+    try {
+      await submitRunReview(lastRun.runId, {
+        reviewStatus,
+        reviewer: trimmedReviewer,
+        comments: trimmedComments,
+      }, runReview ? "PUT" : "POST");
+      await refreshRunReview(lastRun.runId);
+      setReviewMessage("Revisión profesional guardada.");
+    } catch (error) {
+      setReviewMessage(apiErrorMessage(error, "guardar revisión profesional"));
+    } finally {
+      setReviewSaving(false);
+    }
+  }
+
   async function runAnalysis() {
     if (!caseId) {
       setMessage("Seleccioná un estudio de la worklist antes de ejecutar el workspace multiplanar.");
@@ -211,6 +262,8 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
         },
       });
       setFailedAssetUrls({});
+      setRunReview(null);
+      setReviewMessage("");
       setLastRun(result);
       setMessage(`Run ${String(result.runId ?? "sin_id")} finalizado. Solicitado=${String(result.requestedInferenceMode ?? inferenceMode)} · efectivo=${String(result.effectiveInferenceMode ?? "contract")}`);
     } catch (error) {
@@ -225,12 +278,19 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
     setFailedAssetUrls({});
     setOverlayOpacity(defaultOverlayOpacity);
     setUploadedInputs(emptyUploadState);
+    setRunReview(null);
+    setReviewMessage("");
     if (caseId) void refresh();
     else {
       setContract(null);
       setMessage("");
     }
   }, [caseId]);
+
+  useEffect(() => {
+    if (!lastRun?.runId) return;
+    void refreshRunReview(lastRun.runId);
+  }, [lastRun?.runId]);
 
   const ready = readyPlaneCount(contract ?? undefined);
   const status = String(contract?.status ?? "consultando");
@@ -316,6 +376,44 @@ export function MultiplanarWorkspaceCard({ caseId }: { caseId?: string | null })
               );
             })}
           </div>
+        )}
+        {lastRun && (
+          <form className="panel-card compact-card" onSubmit={(event) => void handleSubmitReview(event)} style={{ marginTop: 14 }}>
+            <div className="section-title">
+              <div>
+                <h3>Revisión profesional</h3>
+                <p className="muted compact-copy">Decisión humana obligatoria sobre el run actual. No constituye diagnóstico clínico autónomo.</p>
+              </div>
+              <StatusBadge tone={runReview ? "green" : "amber"}>{runReview?.reviewStatus ?? "sin revisión"}</StatusBadge>
+            </div>
+            <dl className="info-list compact-info">
+              <div><dt>Estado guardado</dt><dd>{runReview?.reviewStatus ?? "pendiente"}</dd></div>
+              <div><dt>Reviewer</dt><dd>{runReview?.reviewer ?? "sin reviewer"}</dd></div>
+              <div><dt>Fecha revisión</dt><dd>{runReview?.reviewedAt ?? "sin fecha"}</dd></div>
+              <div><dt>Run</dt><dd>{lastRun.runId}</dd></div>
+            </dl>
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              <label className="compact-copy" style={{ display: "grid", gap: 6 }}>
+                <span>Estado</span>
+                <select disabled={reviewSaving} onChange={(event) => setReviewStatus(event.target.value as RunReviewStatus)} value={reviewStatus}>
+                  {reviewStatuses.map((statusOption) => <option key={statusOption} value={statusOption}>{statusOption}</option>)}
+                </select>
+              </label>
+              <label className="compact-copy" style={{ display: "grid", gap: 6 }}>
+                <span>Reviewer</span>
+                <input disabled={reviewSaving} onChange={(event) => setReviewer(event.target.value)} placeholder="Nombre profesional revisor" value={reviewer} />
+              </label>
+            </div>
+            <label className="compact-copy" style={{ display: "grid", gap: 6, marginTop: 10 }}>
+              <span>Comentarios</span>
+              <textarea disabled={reviewSaving} onChange={(event) => setComments(event.target.value)} placeholder="Notas profesionales, observaciones o motivo de rechazo" rows={4} value={comments} />
+            </label>
+            {reviewMessage && <div className="toast info">{reviewMessage}</div>}
+            <div className="diagnostics-actions">
+              <button className="ghost-button" disabled={reviewSaving} onClick={() => void refreshRunReview(lastRun.runId)} type="button">Refrescar revisión</button>
+              <button className="primary-button" disabled={reviewSaving} type="submit">{reviewSaving ? "Guardando..." : runReview ? "Actualizar revisión" : "Guardar revisión"}</button>
+            </div>
+          </form>
         )}
         {lastRun && (
           <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", marginTop: 14 }}>
