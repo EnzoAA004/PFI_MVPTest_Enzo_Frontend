@@ -1,5 +1,6 @@
 import type * as React from "react";
 import type { Priority, ReviewStatus } from "../appTypes";
+import { StatusBadge as BaseStatusBadge } from "../design/primitives";
 
 interface StatusBadgeProps {
   children: React.ReactNode;
@@ -7,7 +8,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ children, tone = "slate" }: StatusBadgeProps) {
-  return <span className={`status-badge badge-${tone}`}>{children}</span>;
+  return <BaseStatusBadge tone={tone}>{children}</BaseStatusBadge>;
 }
 
 export function PriorityBadge({ priority }: { priority: Priority }) {

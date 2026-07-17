@@ -1,5 +1,3 @@
-import "./theme.css";
-import "./mri-theme.css";
 import { useEffect, useMemo, useState } from "react";
 import { getDemoStudyReview, getHealth, getModels, getStudies, getSystemDiagnostics, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
 import { logoutDoctor, updateDoctorSettings } from "./authClient";

@@ -1,0 +1,42 @@
+﻿@layer utilities {
+  .muted,
+  .text-muted {
+    color: var(--text-muted);
+  }
+  .tabular-nums,
+  .measurement-value,
+  .metric-value,
+  .worklist-table td,
+  .comparison-row input {
+    font-variant-numeric: tabular-nums;
+  }
+  .cluster {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+  .stack {
+    display: grid;
+    gap: var(--sp-3);
+  }
+  .surface-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-sm);
+  }
+  .sr-only {
+    clip: rect(0 0 0 0);
+    border: 0;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+}
+
+

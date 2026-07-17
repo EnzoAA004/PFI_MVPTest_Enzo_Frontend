@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import type { Priority, ReviewStatus, StudyRow } from "../appTypes";
-import "../worklist-table.css";
 import { fetchStudyDetail } from "../studyApi";
 import { loadSelectedStudyDetail, saveSelectedStudyDetail, saveSelectedStudyFallback } from "../selectedStudyStorage";
 import { PriorityBadge, ReviewBadge } from "./StatusBadge";
@@ -88,8 +87,8 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
   function SortHeader({ column, children }: { column: SortKey; children: React.ReactNode }) {
     const active = sortKey === column;
     return (
-      <th>
-        <button className={`sortable-header ${active ? "active" : ""}`} onClick={() => changeSort(column)} type="button" aria-sort={active ? sortDirection === "asc" ? "ascending" : "descending" : "none"}>
+      <th aria-sort={active ? sortDirection === "asc" ? "ascending" : "descending" : "none"}>
+        <button className={`sortable-header ${active ? "active" : ""}`} onClick={() => changeSort(column)} type="button">
           <span>{children}</span>
           <em>{sortLabel(active, sortDirection)}</em>
         </button>

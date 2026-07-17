@@ -1,0 +1,121 @@
+﻿@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  html {
+    color-scheme: light;
+    font-size: var(--fs-body);
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    min-width: 320px;
+    background: var(--bg-app);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--fs-body);
+    font-weight: var(--fw-regular);
+    line-height: 1.5;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+  button,
+  [role='button'],
+  a,
+  input,
+  textarea,
+  select {
+    -webkit-tap-highlight-color: transparent;
+  }
+  :focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary) 72%, var(--surface));
+    outline-offset: 2px;
+  }
+  #root {
+    min-height: 100vh;
+  }
+  .app-layout {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+  .main-panel {
+    min-width: 0;
+    padding: var(--sp-6);
+  }
+  .review-grid {
+    display: grid;
+    gap: var(--sp-4);
+    grid-template-columns: 260px minmax(500px, 1fr) 395px;
+  }
+  .dashboard-grid {
+    display: grid;
+    gap: var(--sp-4);
+    grid-template-columns: minmax(0, 1fr) 385px;
+  }
+  .viewer-stack {
+    display: grid;
+    gap: var(--sp-3);
+  }
+  @media (min-width: 1280px) {
+    .viewer-stack {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+    .review-workspace .viewer-stack {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 1180px) {
+    .dashboard-grid,
+    .review-grid,
+    .history-grid,
+    .history-grid.two {
+      grid-template-columns: 1fr;
+    }
+    .right-column {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 760px) {
+    html {
+      font-size: var(--fs-body);
+    }
+    .app-layout {
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
+      height: auto;
+      position: static;
+      width: auto;
+    }
+    .main-panel {
+      padding: var(--sp-3);
+    }
+    .metric-grid,
+    .right-column,
+    .trend-grid,
+    .library-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: .01ms;
+      animation-iteration-count: 1;
+      scroll-behavior: auto;
+      transition-duration: .01ms;
+    }
+  }
+}
+
+

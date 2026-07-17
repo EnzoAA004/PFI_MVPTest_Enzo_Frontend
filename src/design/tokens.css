@@ -1,0 +1,80 @@
+﻿@layer tokens {
+  :root {
+    /* Color */
+    --bg-app: #F7F8FA;
+    --bg-sidebar: #0E1726;
+    --surface: #FFFFFF;
+    --border: #E5E7EB;
+    --text: #0F172A;
+    --text-muted: #64748B;
+    --primary: #2563EB;
+    --ai: #7C3AED;
+    --success: #16A34A;
+    --warning: #F59E0B;
+    --danger: #DC2626;
+    --info-bg: #EFF4FF;
+    /* Typography */
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --fs-h1: 24px;
+    --fs-h2: 18px;
+    --fs-h3: 15px;
+    --fs-body: 14px;
+    --fs-small: 12px;
+    --fw-regular: 400;
+    --fw-medium: 500;
+    --fw-semibold: 600;
+    /* Spacing */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-6: 24px;
+    --sp-8: 32px;
+    --sp-12: 48px;
+    /* Radius */
+    --radius-card: 12px;
+    --radius-btn: 8px;
+    --radius-input: 8px;
+    --radius-pill: 999px;
+    --radius-chip: 6px;
+    /* Shadow */
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .10);
+    /* Semantic aliases used while consolidating legacy CSS into tokens. */
+    --surface-subtle: color-mix(in srgb, var(--surface) 76%, var(--bg-app));
+    --surface-soft: color-mix(in srgb, var(--surface) 88%, var(--info-bg));
+    --surface-warm: color-mix(in srgb, var(--surface) 82%, var(--warning));
+    --surface-success: color-mix(in srgb, var(--surface) 86%, var(--success));
+    --surface-danger: color-mix(in srgb, var(--surface) 86%, var(--danger));
+    --surface-ai: color-mix(in srgb, var(--surface) 84%, var(--ai));
+    --surface-cyan: color-mix(in srgb, var(--surface) 82%, #06B6D4);
+    --surface-dark: #0B1220;
+    --surface-dark-2: #111827;
+    --surface-dark-3: #1F2937;
+    --surface-scan: #05070A;
+    --sidebar-text: color-mix(in srgb, var(--surface) 82%, var(--primary));
+    --border-strong: #CBD5E1;
+    --border-info: #BFDBFE;
+    --border-warning: #FED7AA;
+    --border-success: #BBF7D0;
+    --border-danger: #FECACA;
+    --text-on-dark: #DBEAFE;
+    --text-primary-strong: #1D4ED8;
+    --text-success-strong: #15803D;
+    --text-warning-strong: #B45309;
+    --text-danger-strong: #B91C1C;
+    --text-ai-strong: #6D28D9;
+    --teal: #0891B2;
+    --teal-strong: #0E7490;
+    --teal-soft: #67E8F9;
+    --mask-vertebral-body: #C8B28A;
+    --mask-foramen: #8B5CF6;
+    --switch-on: #67D85F;
+    --focus-ring: rgba(37, 99, 235, .16);
+    --shadow-legacy: 0 10px 28px rgba(15, 31, 52, .06);
+    --shadow-card: 0 18px 50px rgba(15, 23, 42, .08);
+    --shadow-float: 0 24px 70px rgba(15, 23, 42, .14);
+    --shadow-modal: 0 28px 90px rgba(15, 23, 42, .22);
+  }
+}
+
+
