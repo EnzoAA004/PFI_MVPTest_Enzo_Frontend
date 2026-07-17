@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { exportReviewReport } from "../api";
-import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyMask, StudySeries } from "../appTypes";
+import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudySeries } from "../appTypes";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
@@ -18,11 +18,11 @@ const fallbackSeries: StudySeries[] = [
 ];
 
 const fallbackMasks: StudyMask[] = [
-  { id: "mask-vertebral-body", label: "Cuerpo vertebral", className: "vertebral_body", color: "#c8b28a", confidence: 0.86, editable: true, enabled: true, contours: [] },
-  { id: "mask-disc", label: "Disco intervertebral", className: "disc", color: "#2563eb", confidence: 0.82, editable: true, enabled: true, contours: [] },
-  { id: "mask-canal", label: "Canal espinal", className: "spinal_canal", color: "#16a34a", confidence: 0.79, editable: true, enabled: true, contours: [] },
-  { id: "mask-root-left", label: "Raíz nerviosa izquierda", className: "nerve_root", color: "#f59e0b", confidence: 0.72, editable: true, enabled: true, contours: [] },
-  { id: "mask-foramen-right", label: "Foramen derecho", className: "foramen", color: "#8b5cf6", confidence: 0.7, editable: true, enabled: true, contours: [] },
+  { id: "mask-vertebral-body", label: "Cuerpo vertebral", className: "vertebral_body", color: "var(--mask-vertebral-body)", confidence: 0.86, editable: true, enabled: true, contours: [] },
+  { id: "mask-disc", label: "Disco intervertebral", className: "disc", color: "var(--mask-disc)", confidence: 0.82, editable: true, enabled: true, contours: [] },
+  { id: "mask-canal", label: "Canal espinal", className: "spinal_canal", color: "var(--mask-spinal-canal)", confidence: 0.79, editable: true, enabled: true, contours: [] },
+  { id: "mask-root-left", label: "Raíz nerviosa izquierda", className: "nerve_root", color: "var(--mask-nerve-root)", confidence: 0.72, editable: true, enabled: true, contours: [] },
+  { id: "mask-foramen-right", label: "Foramen derecho", className: "foramen", color: "var(--mask-foramen-other-soft-tissue)", confidence: 0.7, editable: true, enabled: true, contours: [] },
 ];
 
 type MeasurementRow = {
@@ -145,6 +145,12 @@ function confidenceToneClass(confidence?: number) {
   return "confidence-low";
 }
 
+function coordinateSpaceFrom(series?: any, landmarks?: StudyLandmark[]) {
+  const fromSeries = typeof series?.coordinateSpace === "string" ? series.coordinateSpace : undefined;
+  const fromLandmark = landmarks?.find((landmark: any) => typeof landmark.coordinateSpace === "string") as any;
+  return fromSeries ?? fromLandmark?.coordinateSpace;
+}
+
 function normalizeRow(item: any): MeasurementRow {
   const value = item.aiValue ?? item.value ?? "";
   return {
@@ -211,6 +217,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [selectedLandmark, setSelectedLandmark] = useState("L4");
   const [overlayAvailableByPlane, setOverlayAvailableByPlane] = useState<Record<string, boolean>>({});
   const [reviewerValues, setReviewerValues] = useState<Record<string, string>>({});
+  const [landmarkDrafts, setLandmarkDrafts] = useState<Record<string, StudyLandmark>>({});
+  const [landmarkAddMode, setLandmarkAddMode] = useState(false);
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
   const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
@@ -239,6 +247,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const seriesList = hasPipelineVisualContract ? run.series ?? fallbackSeries : Array.isArray(studyReview?.series) && studyReview.series.length ? studyReview.series : fallbackSeries;
   const masks = hasPipelineVisualContract && Array.isArray(run.masks) ? run.masks : Array.isArray(studyReview?.masks) && studyReview.masks.length ? studyReview.masks : fallbackMasks;
   const landmarks = hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [];
+  const displayLandmarks = useMemo(() => {
+    const byId = new Map<string, StudyLandmark>();
+    landmarks.forEach((landmark) => byId.set(landmark.id, landmark));
+    Object.values(landmarkDrafts).forEach((landmark) => byId.set(landmark.id, landmark));
+    return Array.from(byId.values());
+  }, [landmarkDrafts, landmarks]);
   const aiOutput = hasPipelineVisualContract && run.aiOutput ? run.aiOutput : studyReview?.aiOutput ?? {
     status: run.measurementsStatus ?? "ai_output_pending",
     label: run.measurementsStatus === "pending_real_inference" ? "Salida IA pendiente" : "Salida técnica",
@@ -247,6 +261,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const currentSeries = seriesList.find((item: any) => item.id === selectedSeriesId) ?? seriesList.find((item: any) => item.plane === tab.toLowerCase()) ?? seriesList[0];
   const activePlane = currentSeries?.plane === "axial" ? "axial" : "sagittal";
   const overlayAvailable = overlayAvailableByPlane[activePlane] === true;
+  const activeCoordinateSpace = coordinateSpaceFrom(currentSeries, displayLandmarks);
 
   const studyMeasurements: MeasurementRow[] = hasPipelineVisualContract && pipelineMeasurements.length
     ? pipelineMeasurements.map((item) => normalizeRow({ ...item, aiValue: item.aiValue ?? item.value, reviewerValue: item.reviewerValue ?? null, confidence: item.confidence ?? 0.72 }))
@@ -290,8 +305,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     return String(a.label).localeCompare(String(b.label));
   }), [reviewerValues, sourceMeasurements, studyMeasurements]);
 
-  const hasReviewerDrafts = Object.keys(reviewerValues).some((key) => reviewerValues[key] !== "");
+  const hasMeasurementDrafts = Object.keys(reviewerValues).some((key) => reviewerValues[key] !== "");
   const reviewerDraftCount = Object.keys(reviewerValues).filter((key) => reviewerValues[key] !== "").length;
+  const landmarkDraftCount = Object.keys(landmarkDrafts).length;
+  const hasReviewerDrafts = hasMeasurementDrafts || landmarkDraftCount > 0;
   const relevantChanges = resultRows.filter((row) => row.severity === "medium" || row.severity === "high").length;
   const outlierCount = resultRows.filter((row) => row.outlier).length;
 
@@ -306,6 +323,25 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
   function updateReviewerValue(measurement: MeasurementRow, value: string) {
     setReviewerValues((current) => ({ ...current, [measurement.id]: value }));
+  }
+
+  function resetReviewerValue(measurementId: string) {
+    setReviewerValues((current) => {
+      const next = { ...current };
+      delete next[measurementId];
+      return next;
+    });
+  }
+
+  function updateLandmarkDraft(landmark: StudyLandmark) {
+    setLandmarkDrafts((current) => ({ ...current, [landmark.id]: landmark }));
+    setSelectedLandmark(landmark.id);
+  }
+
+  function resetReviewerDrafts() {
+    setReviewerValues({});
+    setLandmarkDrafts({});
+    setLandmarkAddMode(false);
   }
 
   function toMeasurement(item: MeasurementRow): Measurement {
@@ -330,7 +366,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   }
 
   function commitReviewerMeasurements() {
-    if (!hasReviewerDrafts) return;
+    if (!hasMeasurementDrafts) return;
     const existingIds = new Set(sourceMeasurements.map((item) => item.id));
     const updated = sourceMeasurements.map((item) => {
       const reviewerValue = reviewerValues[item.id];
@@ -439,8 +475,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
   async function save(status: ReviewStatus) {
     setReviewStatus(status);
-    if (hasReviewerDrafts) commitReviewerMeasurements();
-    await onSaveReview(status, notes);
+    if (hasMeasurementDrafts) commitReviewerMeasurements();
+    const landmarkNote = landmarkDraftCount > 0
+      ? `Landmark reviewer corrections (versioning pending BE-008/FE-010, ${activeCoordinateSpace ?? "coordinate-space-missing"}): ${Object.values(landmarkDrafts).map((landmark) => `${landmark.label} x=${landmark.x.toFixed(1)} y=${landmark.y.toFixed(1)}`).join("; ")}`
+      : "";
+    const reviewNotes = landmarkNote ? `${notes.trim()}${notes.trim() ? "\n\n" : ""}${landmarkNote}` : notes;
+    await onSaveReview(status, reviewNotes);
+    if (landmarkDraftCount > 0) setLandmarkDrafts({});
   }
 
   function panelVisible(panelId: string) {
@@ -640,9 +681,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </div>
           <div className="toolbar compact-toolbar review-toolbar" role="toolbar" aria-label="Review tools">
             <button disabled title={futureFeatureTitle} type="button">Edit Mask</button>
-            <button disabled title={futureFeatureTitle} type="button">Add Landmark</button>
+            <button className={editMode ? "active" : ""} disabled={!activeCoordinateSpace} onClick={() => {
+              setEditMode((value) => !value);
+              setLandmarkAddMode(false);
+            }} title={activeCoordinateSpace ? "Habilita mover landmarks IA como borrador Reviewer" : "Espacio de coordenadas no informado por backend"} type="button">Landmark Edit</button>
+            <button className={landmarkAddMode ? "active" : ""} disabled={!editMode || !activeCoordinateSpace} onClick={() => setLandmarkAddMode((value) => !value)} title={!activeCoordinateSpace ? "Espacio de coordenadas no informado por backend" : editMode ? "Click sobre la imagen real para agregar landmark Reviewer" : "Activar Landmark Edit primero"} type="button">Add Landmark</button>
             <button disabled title={futureFeatureTitle} type="button">Recalculate</button>
-            <button disabled title={futureFeatureTitle} type="button">Undo</button>
+            <button disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores Reviewer" : "No hay borradores Reviewer"} type="button">Undo</button>
             <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button>
             <button className={overlayEnabled && overlayAvailable ? "active" : ""} disabled={!overlayAvailable} onClick={() => setOverlayEnabled((value) => !value)} title={overlayAvailable ? "Toggle overlay.png real" : "overlay.png no disponible desde backend"} type="button">AI Overlay</button>
             <label className="opacity-control">Opacity <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
@@ -654,7 +699,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <button className={overlayEnabled ? "active" : ""} onClick={() => setOverlayEnabled((value) => !value)} type="button">Superposición</button>
             <label className="opacity-control">Opacidad <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Asset servido: <strong>input.png único</strong> · Overlay: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong></div>
+          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Asset servido: <strong>input.png unico</strong> · Overlay: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong> · Borradores Reviewer: <strong>{reviewerDraftCount} medicion/es, {landmarkDraftCount} landmark/s</strong> · Versionado: <strong>pendiente BE-008/FE-010</strong></div>
           {tab === "3D Reconstruction" ? (
             <article className="panel-card full-viewer"><SpineReconstructionPreview /></article>
           ) : (
@@ -664,7 +709,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 series={currentSeries}
                 runId={displayRun.runId}
                 masks={masks}
-                landmarks={landmarks}
+                landmarks={displayLandmarks}
                 maskVisibility={maskVisibility}
                 selectedMask={selectedMask}
                 overlayEnabled={overlayEnabled}
@@ -673,6 +718,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 selectedLandmark={selectedLandmark}
                 onSelectMask={setSelectedMask}
                 onSelectLandmark={setSelectedLandmark}
+                landmarkEditMode={editMode}
+                landmarkAddMode={landmarkAddMode}
+                onLandmarkDraftChange={updateLandmarkDraft}
+                onLandmarkAddComplete={() => setLandmarkAddMode(false)}
                 onOverlayAvailableChange={(available) => setOverlayAvailableByPlane((current) => ({ ...current, [activePlane]: available }))}
               />
               <article className="panel-card compact-card legend-card">
@@ -698,25 +747,34 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           <section className="panel-card results-panel measurements-review-panel">
             <div className="section-title">
               <h2>Measurements</h2>
-              <button className="text-link-button" disabled title={futureFeatureTitle} type="button">Reset to AI</button>
+              <button className="text-link-button" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Restaurar valores Reviewer al valor IA original" : "No hay mediciones Reviewer editadas"} type="button">Reset to AI</button>
             </div>
-            <p className="muted compact-copy">AI values are read-only in this phase. Reviewer edits arrive in a future measurements phase.</p>
+            <p className="muted compact-copy">AI Initial y Reviewer se mantienen separados. La confidence y outlier pertenecen a IA; no se inventan para la correccion Reviewer.</p>
             <div className="measurement-review-table" role="table" aria-label="Measurements">
               <div className="measurement-review-head" role="row">
                 <span role="columnheader">Measurement</span>
-                <span role="columnheader">Value</span>
-                <span role="columnheader">Confidence</span>
+                <span role="columnheader">AI Initial</span>
+                <span role="columnheader">Reviewer</span>
+                <span role="columnheader">Delta</span>
+                <span role="columnheader">AI Confidence</span>
                 <span role="columnheader">Outlier</span>
               </div>
               {resultRows.map((item) => (
-                <div className="measurement-review-row" role="row" key={item.id}>
+                <div className={`measurement-review-row ${item.draftValue !== undefined && item.draftValue !== "" ? "is-draft" : ""}`} role="row" key={item.id}>
                   <span role="cell"><strong>{item.label}</strong><small>{item.level}</small></span>
                   <span role="cell" className="tabular-value"><em>AI</em>{item.aiValue} {item.unit}</span>
+                  <span role="cell" className="reviewer-input-cell">
+                    <input aria-label={`Reviewer value for ${item.label}`} className="reviewer-value-input" inputMode="decimal" onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder={String(item.aiValue ?? "")} value={String(item.reviewerValue ?? "")} />
+                    <button className="measurement-reset-button" disabled={item.draftValue === undefined && !item.persistedValue} onClick={() => resetReviewerValue(item.id)} title="Reset to AI for this measurement" type="button">Reset</button>
+                    {item.draftValue !== undefined && item.draftValue !== "" && <span className="draft-chip">Draft</span>}
+                  </span>
+                  <span role="cell" className={`delta-chip delta-${item.severity}`}>{formatDelta(item.delta, item.unit)}</span>
                   <span role="cell" className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `${Math.round(item.confidence * 100)}%` : "N/A"}</span>
-                  <span role="cell">{item.outlier ? <StatusBadge tone="amber">Low</StatusBadge> : "—"}</span>
+                  <span role="cell">{item.outlier ? <StatusBadge tone="amber">AI outlier</StatusBadge> : "—"}</span>
                 </div>
               ))}
             </div>
+            {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medicion/es y {landmarkDraftCount} landmark/s en borrador. Correccion enviada en la revision; versionado pendiente BE-008/FE-010.</p>}
           </section>
 
           <section className="panel-card results-panel legacy-results-panel" hidden>

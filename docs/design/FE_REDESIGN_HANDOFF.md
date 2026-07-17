@@ -28,8 +28,8 @@ Plataforma web para radiólogos / centros / hospitales que asiste el análisis e
 | 0 | FE-RD-000 | Consolidar design system (tokens + unificar CSS + componentes base) | APROBADA Y CERRADA (build 1831; 7 CSS→src/design/*; 0 hex en CSS nuevo; !important 47→0; smoke test OK; 5 mask-tokens agregados). |
 | 1 | FE-RD-001 | App shell + Dashboard | APROBADA (sidebar+header+dashboard a nivel mockup; contadores/stat cards reales; sparklines omitidos por honestidad; preview segmentación real o vacío honesto; a11y 0 violaciones). Decisión aplicada: quitar línea "AI Confidence not reported". |
 | 2 | FE-RD-002 | Case Review (layout + paneles) | APROBADA (layout 3 col a nivel mockup; leyenda cableada a mask-tokens; toolbar futura deshabilitada honesta; mediciones editables se mantienen; build 1831). Deuda: limpiar bloques legacy duplicados ocultos. |
-| 3 | FE-RD-003 | Visores radiológicos 2D (W/L, zoom/pan, capas) | EN CURSO (brief: FE-RD-003_BRIEF.md) — el visor actual es SIMULADO (gradientes CSS + slice/WL hardcodeados); esta fase lo pasa a asset real u honesto. |
-| 4 | FE-RD-004 | Landmarks y mediciones editables | PENDIENTE |
+| 3 | FE-RD-003 | Visores radiológicos 2D (W/L, zoom/pan, capas) | APROBADA (visor pasa a asset real input/overlay; simulación CSS eliminada; W/L aproximado documentado; zoom/pan/fit; visibilidad por clase deshabilitada honesta; slider falso removido). Deps reportadas: AI-009/AI-011/AI-017. |
+| 4 | FE-RD-004 | Landmarks y mediciones editables | EN CURSO (brief: FE-RD-004_BRIEF.md) — depende de BE-007/BE-008/FE-010; si no están, edición local + envío en revisión y persistencia versionada marcada pendiente. |
 | 5 | FE-RD-005 | Patient longitudinal (estados honestos) | PENDIENTE |
 | 6 | FE-RD-006 | Vista 3D honesta (atlas genérico) | PENDIENTE |
 Orden recomendado: 0 → 1 → 2 → 3 → 4; 5 en paralelo tras 0/1; 6 al final. Mayor impacto visual: 0, 1, 2.

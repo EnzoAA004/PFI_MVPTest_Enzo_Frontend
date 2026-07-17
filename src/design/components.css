@@ -2802,7 +2802,7 @@ body {
   align-items: center;
   display: grid;
   gap: 8px;
-  grid-template-columns: 1.35fr .8fr .62fr .54fr;
+  grid-template-columns: 1.25fr .72fr 1fr .58fr .68fr .56fr;
 }
 .measurement-review-head {
   background: var(--surface-subtle);
@@ -2816,6 +2816,9 @@ body {
 .measurement-review-row {
   border-top: 1px solid var(--border);
   padding: 9px 10px;
+}
+.measurement-review-row.is-draft {
+  background: var(--surface-warm);
 }
 .measurement-review-row small {
   color: var(--text-muted);
@@ -2832,6 +2835,32 @@ body {
   font-size: .68rem;
   font-style: normal;
   font-weight: 900;
+  text-transform: uppercase;
+}
+.reviewer-input-cell {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reviewer-value-input {
+  font-variant-numeric: tabular-nums;
+  min-height: 32px;
+  min-width: 76px;
+  width: 86px;
+}
+.measurement-reset-button {
+  min-height: 28px;
+  padding: 3px 7px;
+}
+.draft-chip {
+  background: var(--info-bg);
+  border: 1px solid var(--border-info);
+  border-radius: var(--radius-pill);
+  color: var(--text-primary-strong);
+  font-size: var(--fs-xs);
+  font-weight: 900;
+  padding: 2px 7px;
   text-transform: uppercase;
 }
 .confidence-pill {
@@ -2889,7 +2918,7 @@ body {
     grid-template-columns: 1fr;
   }
   .measurement-review-head, .measurement-review-row {
-    grid-template-columns: 1fr .8fr .6fr .5fr;
+    grid-template-columns: 1fr .7fr 1fr .55fr .65fr .55fr;
   }
 }
 @media (max-width: 760px) {
@@ -2969,6 +2998,9 @@ body {
 .real-slice-frame.window-mode {
   cursor: crosshair;
 }
+.real-slice-frame.landmark-add-mode {
+  cursor: crosshair;
+}
 .asset-transform {
   align-items: center;
   display: flex;
@@ -3027,6 +3059,9 @@ body {
 .asset-landmark.selected {
   background: var(--warning);
   border-color: var(--surface);
+}
+.asset-landmark:active {
+  cursor: grabbing;
 }
 .real-viewer-footer {
   border-top: 1px solid var(--border);

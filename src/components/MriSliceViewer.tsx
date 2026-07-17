@@ -28,6 +28,10 @@ type Props = {
   onSelectLandmark: (landmark: string) => void;
   onSliceChange?: (slice: number) => void;
   onOverlayAvailableChange?: (available: boolean) => void;
+  landmarkEditMode?: boolean;
+  landmarkAddMode?: boolean;
+  onLandmarkDraftChange?: (landmark: StudyLandmark, detail: string) => void;
+  onLandmarkAddComplete?: () => void;
 };
 
 const windowPresets: WindowPreset[] = [
@@ -95,9 +99,13 @@ export function MriSliceViewer({
   landmarks = [],
   overlayEnabled,
   overlayOpacity = 0.74,
+  landmarkEditMode = false,
+  landmarkAddMode = false,
   selectedLandmark,
   onSelectLandmark,
   onOverlayAvailableChange,
+  onLandmarkDraftChange,
+  onLandmarkAddComplete,
 }: Props) {
   const plane = variant as Plane;
   const inputUrl = series?.imageUrl ?? (runId ? aiAssetUrl(runId, plane, "input.png") : undefined);
@@ -110,10 +118,13 @@ export function MriSliceViewer({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; brightness: number; contrast: number; panX: number; panY: number } | null>(null);
+  const landmarkDragRef = useRef<string | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const coordinateSpace = coordinateSpaceFrom(series, landmarks);
   const realLandmarks = useMemo(() => landmarks.filter((landmark) => Number.isFinite(landmark.x) && Number.isFinite(landmark.y)), [landmarks]);
   const imageLoaded = inputState === "loaded";
   const overlayLoaded = overlayState === "loaded";
+  const canEditLandmarks = Boolean(imageLoaded && coordinateSpace && onLandmarkDraftChange);
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
   const filter = `brightness(${brightness}%) contrast(${contrast}%)`;
 
@@ -140,6 +151,10 @@ export function MriSliceViewer({
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (!imageLoaded || event.button !== 0) return;
+    if (landmarkAddMode) {
+      createLandmarkDraft(event);
+      return;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       x: event.clientX,
@@ -152,6 +167,17 @@ export function MriSliceViewer({
   }
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (landmarkDragRef.current && canEditLandmarks) {
+      const point = pointFromEvent(event);
+      const landmark = realLandmarks.find((item) => item.id === landmarkDragRef.current);
+      if (point && landmark) {
+        onLandmarkDraftChange?.(
+          { ...landmark, x: point.x, y: point.y, editable: true },
+          `Landmark ${landmark.label} movido por Reviewer en ${coordinateSpace}`,
+        );
+      }
+      return;
+    }
     const drag = dragRef.current;
     if (!drag) return;
     const dx = event.clientX - drag.x;
@@ -166,11 +192,41 @@ export function MriSliceViewer({
 
   function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
     dragRef.current = null;
+    landmarkDragRef.current = null;
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
       // Pointer capture may already be released by the browser.
     }
+  }
+
+  function pointFromEvent(event: { clientX: number; clientY: number }) {
+    const image = imageRef.current;
+    if (!image) return null;
+    const rect = image.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return {
+      x: clamp((event.clientX - rect.left) / rect.width * 256, 0, 256),
+      y: clamp((event.clientY - rect.top) / rect.height * 256, 0, 256),
+    };
+  }
+
+  function createLandmarkDraft(event: { clientX: number; clientY: number }) {
+    if (!landmarkAddMode || !canEditLandmarks) return;
+    const point = pointFromEvent(event);
+    if (!point) return;
+    const landmark: StudyLandmark = {
+      id: `reviewer-landmark-${Date.now()}`,
+      label: `R${realLandmarks.length + 1}`,
+      seriesId: String(series?.id ?? `${plane}-asset`),
+      sliceIndex: Number(series?.selectedSlice ?? 1),
+      x: point.x,
+      y: point.y,
+      editable: true,
+    };
+    onLandmarkDraftChange?.(landmark, `Landmark ${landmark.label} agregado por Reviewer en ${coordinateSpace}`);
+    onSelectLandmark(landmark.id);
+    onLandmarkAddComplete?.();
   }
 
   return (
@@ -205,7 +261,7 @@ export function MriSliceViewer({
       <p className="viewer-limit-note">W/L is an approximate brightness/contrast filter over an 8-bit PNG asset. DICOM windowing and multi-slice navigation require AI-009.</p>
 
       <div
-        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"}`}
+        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"} ${landmarkAddMode ? "landmark-add-mode" : ""}`}
         onPointerCancel={handlePointerUp}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -214,7 +270,7 @@ export function MriSliceViewer({
       >
         {inputState === "loaded" && inputUrl ? (
           <div className="asset-transform" style={{ transform }}>
-            <img alt={`${series?.name ?? variant} input asset`} className="mri-asset-img" draggable={false} src={inputUrl} style={{ filter }} />
+            <img ref={imageRef} alt={`${series?.name ?? variant} input asset`} className="mri-asset-img" draggable={false} src={inputUrl} style={{ filter }} />
             {overlayEnabled && overlayLoaded && overlayUrl && (
               <img alt={`${series?.name ?? variant} AI overlay asset`} className="mri-overlay-img" draggable={false} src={overlayUrl} style={{ opacity: overlayOpacity, transform: "translateZ(0)" }} />
             )}
@@ -226,6 +282,13 @@ export function MriSliceViewer({
                 onClick={(event) => {
                   event.stopPropagation();
                   onSelectLandmark(landmark.id);
+                }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  onSelectLandmark(landmark.id);
+                  if (!landmarkEditMode || !canEditLandmarks || event.button !== 0) return;
+                  landmarkDragRef.current = landmark.id;
+                  event.currentTarget.setPointerCapture(event.pointerId);
                 }}
                 style={{ left: `${pointPercent(landmark.x)}%`, top: `${pointPercent(landmark.y)}%` }}
                 type="button"
@@ -245,10 +308,11 @@ export function MriSliceViewer({
       <div className="viewer-footer real-viewer-footer">
         <span>{overlayLoaded ? "overlay.png disponible" : overlayState === "failed" ? "overlay.png no disponible" : "overlay pendiente"}</span>
         <span>{overlayEnabled && overlayLoaded ? `${Math.round(overlayOpacity * 100)}% opacity` : "AI Overlay deshabilitado si falta asset"}</span>
-        <span>Single slice served</span>
+        <span>{landmarkEditMode && canEditLandmarks ? "Reviewer landmark editing" : "Single slice served"}</span>
       </div>
       {overlayState === "failed" && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend. No se muestra superposición simulada.</div>}
-      {!coordinateSpace && <div className="panel-hidden-placeholder">Espacio de coordenadas no informado por backend; no se inventa model_256/original.</div>}
+      {!coordinateSpace && <div className="panel-hidden-placeholder">Espacio de coordenadas no informado por backend; mover/agregar landmarks queda deshabilitado para no inventar model_256/original.</div>}
+      {coordinateSpace && landmarkEditMode && <div className="panel-hidden-placeholder">Correcciones de landmarks en borrador Reviewer; se envian con la revision existente. Versionado pendiente BE-008/FE-010.</div>}
     </div>
   );
 }
