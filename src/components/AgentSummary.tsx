@@ -23,6 +23,10 @@ export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision 
             <div><dt>Human review</dt><dd>{agentDecision?.humanReviewRequired === false ? "Optional" : "Required"}</dd></div>
             <div><dt>Clinical use</dt><dd>{agentDecision?.notClinicalDiagnosis === false ? "Restricted" : "Not for clinical diagnosis"}</dd></div>
           </dl>
+          <div className="ai-honesty-row">
+            <StatusBadge tone="amber">Human review required</StatusBadge>
+            <StatusBadge tone="purple">AI output may be inaccurate. Please verify all results.</StatusBadge>
+          </div>
           <p className="muted">{agentDecision?.recommendedAction}</p>
           <div className="chip-row">
             {flags.map((flag) => <span className="chip" key={flag}>{flag}</span>)}

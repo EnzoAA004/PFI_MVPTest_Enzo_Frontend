@@ -25,9 +25,9 @@ Plataforma web para radiólogos / centros / hospitales que asiste el análisis e
 ## 4. Fases y estado (actualizar a medida que se cierran)
 | Fase | Ticket | Descripción | Estado |
 |---|---|---|---|
-| 0 | FE-RD-000 | Consolidar design system (tokens + unificar CSS + componentes base) | APROBADA (build 1831 OK; 7 CSS→src/design/*; 0 hex en CSS nuevo; !important 47→0). Pendiente ajuste: smoke test visual + completar 5 mask-tokens. |
-| 1 | FE-RD-001 | App shell + Dashboard | EN CURSO (brief: FE-RD-001_BRIEF.md) |
-| 2 | FE-RD-002 | Case Review (layout + paneles) | PENDIENTE |
+| 0 | FE-RD-000 | Consolidar design system (tokens + unificar CSS + componentes base) | APROBADA Y CERRADA (build 1831; 7 CSS→src/design/*; 0 hex en CSS nuevo; !important 47→0; smoke test OK; 5 mask-tokens agregados). |
+| 1 | FE-RD-001 | App shell + Dashboard | APROBADA (sidebar+header+dashboard a nivel mockup; contadores/stat cards reales; sparklines omitidos por honestidad; preview segmentación real o vacío honesto; a11y 0 violaciones). Decisión aplicada: quitar línea "AI Confidence not reported". |
+| 2 | FE-RD-002 | Case Review (layout + paneles) | EN CURSO (brief: FE-RD-002_BRIEF.md) |
 | 3 | FE-RD-003 | Visores radiológicos 2D (W/L, zoom/pan, capas) | PENDIENTE |
 | 4 | FE-RD-004 | Landmarks y mediciones editables | PENDIENTE |
 | 5 | FE-RD-005 | Patient longitudinal (estados honestos) | PENDIENTE |

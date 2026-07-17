@@ -360,7 +360,7 @@ function App() {
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => setActiveView("settings")} onOpenReview={handleOpenReview} />)}
-      {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
+      {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => setActiveView("dashboard")} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
       {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source} summary={patientHistoryResponse?.summary} governance={patientHistoryResponse?.governance} />)}
       {activeView === "settings" && <><AiMvpCompletionCard /><DemoReadinessPanel /><MultiplanarWorkspaceCard caseId={workspaceCaseId} /><SystemDiagnosticsView /></>}
     </AppShell>

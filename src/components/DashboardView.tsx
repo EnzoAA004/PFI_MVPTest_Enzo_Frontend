@@ -247,7 +247,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
                     {["L1", "L2", "L3", "L4", "L5", "S1"].map((level) => <span key={level}><i />{level}</span>)}
                   </div>
                 </div>
-                <p className="preview-meta">{latestStudy?.caseId} - {latestStudy?.plane} - AI Confidence not reported</p>
+                <p className="preview-meta">{latestStudy?.caseId} - {latestStudy?.plane}</p>
               </>
             ) : (
               <div className="panel-hidden-placeholder">{previewState === "loading" ? "Verificando preview real disponible..." : "Sin preview real disponible para este estudio. No se muestra una segmentacion simulada."}</div>
