@@ -4,7 +4,15 @@ import { worklistStudies } from "./data/mockStudies";
 import { sampleModels, sampleRun } from "./mock/sampleRun";
 import type { AgentDecision, AiModel, AiRunResponse, Measurement, PipelineRunRequest, Plane, Priority, RawMeasurements, ReviewExportRequest, ReviewExportResponse, ReviewStatus, ReviewStatusResponse, ReviewUpdateRequest, StudiesResponse, StudyRow, SystemDiagnostics } from "./appTypes";
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+declare global {
+  interface Window {
+    __PFI_CONFIG__?: {
+      API_BASE_URL?: string;
+    };
+  }
+}
+
+export const API_BASE_URL = window.__PFI_CONFIG__?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true";
 const FALLBACK_RUN_ID = "demo-run-2026-001";
 let demoMode = USE_MOCK;
