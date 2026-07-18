@@ -14,7 +14,7 @@
 | P1 | FE-P1 | Navegación + Header (fix tab activo, alineación, limpiar badges/⌘K/Run ID, campana/perfil) | APROBADA (ViewKey separado; sidebar highlight por item; StudiesView/PatientsView/Review Queue como pantallas propias; header limpio; perfil con menú+logout; empty honesto cuando demo; build 1836). Fix menor pendiente → P6: mantener origen iluminado al abrir un caso. |
 | P2 | FE-P2 | Español total (i18n de toda la UI) + fix de encoding (mojibake) | APROBADA (texto visible en español ≈0 inglés; mojibake 0; 6 archivos muertos borrados + CSS huérfano limpio; build 1832). Requirió 2 pasadas. |
 | P7 | FE-P7 | Pasada de accesibilidad (axe AA: contraste, roles, th vacío, scroll) | APROBADA Y CERRADA (axe runtime real vía @axe-core/playwright: 0 serious/critical en las 9 vistas; Dashboard 10→0, History 3→0, Case Review 3D 19→0; success/warning-strong a 7.1; script reutilizable scripts/axe-runtime-audit.mjs). |
-| P8 | FE-P8 | QA final (responsive, performance chunk three, estados error/carga, consistencia) | PENDIENTE (brief: FE-P8_QA_BRIEF.md) |
+| P8 | FE-P8 | QA final (responsive, performance chunk three, estados error/carga, consistencia) | APROBADA (responsive 360/768/1024 sin overflow; chunking vendor-three lazy, index 342→142 kB; error handling con Reintentar ante Failed to fetch; axe 0; build 1832). Scripts QA: axe-runtime-audit.mjs, responsive-qa.mjs. |
 
 ## Documentos de readiness / hand-off (planificación de integración)
 - `FE_MODEL_INTEGRATION_READINESS.md` — qué campo/contrato espera el FE por cada feature Futura para "encenderse".

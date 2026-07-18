@@ -90,7 +90,7 @@ export function ProfessionalSettingsView({ user, onUserUpdated, onLogout }: Prof
               <span>Idioma</span>
               <select value={preferences.language} onChange={(event) => setPreferences((current) => ({ ...current, language: event.target.value }))}>
                 <option value="es">Español</option>
-                <option value="en">English</option>
+                <option value="en">Inglés</option>
               </select>
             </label>
             <label>

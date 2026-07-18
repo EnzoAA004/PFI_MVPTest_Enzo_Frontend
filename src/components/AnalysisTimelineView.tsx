@@ -139,12 +139,17 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
     setReviewer(reviewerName ?? "");
   }, [reviewerName]);
 
-  useEffect(() => {
+  function loadContract() {
     setLoadingContract(true);
+    setMessage("");
     getMultiplanarContract()
       .then(setContract)
       .catch((error) => setMessage(apiErrorMessage(error, "consultar contrato multiplanar")))
       .finally(() => setLoadingContract(false));
+  }
+
+  useEffect(() => {
+    loadContract();
   }, []);
 
   useEffect(() => {
@@ -262,7 +267,12 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
         </div>
       </section>
 
-      {message && <div className="toast info" role="status">{message}</div>}
+      {message && (
+        <div className="toast info app-error-toast" role="status">
+          <span>{message}</span>
+          {!contract && !loadingContract && <button className="ghost-button" onClick={loadContract} type="button">Reintentar contrato</button>}
+        </div>
+      )}
 
       <nav className="analysis-stepper" aria-label="Pasos del análisis">
         {[

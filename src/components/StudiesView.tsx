@@ -37,14 +37,14 @@ export function StudiesView({ studies, mode, loading = false, onOpenReview }: St
         </div>
         <div className="screen-summary">
           <strong>{visibleStudies.length}</strong>
-          <span>{isQueue ? `of ${studies.length} studies require review` : "real studies visible"}</span>
+          <span>{isQueue ? `${studies.length} estudios en la lista` : "estudios reales visibles"}</span>
         </div>
       </section>
 
       <section className="panel-card worklist-panel">
         <div className="section-title">
           <div>
-            <h2>{isQueue ? "Pending worklist" : "All studies"}</h2>
+            <h2>{isQueue ? "Lista pendiente" : "Todos los estudios"}</h2>
             <p className="muted compact-copy">
               {isQueue ? "Filtrado solo a revisiónes pendientes u observadas." : "Lista completa de estudios desde backend o fallback demo configurado."}
             </p>

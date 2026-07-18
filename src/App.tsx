@@ -92,6 +92,7 @@ function App() {
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [bootstrapRetryNonce, setBootstrapRetryNonce] = useState(0);
 
   const safeRun = useMemo(() => normalizeRun(selectedRun), [selectedRun]);
   const history = useMemo(() => loadReviewHistory(), [auditTrail, selectedRun]);
@@ -151,6 +152,7 @@ function App() {
     const stored = loadReviewHistory();
     setAuditTrail(stored.auditTrail.length > 0 ? stored.auditTrail : initialAuditTrail);
     setBootstrapLoading(true);
+    setError("");
 
     const normalized = normalizeRun(stored.runs[0] ?? sampleRun);
     const runId = normalized.runId ?? "demo-run-2026-001";
@@ -192,7 +194,10 @@ function App() {
           saveProfessionalReview(runId, backendReview);
         }
       } catch (bootstrapError) {
-        if (!cancelled) setError(bootstrapError instanceof Error ? bootstrapError.message : "No se pudo consultar el backend");
+        if (!cancelled) {
+          const detail = bootstrapError instanceof Error ? bootstrapError.message : "Error desconocido";
+          setError(`No se pudo consultar el backend. Podés seguir viendo datos locales disponibles y reintentar la conexión. Detalle: ${detail}`);
+        }
       } finally {
         if (!cancelled) setBootstrapLoading(false);
       }
@@ -200,7 +205,7 @@ function App() {
 
     void bootstrap();
     return () => { cancelled = true; };
-  }, [session, pendingApproval]);
+  }, [bootstrapRetryNonce, session, pendingApproval]);
 
   function recordAudit(action: string, detail: string, actor = "Revisor") {
     setAuditTrail(appendAuditEvent({ action, detail, actor }));
@@ -214,6 +219,11 @@ function App() {
   function changeView(view: ViewKey) {
     if (view === "studies" || view === "queue") setLastStudyNavView(view);
     setActiveView(view);
+  }
+
+  function retryBootstrap() {
+    setInfo("");
+    setBootstrapRetryNonce((value) => value + 1);
   }
 
   async function completeOnboarding() {
@@ -315,7 +325,12 @@ function App() {
   return (
     <AppShell activeView={activeView} activeNavView={activeView === "review" ? lastStudyNavView : activeView} onChangeView={changeView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onNewAnalysis={() => changeView("analysis")} loading={false} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
       {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
-      {error && <div className="toast error">{error}</div>}
+      {error && (
+        <div className="toast error app-error-toast" role="alert">
+          <span>{error}</span>
+          <button className="ghost-button" onClick={retryBootstrap} type="button">Reintentar</button>
+        </div>
+      )}
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando lista de trabajo" detail="Consultando estudios deidentificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
       {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} />}

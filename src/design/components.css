@@ -2670,6 +2670,14 @@ body {
 .analysis-upload-card p {
   margin: 0;
 }
+.analysis-upload-card input[type="file"] {
+  font-size: var(--fs-small);
+  max-width: 100%;
+  width: 100%;
+}
+.analysis-upload-card input[type="file"]::file-selector-button {
+  max-width: 48%;
+}
 
 .analysis-actions {
   display: flex;
@@ -3486,6 +3494,16 @@ body {
 .full-viewer .generic-spine-canvas {
   min-height: 460px;
 }
+.app-error-toast {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  justify-content: space-between;
+}
+.app-error-toast span {
+  min-width: min(100%, 260px);
+}
 @media (max-width: 1280px) {
   .review-workspace .review-grid {
     grid-template-columns: minmax(250px, 290px) minmax(0, 1fr);
@@ -3502,6 +3520,161 @@ body {
   .patient-side-stack {
     grid-column: auto;
     grid-row: auto;
+  }
+}
+
+/* FE-P8 final responsive QA overrides */
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: clip;
+}
+.app-layout,
+.main-panel,
+.view-stack,
+.panel-card,
+.table-wrap {
+  min-width: 0;
+}
+.top-header,
+.page-heading,
+.history-hero,
+.section-title,
+.analysis-actions,
+.decision-actions,
+.account-actions {
+  min-width: 0;
+}
+.table-wrap {
+  max-width: 100%;
+}
+.worklist-table,
+.measurement-review-table,
+.patient-index-table {
+  width: 100%;
+}
+@media (max-width: 1024px) {
+  .dashboard-grid,
+  .metric-grid,
+  .settings-grid,
+  .help-grid,
+  .history-grid,
+  .history-grid.two,
+  .patient-overview-grid,
+  .analysis-upload-grid,
+  .analysis-evaluation-grid,
+  .review-workspace .review-grid,
+  .review-workspace .right-column {
+    grid-template-columns: 1fr;
+  }
+  .top-header,
+  .page-heading,
+  .history-hero {
+    align-items: stretch;
+  }
+}
+@media (max-width: 768px) {
+  .app-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .main-panel {
+    padding: var(--sp-3);
+  }
+  .sidebar {
+    position: static;
+    max-width: 100vw;
+    min-width: 0;
+    overflow: hidden;
+    width: 100%;
+  }
+  .brand,
+  .side-nav,
+  .sidebar-footer {
+    max-width: 100%;
+    min-width: 0;
+  }
+  .side-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+    width: 100%;
+  }
+  .side-nav button {
+    min-width: 0;
+    white-space: normal;
+    width: 100%;
+  }
+  .side-nav-label {
+    min-width: 0;
+  }
+  .search-box,
+  .header-actions,
+  .header-actions > *,
+  .analysis-actions button,
+  .decision-actions button,
+  .decision-actions select,
+  .account-actions button {
+    width: 100%;
+  }
+  .analysis-stepper {
+    grid-template-columns: 1fr;
+  }
+  .analysis-stepper button {
+    min-height: 44px;
+  }
+  .settings-form-grid,
+  .settings-details div,
+  .patient-header-grid,
+  .measurement-review-row {
+    grid-template-columns: 1fr;
+  }
+  .full-viewer .generic-spine-canvas-wrap,
+  .full-viewer .generic-spine-canvas,
+  .real-slice-frame {
+    min-height: 320px;
+  }
+}
+@media (max-width: 420px) {
+  .main-panel {
+    padding: var(--sp-2);
+  }
+  .page-heading,
+  .history-hero,
+  .panel-card,
+  .metric-card,
+  .toast {
+    border-radius: var(--radius-card);
+    padding: var(--sp-3);
+  }
+  .workspace-tabs,
+  .viewer-controls,
+  .three-d-controls,
+  .worklist-filter-tabs {
+    overflow-x: auto;
+  }
+  .screen-summary,
+  .surface-mode-pill,
+  .preview-meta {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .section-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .settings-form-grid,
+  .settings-form-grid label,
+  .settings-form-grid input,
+  .settings-form-grid select {
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+  }
+  .generic-spine-label {
+    border-radius: var(--radius-chip);
+    max-width: calc(100% - var(--sp-4));
+    white-space: normal;
   }
 }
 @media (max-width: 1180px) {

@@ -56,11 +56,11 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
       <section className="page-heading compact-heading">
         <div>
           <p>Pacientes</p>
-          <h1>Patient Index</h1>
+          <h1>Índice de pacientes</h1>
         </div>
         <div className="screen-summary">
           <strong>{visiblePatients.length}</strong>
-          <span>de-identified patient records</span>
+          <span>registros de pacientes deidentificados</span>
         </div>
       </section>
 
@@ -101,7 +101,7 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
               <tbody>
                 {visiblePatients.map((patient) => (
                   <tr key={patient.patientId}>
-                    <td><strong>{patient.patientId}</strong><small>De-identified</small></td>
+                    <td><strong>{patient.patientId}</strong><small>Deidentificado</small></td>
                     <td>{patient.totalStudies}</td>
                     <td>{patient.firstStudy}</td>
                     <td>{patient.mostRecent}</td>
