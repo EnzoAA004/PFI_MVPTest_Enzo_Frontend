@@ -2,7 +2,7 @@ import type { ViewKey } from "../appTypes";
 import type { ComponentType } from "react";
 import { ClipboardList, Folder, HelpCircle, History, Home, Settings, ShieldCheck, Users } from "lucide-react";
 
-const navItems: Array<{ key: ViewKey | "studies" | "queue" | "patients"; label: string; icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>; badge?: "reviewQueue" }> = [
+const navItems: Array<{ key: ViewKey; label: string; icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>; badge?: "reviewQueue" }> = [
   { key: "dashboard", label: "Dashboard", icon: Home },
   { key: "studies", label: "Studies", icon: Folder },
   { key: "queue", label: "Review Queue", icon: ClipboardList, badge: "reviewQueue" },
@@ -19,13 +19,6 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeView, onChangeView, reviewQueueCount, systemOnline = true }: SidebarProps) {
-  function resolveTarget(key: string): ViewKey {
-    if (key === "history" || key === "patients") return "history";
-    if (key === "studies" || key === "queue") return "review";
-    if (key === "settings") return "settings";
-    return "dashboard";
-  }
-
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -44,11 +37,10 @@ export function Sidebar({ activeView, onChangeView, reviewQueueCount, systemOnli
       </div>
       <nav className="side-nav">
         {navItems.map((item) => {
-          const target = resolveTarget(item.key);
           const Icon = item.icon;
-          const selected = activeView === target && (activeView !== "review" || item.key === "queue") && (activeView !== "history" || item.key === "history");
+          const selected = activeView === item.key;
           return (
-            <button className={selected ? "active" : ""} key={item.key} onClick={() => onChangeView(target)} type="button" aria-current={selected ? "page" : undefined}>
+            <button className={selected ? "active" : ""} key={item.key} onClick={() => onChangeView(item.key)} type="button" aria-current={selected ? "page" : undefined}>
               <span className="side-nav-label"><Icon aria-hidden size={18} />{item.label}</span>
               {item.badge && <em>{reviewQueueCount}</em>}
             </button>

@@ -2439,7 +2439,7 @@ body {
   color: var(--text-muted);
   display: grid;
   gap: var(--sp-2);
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   min-height: 42px;
   padding: 0 var(--sp-3);
 }
@@ -2494,6 +2494,86 @@ body {
 .profile-chip small {
   color: var(--text-muted);
   font-size: var(--fs-small);
+}
+
+.profile-menu {
+  position: relative;
+}
+
+.profile-chip {
+  cursor: pointer;
+}
+
+.profile-chip svg:last-child {
+  color: var(--text-muted);
+}
+
+.profile-menu-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 210px;
+  padding: var(--sp-2);
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--sp-2));
+  z-index: 20;
+}
+
+.profile-menu-panel button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-btn);
+  color: var(--text);
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-start;
+  min-height: 40px;
+  padding: var(--sp-2) var(--sp-3);
+  text-align: left;
+}
+
+.profile-menu-panel button:hover,
+.profile-menu-panel button:focus-visible {
+  background: var(--surface-soft);
+  outline: 0;
+}
+
+.side-nav button:focus-visible,
+.profile-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 52%, var(--surface));
+  outline-offset: 2px;
+}
+
+.screen-summary {
+  align-items: flex-end;
+  color: var(--text-muted);
+  display: grid;
+  gap: var(--sp-1);
+  justify-items: end;
+  text-align: right;
+}
+
+.screen-summary strong {
+  color: var(--text);
+  font-size: var(--fs-h2);
+  line-height: 1;
+}
+
+.worklist-search-row.single-action {
+  grid-template-columns: minmax(260px, 1fr);
+}
+
+.patient-index-table td strong {
+  display: block;
+}
+
+.patient-index-table td small {
+  color: var(--text-muted);
 }
 
 .icon-button {

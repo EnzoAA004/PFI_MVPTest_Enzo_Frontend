@@ -10,8 +10,10 @@ import { DemoReadinessPanel } from "./components/DemoReadinessPanel";
 import { MultiplanarWorkspaceCard } from "./components/MultiplanarWorkspaceCard";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { PatientHistoryView } from "./components/PatientHistoryView";
+import { PatientsView } from "./components/PatientsView";
 import { PendingApprovalView } from "./components/PendingApprovalView";
 import { StudyReviewView } from "./components/StudyReviewView";
+import { StudiesView } from "./components/StudiesView";
 import { SystemDiagnosticsView } from "./components/SystemDiagnosticsView";
 import { initialAuditTrail, worklistStudies } from "./data/mockStudies";
 import { sampleRun } from "./mock/sampleRun";
@@ -89,6 +91,8 @@ function App() {
   const [health, setHealth] = useState("consultando");
   const [models, setModels] = useState<AiModel[]>([]);
   const [backendStudies, setBackendStudies] = useState<StudyRow[]>([]);
+  const [studiesBackendAvailable, setStudiesBackendAvailable] = useState(false);
+  const [selectedSubjectRef, setSelectedSubjectRef] = useState<string | null>(null);
   const [studiesSummary, setStudiesSummary] = useState<StudiesSummary | undefined>();
   const [patientHistoryResponse, setPatientHistoryResponse] = useState<PatientHistoryResponse | null>(null);
   const [selectedRun, setSelectedRun] = useState<AiRunResponse>(() => normalizeRun(sampleRun));
@@ -125,9 +129,9 @@ function App() {
   }, [backendStudies, bootstrapLoading, safeRun]);
   const backendPatientStudies = useMemo(() => {
     if (!backendStudies.length) return [];
-    const subjectRef = patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId;
+    const subjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId;
     return studies.filter((study) => !subjectRef || study.patientId === subjectRef).map(toPatientStudy);
-  }, [backendStudies, patientHistoryResponse?.subjectRef, studies]);
+  }, [backendStudies, patientHistoryResponse?.subjectRef, selectedSubjectRef, studies]);
   const visiblePatientStudies = patientHistoryResponse?.studies?.length
     ? patientHistoryResponse.studies
     : backendPatientStudies.length
@@ -136,8 +140,9 @@ function App() {
         ? []
         : [];
   const shouldShowDataLoading = bootstrapLoading && backendStudies.length === 0;
-  const historySubjectRef = patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? "PAT-0087";
-  const reviewQueueCount = studies.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
+  const historySubjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? "PAT-0087";
+  const realStudyRows = studiesBackendAvailable ? studies : [];
+  const reviewQueueCount = realStudyRows.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
   const pendingApproval = Boolean(session && (session.user.approved === false || session.user.roles.includes("PENDING_APPROVAL")));
   const needsOnboarding = Boolean(session && session.user.approved !== false && !session.user.roles.includes("PENDING_APPROVAL") && session.user.onboardingCompleted === false);
 
@@ -184,6 +189,7 @@ function App() {
         setModels(modelResponse);
         setInferenceMode(inferenceModeFromDiagnostics(diagnosticsResponse));
         const subjectRef = studyResponse?.items?.[0]?.patientId ?? "PAT-0087";
+        setStudiesBackendAvailable(studyResponse?.status !== "demo");
         if (studyResponse?.items?.length) {
           setBackendStudies(studyResponse.items);
           setStudiesSummary(studyResponse.summary);
@@ -258,6 +264,15 @@ function App() {
           review: detail.review ?? current.review,
         }));
       }
+    }).catch(() => undefined);
+  }
+
+  function handleOpenPatientHistory(patientId: string) {
+    setSelectedSubjectRef(patientId);
+    setPatientHistoryResponse(null);
+    setActiveView("history");
+    void fetchSubjectHistory(patientId).then((historyResponse) => {
+      if (historyResponse?.studies?.length) setPatientHistoryResponse(historyResponse);
     }).catch(() => undefined);
   }
 
@@ -357,7 +372,10 @@ function App() {
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => setActiveView("settings")} onOpenReview={handleOpenReview} />)}
-      {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => setActiveView("dashboard")} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
+      {activeView === "studies" && <StudiesView studies={realStudyRows} mode="all" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
+      {activeView === "queue" && <StudiesView studies={realStudyRows} mode="queue" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
+      {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => setActiveView("studies")} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
+      {activeView === "patients" && <PatientsView studies={realStudyRows} loading={shouldShowDataLoading} onOpenHistory={handleOpenPatientHistory} />}
       {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (backendPatientStudies.length ? "studies-index-no-longitudinal-model" : "no-longitudinal-backend-data")} summary={patientHistoryResponse?.summary} governance={patientHistoryResponse?.governance} />)}
       {activeView === "settings" && <><AiMvpCompletionCard /><DemoReadinessPanel /><MultiplanarWorkspaceCard caseId={workspaceCaseId} /><SystemDiagnosticsView /></>}
     </AppShell>

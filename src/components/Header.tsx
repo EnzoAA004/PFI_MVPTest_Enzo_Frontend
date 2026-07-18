@@ -1,16 +1,12 @@
 import { API_BASE_URL } from "../api";
 import { authHeaders, refreshDoctorSession } from "../authClient";
 import type { ViewKey } from "../appTypes";
-import { Bell, Command, LogOut, Search, ShieldCheck, UserCircle } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { StatusBadge } from "./StatusBadge";
+import { ChevronDown, LogOut, Search, UserCircle, UserCog } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 interface HeaderProps {
   activeView: ViewKey;
-  health: string;
-  modelCount: number;
-  aiModuleAvailable?: boolean;
-  degradedMode?: boolean;
+  onChangeView: (view: ViewKey) => void;
   currentRunId?: string;
   onRunDemo: () => void;
   loading: boolean;
@@ -156,9 +152,10 @@ function renderTechnicalReportHtml(payload: any) {
 </html>`;
 }
 
-export function Header({ activeView, health, modelCount, aiModuleAvailable, degradedMode, currentRunId, onRunDemo, loading, userName, onLogout }: HeaderProps) {
+export function Header({ activeView, onChangeView, currentRunId, onRunDemo, loading, userName, onLogout }: HeaderProps) {
   const searchRef = useRef<HTMLInputElement>(null);
-  const backendTone = degradedMode ? "amber" : aiModuleAvailable ? "green" : "red";
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const showTechnicalReport = activeView === "review" && Boolean(currentRunId);
   const technicalReportUrl = currentRunId ? `${API_BASE_URL}/api/ai/agent/report/${currentRunId}` : "";
   const runButtonText = loading ? "Ejecutando..." : "Ejecutar análisis";
@@ -173,6 +170,22 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
   }, []);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return undefined;
+    function closeOnOutsideClick(event: MouseEvent) {
+      if (!profileMenuRef.current?.contains(event.target as Node)) setProfileMenuOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setProfileMenuOpen(false);
+    }
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [profileMenuOpen]);
 
   async function fetchTechnicalReportPayload() {
     let response = await fetch(technicalReportUrl, {
@@ -220,13 +233,14 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
     }
   }
 
-  async function copyRunId() {
-    if (!currentRunId) return;
-    try {
-      await navigator.clipboard.writeText(currentRunId);
-    } catch {
-      window.prompt("Copiar Run ID", currentRunId);
-    }
+  function openProfileSettings() {
+    setProfileMenuOpen(false);
+    onChangeView("settings");
+  }
+
+  function logoutFromMenu() {
+    setProfileMenuOpen(false);
+    onLogout?.();
   }
 
   return (
@@ -234,23 +248,23 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
       <div className="search-box">
         <Search aria-hidden size={18} />
         <input ref={searchRef} placeholder="Search studies, cases, or patients..." aria-label="Search studies, cases, or patients" />
-        <kbd><Command aria-hidden size={12} />K</kbd>
       </div>
       <div className="header-actions">
-        <span className="mode-badge"><ShieldCheck aria-hidden size={16} />Academic / De-identified Data</span>
-        <StatusBadge tone={backendTone}>
-          {degradedMode ? "Modo degradado" : `Backend ${health}`} / {modelCount} models
-        </StatusBadge>
-        <button className="icon-button" aria-label="Notifications" type="button"><Bell aria-hidden size={18} /></button>
-        <div className="profile-chip" title={API_BASE_URL}>
-          <UserCircle aria-hidden size={28} />
-          <span><strong>{userName ?? "Reviewer"}</strong><small>Reviewer</small></span>
+        <div className="profile-menu" ref={profileMenuRef}>
+          <button className="profile-chip" aria-expanded={profileMenuOpen} aria-haspopup="menu" onClick={() => setProfileMenuOpen((open) => !open)} type="button">
+            <UserCircle aria-hidden size={28} />
+            <span><strong>{userName ?? "Reviewer"}</strong><small>Reviewer</small></span>
+            <ChevronDown aria-hidden size={16} />
+          </button>
+          {profileMenuOpen && (
+            <div className="profile-menu-panel" role="menu" aria-label="Profile menu">
+              <button onClick={openProfileSettings} role="menuitem" type="button"><UserCog aria-hidden size={16} />Ver / editar perfil</button>
+              <button onClick={logoutFromMenu} role="menuitem" type="button"><LogOut aria-hidden size={16} />Cerrar sesiÃ³n</button>
+            </div>
+          )}
         </div>
         {showTechnicalReport && (
           <>
-            <button className="ghost-button" onClick={() => void copyRunId()} title={currentRunId} type="button">
-              Copiar Run ID
-            </button>
             <button className="ghost-button" onClick={() => void openTechnicalReport()} title="Abrir reporte técnico autenticado" type="button">
               Reporte técnico
             </button>
@@ -259,7 +273,6 @@ export function Header({ activeView, health, modelCount, aiModuleAvailable, degr
         <button className="primary-button" disabled={loading} onClick={onRunDemo} title="Ejecutar análisis sobre el caso seleccionado o el demo por defecto" type="button">
           {runButtonText}
         </button>
-        {onLogout && <button className="icon-button" aria-label="Salir" onClick={onLogout} type="button"><LogOut aria-hidden size={18} /></button>}
       </div>
     </header>
   );
