@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { getDemoStudyReview, getHealth, getModels, getStudies, getSystemDiagnostics, isDemoMode, normalizeRun, runPipeline, updateReview } from "./api";
+﻿import { useEffect, useMemo, useState } from "react";
+import { getDemoStudyReview, getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
 import { logoutDoctor, updateDoctorSettings } from "./authClient";
 import { hydrateAuthSession, loadAuthSession } from "./authStorage";
+import { AnalysisTimelineView } from "./components/AnalysisTimelineView";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
 import { DashboardView } from "./components/DashboardView";
 import { HelpSupportView } from "./components/HelpSupportView";
-import { MultiplanarWorkspaceCard } from "./components/MultiplanarWorkspaceCard";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { PatientHistoryView } from "./components/PatientHistoryView";
 import { PatientsView } from "./components/PatientsView";
@@ -18,25 +18,13 @@ import { initialAuditTrail, worklistStudies } from "./data/mockStudies";
 import { sampleRun } from "./mock/sampleRun";
 import { appendBackendAudit, getBackendReviewSnapshot, saveBackendMeasurements } from "./reviewPersistenceApi";
 import { loadSelectedStudyDetail, saveSelectedStudyDetail, saveSelectedStudyFallback } from "./selectedStudyStorage";
-import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessionalReview, saveRun } from "./storage";
+import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessionalReview } from "./storage";
 import { fetchStudyDetail } from "./studyApi";
 import { fetchSubjectHistory } from "./subjectHistoryApi";
-import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, StudiesSummary, StudyRow, SystemDiagnostics, ViewKey } from "./appTypes";
-
-type InferenceMode = "contract" | "real_baseline";
+import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, StudiesSummary, StudyRow, ViewKey } from "./appTypes";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
-}
-
-function inferenceModeFromDiagnostics(diagnostics?: SystemDiagnostics | null): InferenceMode {
-  const aiModule = asRecord(diagnostics?.aiModule);
-  const response = asRecord(aiModule?.response);
-  const models = asRecord(aiModule?.models);
-  const summary = asRecord(aiModule?.artifactSummary) ?? asRecord(response?.artifactSummary) ?? asRecord(models?.summary);
-  const defaultMode = String(summary?.defaultInferenceMode ?? aiModule?.defaultInferenceMode ?? "contract");
-  const readyForRealInference = summary?.readyForRealInference === true;
-  return defaultMode === "real_baseline" && readyForRealInference ? "real_baseline" : "contract";
 }
 
 function toPatientStudy(study: StudyRow): PatientStudy {
@@ -76,7 +64,7 @@ function reviewRequiresNotes(status: ReviewStatus, notes: string) {
 
 function approvalWasCancelled(status: ReviewStatus) {
   if (status !== "aceptado") return false;
-  return !window.confirm("Confirmo que revisé visualmente las máscaras, mediciones, trazabilidad del modelo y que esta aprobación corresponde a una revisión profesional humana. Esta salida no constituye diagnóstico clínico autónomo.");
+  return !window.confirm("Confirmo que revisÃ© visualmente las mÃ¡scaras, mediciones, trazabilidad del modelo y que esta aprobaciÃ³n corresponde a una revisiÃ³n profesional humana. Esta salida no constituye diagnÃ³stico clÃ­nico autÃ³nomo.");
 }
 
 function isBackendValidationError(error: unknown) {
@@ -96,12 +84,9 @@ function App() {
   const [studiesSummary, setStudiesSummary] = useState<StudiesSummary | undefined>();
   const [patientHistoryResponse, setPatientHistoryResponse] = useState<PatientHistoryResponse | null>(null);
   const [selectedRun, setSelectedRun] = useState<AiRunResponse>(() => normalizeRun(sampleRun));
-  const [workspaceCaseId, setWorkspaceCaseId] = useState<string | null>(() => loadSelectedStudyDetail()?.study?.caseId ?? null);
   const [studyReview, setStudyReview] = useState<any | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>(() => normalizeRun(sampleRun).normalizedMeasurements ?? []);
   const [auditTrail, setAuditTrail] = useState<AuditEvent[]>(initialAuditTrail);
-  const [inferenceMode, setInferenceMode] = useState<InferenceMode>("contract");
-  const [loading, setLoading] = useState(false);
   const [bootstrapLoading, setBootstrapLoading] = useState(Boolean(loadAuthSession()));
   const [saving, setSaving] = useState(false);
   const [onboardingSaving, setOnboardingSaving] = useState(false);
@@ -176,18 +161,16 @@ function App() {
 
     async function bootstrap() {
       try {
-        const [healthResponse, modelResponse, studyResponse, demoStudyReview, backendSnapshot, diagnosticsResponse] = await Promise.all([
+        const [healthResponse, modelResponse, studyResponse, demoStudyReview, backendSnapshot] = await Promise.all([
           getHealth(),
           getModels(),
           getStudies().catch(() => null),
           getDemoStudyReview().catch(() => null),
           getBackendReviewSnapshot().catch(() => null),
-          getSystemDiagnostics().catch(() => null),
         ]);
         if (cancelled) return;
         setHealth(healthResponse.status ?? "sin_estado");
         setModels(modelResponse);
-        setInferenceMode(inferenceModeFromDiagnostics(diagnosticsResponse));
         const subjectRef = studyResponse?.items?.[0]?.patientId ?? "PAT-0087";
         setStudiesBackendAvailable(studyResponse?.status !== "demo");
         if (studyResponse?.items?.length) {
@@ -248,7 +231,6 @@ function App() {
   function handleOpenReview(study: StudyRow) {
     if (activeView === "studies" || activeView === "queue") setLastStudyNavView(activeView);
     saveSelectedStudyFallback(study);
-    setWorkspaceCaseId(study.caseId);
     setSelectedRun(runFromStudy(study));
     setMeasurements([]);
     setStudyReview(null);
@@ -257,7 +239,6 @@ function App() {
       saveSelectedStudyDetail(detail);
       if (detail.measurements?.length) setMeasurements(detail.measurements);
       const firstRun = detail.runs?.[0];
-      setWorkspaceCaseId(detail.study.caseId);
       if (firstRun) {
         setSelectedRun((current) => normalizeRun({
           ...current,
@@ -282,47 +263,6 @@ function App() {
     }).catch(() => undefined);
   }
 
-  async function handleRunDemo() {
-    setLoading(true); setError(""); setInfo("");
-    try {
-      const selectedDetail = loadSelectedStudyDetail();
-      const selectedStudy = selectedDetail?.study;
-      const selectedStoredRun = selectedDetail?.runs?.[0];
-      const caseId = selectedStudy?.caseId ?? safeRun.caseId ?? sampleRun.caseId ?? "CASE-DEMO-0142";
-      const plane = selectedStoredRun?.plane ?? selectedStudy?.plane ?? safeRun.plane ?? sampleRun.plane ?? "sagittal";
-      const modelKey = selectedStoredRun?.modelKey ?? selectedStudy?.modelKey ?? safeRun.modelKey ?? "sagittal_spider";
-      const patientId = selectedStudy?.patientId ?? safeRun.patientId ?? "PAT-0087";
-      const studyDate = selectedStudy?.studyDate ?? safeRun.studyDate ?? "2026-07-01";
-      const activeInferenceMode = inferenceMode;
-      const response = await runPipeline({
-        caseId,
-        plane,
-        modelKey,
-        inputPath: `demo/${caseId}`,
-        metadata: {
-          source: selectedStudy ? "frontend-selected-worklist-study" : "frontend-review-workspace",
-          uiVersion: "redesign-v1",
-          frontendBaseUrl: window.location.origin,
-          inferenceMode: activeInferenceMode,
-          requestedBy: session?.user.fullName ?? "Reviewer",
-          selectedFromWorklist: Boolean(selectedStudy),
-          patientId,
-          studyDate,
-        },
-      });
-      const normalized = normalizeRun(response);
-      setSelectedRun(normalized);
-      setMeasurements(normalized.normalizedMeasurements ?? []);
-      saveRun(normalized);
-      recordAudit("pipeline run generado", `${normalized.caseId} ejecutado. Run ID ${normalized.runId}. inferenceMode=${activeInferenceMode}.`, "System");
-      recordAudit("reporte agente recuperado", "Respuesta normalizada para revisión profesional.", "AI Agent");
-      setInfo(isDemoMode() ? "Modo demo local activo o fallback aplicado. La interfaz conserva el flujo de revisión." : `Caso ${caseId} ejecutado contra el backend en modo ${activeInferenceMode}. La respuesta se muestra como salida técnica revisable.`);
-      setActiveView("review");
-    } catch (runError) {
-      setError(runError instanceof Error ? runError.message : "No se pudo ejecutar el caso seleccionado");
-    } finally { setLoading(false); }
-  }
-
   function handleMeasurementsChange(nextMeasurements: Measurement[], detail: string) {
     const runId = safeRun.runId ?? "local-run";
     setMeasurements(nextMeasurements);
@@ -335,12 +275,12 @@ function App() {
     setSaving(true); setError(""); setInfo("");
     const trimmedNotes = notes.trim();
     if (reviewRequiresNotes(status, trimmedNotes)) {
-      setError("Para observar o descartar un caso, agregá una nota profesional descriptiva.");
+      setError("Para observar o descartar un caso, agregÃ¡ una nota profesional descriptiva.");
       setSaving(false);
       return undefined;
     }
     if (approvalWasCancelled(status)) {
-      setInfo("Aprobación cancelada. No se guardaron cambios de estado.");
+      setInfo("AprobaciÃ³n cancelada. No se guardaron cambios de estado.");
       setSaving(false);
       return undefined;
     }
@@ -355,7 +295,7 @@ function App() {
       return review;
     } catch (reviewError) {
       if (isBackendValidationError(reviewError)) {
-        setError(reviewError instanceof Error ? reviewError.message : "La revisión no cumple las reglas profesionales requeridas.");
+        setError(reviewError instanceof Error ? reviewError.message : "La revisiÃ³n no cumple las reglas profesionales requeridas.");
         return undefined;
       }
       const fallbackReview = { runId, status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Reviewer", updatedAt: new Date().toISOString() };
@@ -368,25 +308,27 @@ function App() {
     } finally { setSaving(false); }
   }
 
-  if (authBootstrapping) return <LoadingState title="Restaurando sesión" detail="Validando credenciales guardadas." />;
+  if (authBootstrapping) return <LoadingState title="Restaurando sesiÃ³n" detail="Validando credenciales guardadas." />;
   if (!session) return <AuthView onAuthenticated={setSession} />;
   if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
 
   return (
-    <AppShell activeView={activeView} activeNavView={activeView === "review" ? lastStudyNavView : activeView} onChangeView={changeView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onRunDemo={handleRunDemo} loading={loading} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
+    <AppShell activeView={activeView} activeNavView={activeView === "review" ? lastStudyNavView : activeView} onChangeView={changeView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onNewAnalysis={() => changeView("analysis")} loading={false} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
       {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
+      {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} />}
       {activeView === "studies" && <StudiesView studies={realStudyRows} mode="all" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
       {activeView === "queue" && <StudiesView studies={realStudyRows} mode="queue" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
       {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
       {activeView === "patients" && <PatientsView studies={realStudyRows} loading={shouldShowDataLoading} onOpenHistory={handleOpenPatientHistory} />}
       {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (backendPatientStudies.length ? "studies-index-no-longitudinal-model" : "no-longitudinal-backend-data")} summary={patientHistoryResponse?.summary} />)}
-      {activeView === "settings" && <><ProfessionalSettingsView user={session.user} onUserUpdated={(user) => setSession((current) => current ? { ...current, user } : current)} onLogout={logout} /><MultiplanarWorkspaceCard caseId={workspaceCaseId} /></>}
+      {activeView === "settings" && <ProfessionalSettingsView user={session.user} onUserUpdated={(user) => setSession((current) => current ? { ...current, user } : current)} onLogout={logout} />}
       {activeView === "help" && <HelpSupportView />}
     </AppShell>
   );
 }
 
 export default App;
+

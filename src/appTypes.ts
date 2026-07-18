@@ -1,7 +1,7 @@
 export type Plane = "sagittal" | "axial";
 export type ReviewStatus = "pendiente" | "aceptado" | "observado" | "descartado";
 export type Priority = "alta" | "media" | "baja";
-export type ViewKey = "dashboard" | "studies" | "queue" | "review" | "patients" | "history" | "settings" | "help";
+export type ViewKey = "dashboard" | "studies" | "queue" | "review" | "patients" | "history" | "settings" | "help" | "analysis";
 
 export type PipelineRunRequest = {
   caseId: string;

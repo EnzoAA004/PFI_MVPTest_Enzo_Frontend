@@ -12,19 +12,19 @@ interface AppShellProps {
   aiModuleAvailable?: boolean;
   degradedMode?: boolean;
   currentRunId?: string;
-  onRunDemo: () => void;
+  onNewAnalysis: () => void;
   loading: boolean;
   userName?: string;
   onLogout?: () => void;
   reviewQueueCount: number;
 }
 
-export function AppShell({ activeView, activeNavView, onChangeView, children, aiModuleAvailable, degradedMode, currentRunId, onRunDemo, loading, userName, onLogout, reviewQueueCount }: AppShellProps) {
+export function AppShell({ activeView, activeNavView, onChangeView, children, aiModuleAvailable, degradedMode, currentRunId, onNewAnalysis, loading, userName, onLogout, reviewQueueCount }: AppShellProps) {
   return (
     <div className="app-layout">
       <Sidebar activeView={activeView} activeNavView={activeNavView} onChangeView={onChangeView} reviewQueueCount={reviewQueueCount} systemOnline={aiModuleAvailable && !degradedMode} />
       <main className="main-panel">
-        <Header activeView={activeView} onChangeView={onChangeView} currentRunId={currentRunId} onRunDemo={onRunDemo} loading={loading} userName={userName} onLogout={onLogout} />
+        <Header activeView={activeView} onChangeView={onChangeView} currentRunId={currentRunId} onNewAnalysis={onNewAnalysis} loading={loading} userName={userName} onLogout={onLogout} />
         {children}
       </main>
     </div>

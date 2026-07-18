@@ -1,9 +1,10 @@
 import type { ViewKey } from "../appTypes";
 import type { ComponentType } from "react";
-import { ClipboardList, Folder, HelpCircle, History, Home, Settings, ShieldCheck, Users } from "lucide-react";
+import { ClipboardList, Folder, HelpCircle, History, Home, Settings, ShieldCheck, UploadCloud, Users } from "lucide-react";
 
 const navItems: Array<{ key: ViewKey; label: string; icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>; badge?: "reviewQueue" }> = [
   { key: "dashboard", label: "Dashboard", icon: Home },
+  { key: "analysis", label: "Nuevo análisis", icon: UploadCloud },
   { key: "studies", label: "Studies", icon: Folder },
   { key: "queue", label: "Review Queue", icon: ClipboardList, badge: "reviewQueue" },
   { key: "patients", label: "Patients", icon: Users },

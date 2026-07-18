@@ -16,7 +16,8 @@
 | P3 | FE-P3 | Vista 3D (botones L1–S1 que colorean región, toggle detener rotación, estilo botones, centrado) | PENDIENTE |
 | P4 | FE-P4 | Case Review polish (alinear Measurements y Notas) | PENDIENTE |
 | P5 | FE-P5 | Carga de resonancia como timeline guiado + gating de análisis (nada de mocks) | PENDIENTE |
-| P6 | FE-P6 | Limpieza Settings/Patients (remover paneles técnicos, mover compliance a Help & Support, Settings = perfil) | EN CURSO (brief: FE-P6_BRIEF.md) |
+| P5 | FE-P5 | Carga de resonancia como timeline guiado + gating de análisis | EN CURSO (brief: FE-P5_BRIEF.md) |
+| P6 | FE-P6 | Limpieza Settings/Patients (remover paneles técnicos, mover compliance a Help & Support, Settings = perfil) | APROBADA (Settings = ProfessionalSettingsView + upload conservado; paneles técnicos desmontados; Patients sin governance; Help & Support vista real; persistencia honesta; build 1832). Deuda: borrar archivos muertos (AiMvpCompletionCard/DemoReadinessPanel/SystemDiagnosticsView/PipelineContractCard) en cleanup final. |
 
 Orden sugerido: P1 → P6 → P5 → P3 → P4 → **P2 al final** (traducir después de mover/estructurar, para no rehacer). Nota: en P6 se conserva `MultiplanarWorkspaceCard` (upload real) hasta que P5 lo re-hogar en el timeline.
 

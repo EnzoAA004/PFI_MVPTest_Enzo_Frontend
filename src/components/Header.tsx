@@ -8,7 +8,7 @@ interface HeaderProps {
   activeView: ViewKey;
   onChangeView: (view: ViewKey) => void;
   currentRunId?: string;
-  onRunDemo: () => void;
+  onNewAnalysis: () => void;
   loading: boolean;
   userName?: string;
   onLogout?: () => void;
@@ -152,13 +152,13 @@ function renderTechnicalReportHtml(payload: any) {
 </html>`;
 }
 
-export function Header({ activeView, onChangeView, currentRunId, onRunDemo, loading, userName, onLogout }: HeaderProps) {
+export function Header({ activeView, onChangeView, currentRunId, onNewAnalysis, loading, userName, onLogout }: HeaderProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const showTechnicalReport = activeView === "review" && Boolean(currentRunId);
   const technicalReportUrl = currentRunId ? `${API_BASE_URL}/api/ai/agent/report/${currentRunId}` : "";
-  const runButtonText = loading ? "Ejecutando..." : "Ejecutar análisis";
+  const runButtonText = loading ? "Cargando..." : "Nuevo análisis";
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -270,7 +270,7 @@ export function Header({ activeView, onChangeView, currentRunId, onRunDemo, load
             </button>
           </>
         )}
-        <button className="primary-button" disabled={loading} onClick={onRunDemo} title="Ejecutar análisis sobre el caso seleccionado o el demo por defecto" type="button">
+        <button className="primary-button" disabled={loading} onClick={onNewAnalysis} title="Abrir carga guiada de nuevo análisis" type="button">
           {runButtonText}
         </button>
       </div>
