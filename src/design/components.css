@@ -615,36 +615,48 @@ dd  {
   height: 560px;
 }
 .measurement-table  {
+  --measurement-grid: minmax(140px, 1.35fr) minmax(66px, .62fr) minmax(42px, .42fr) minmax(54px, .5fr) minmax(66px, .58fr) minmax(66px, .58fr) minmax(54px, .5fr);
   display: grid;
-  gap: 8px;
+  gap: var(--sp-2);
   overflow-x: auto;
 }
 .measurement-head, .measurement-row  {
   display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(160px, 1.5fr) 74px 54px 58px 82px 78px 58px;
-  min-width: 700px;
+  gap: var(--sp-2);
+  grid-template-columns: var(--measurement-grid);
+  min-width: 650px;
 }
 .measurement-head  {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--fs-small);
   font-weight: 900;
+  padding: 0 var(--sp-2);
   text-transform: uppercase;
 }
 .measurement-row  {
   align-items: center;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: var(--radius-btn);
+  padding: var(--sp-2);
 }
-.measurement-row input, textarea, select  {
+.measurement-head > span, .measurement-row > span {
+  min-width: 0;
+}
+.measurement-row input  {
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-input);
   color: var(--text);
+  font-variant-numeric: tabular-nums;
   min-height: 36px;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
   width: 100%;
+}
+.measurement-row > span:nth-child(4),
+.measurement-row > span:nth-child(7) {
+  justify-self: center;
+  text-align: center;
 }
 textarea  {
   min-height: 128px;
@@ -973,11 +985,6 @@ body {
   grid-template-columns:260px minmax(500px, 1fr) 395px}
 .slice-canvas {
   height:330px}
-.measurement-head, .measurement-row {
-  grid-template-columns:minmax(145px, 1.5fr) 66px 44px 52px 70px 66px 50px}
-.measurement-row input, textarea, select {
-  min-height:32px;
-  border-radius:10px}
 .audit-list article {
   padding:10px;
   border-radius:12px;
@@ -3091,6 +3098,7 @@ body {
   margin-bottom: 8px;
 }
 .measurement-review-table {
+  --measurement-review-grid: minmax(104px, 1fr) 58px minmax(104px, .85fr) 58px 64px 70px;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   display: grid;
@@ -3099,30 +3107,35 @@ body {
 .measurement-review-head, .measurement-review-row {
   align-items: center;
   display: grid;
-  gap: 8px;
-  grid-template-columns: 1.25fr .72fr 1fr .58fr .68fr .56fr;
+  gap: var(--sp-2);
+  grid-template-columns: var(--measurement-review-grid);
+  min-width: 100%;
 }
 .measurement-review-head {
   background: var(--surface-subtle);
   color: var(--text-muted);
-  font-size: .7rem;
+  font-size: var(--fs-small);
   font-weight: 900;
   letter-spacing: .04em;
-  padding: 9px 10px;
+  padding: var(--sp-2) var(--sp-3);
   text-transform: uppercase;
 }
 .measurement-review-row {
   border-top: 1px solid var(--border);
-  padding: 9px 10px;
+  padding: var(--sp-2) var(--sp-3);
 }
 .measurement-review-row.is-draft {
   background: var(--surface-warm);
 }
+.measurement-review-head > span,
+.measurement-review-row > [role="cell"] {
+  min-width: 0;
+}
 .measurement-review-row small {
   color: var(--text-muted);
   display: block;
-  font-size: .72rem;
-  margin-top: 2px;
+  font-size: var(--fs-small);
+  margin-top: var(--sp-1);
 }
 .tabular-value {
   font-variant-numeric: tabular-nums;
@@ -3137,19 +3150,23 @@ body {
 }
 .reviewer-input-cell {
   align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  gap: var(--sp-1);
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 .reviewer-value-input {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-input);
+  color: var(--text);
   font-variant-numeric: tabular-nums;
   min-height: 32px;
-  min-width: 76px;
-  width: 86px;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-2);
+  width: 100%;
 }
 .measurement-reset-button {
   min-height: 28px;
-  padding: 3px 7px;
+  padding: var(--sp-1) var(--sp-2);
 }
 .draft-chip {
   background: var(--info-bg);
@@ -3161,17 +3178,37 @@ body {
   padding: 2px 7px;
   text-transform: uppercase;
 }
+.reviewer-input-cell .draft-chip {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+.measurement-review-row .delta-chip,
+.measurement-review-row .confidence-pill,
+.measurement-review-row > [role="cell"]:last-child {
+  justify-self: stretch;
+  text-align: center;
+}
+.measurement-review-row .delta-chip,
+.measurement-review-row .confidence-pill {
+  width: 100%;
+}
+.measurement-review-row > [role="cell"]:last-child {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
 .confidence-pill {
   align-items: center;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   display: inline-flex;
-  font-size: .75rem;
+  font-size: var(--fs-small);
   font-weight: 900;
   justify-content: center;
   min-height: 26px;
-  padding: 3px 8px;
-  width: max-content;
+  padding: var(--sp-1) var(--sp-2);
+  white-space: nowrap;
+  width: fit-content;
 }
 .confidence-high {
   background: var(--surface-success);
@@ -3181,23 +3218,56 @@ body {
 .confidence-medium {
   background: var(--surface-warm);
   border-color: var(--border-warning);
-  color: var(--text-warning-strong);
+  color: var(--text);
 }
 .confidence-low {
   background: var(--surface-danger);
   border-color: var(--border-danger);
   color: var(--text-danger-strong);
 }
+.measurement-review-row > [role="cell"]:last-child .badge-amber {
+  color: var(--text);
+}
 .confidence-muted {
   background: var(--surface-subtle);
   color: var(--text-muted);
 }
 .decision-panel textarea {
-  min-height: 92px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-input);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+  min-height: 132px;
+  padding: var(--sp-3);
+  resize: vertical;
+  width: 100%;
+}
+.decision-panel textarea::placeholder {
+  color: var(--text-muted);
+}
+.decision-panel textarea:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 .decision-actions {
   align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
   justify-content: flex-end;
+}
+.decision-actions select {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-input);
+  color: var(--text);
+  min-height: 38px;
+  padding: var(--sp-2) var(--sp-3);
+}
+.decision-actions button {
+  min-height: 38px;
 }
 .ai-honesty-row {
   margin: 10px 0;

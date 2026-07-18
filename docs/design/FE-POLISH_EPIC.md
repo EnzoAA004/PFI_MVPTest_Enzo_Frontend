@@ -13,13 +13,17 @@
 |---|---|---|---|
 | P1 | FE-P1 | Navegación + Header (fix tab activo, alineación, limpiar badges/⌘K/Run ID, campana/perfil) | APROBADA (ViewKey separado; sidebar highlight por item; StudiesView/PatientsView/Review Queue como pantallas propias; header limpio; perfil con menú+logout; empty honesto cuando demo; build 1836). Fix menor pendiente → P6: mantener origen iluminado al abrir un caso. |
 | P2 | FE-P2 | Español total (i18n de toda la UI) + fix de encoding (mojibake) | PENDIENTE |
-| P3 | FE-P3 | Vista 3D (botones L1–S1 que colorean región, toggle detener rotación, estilo botones, centrado) | EN CURSO (brief: FE-P3_BRIEF.md) |
-| P4 | FE-P4 | Case Review polish (alinear Measurements y Notas) | PENDIENTE |
+| P3 | FE-P3 | Vista 3D (botones L1–S1 que colorean región, toggle detener rotación, estilo botones, centrado) | APROBADA (L1–S1 botones con highlight por emissive/token; rotación default quieta + toggle; controles con tokens; 3D + Recent Activity centrados; etiqueta honesta intacta; build 1832). Codex reportó violaciones axe baseline (color-contrast, aria-required-children, etc.) → deuda a11y. |
+| P4 | FE-P4 | Case Review polish (alinear Measurements y Notas) | EN CURSO (brief: FE-P4_BRIEF.md) |
 | P5 | FE-P5 | Carga de resonancia como timeline guiado + gating de análisis (nada de mocks) | PENDIENTE |
 | P5 | FE-P5 | Carga de resonancia como timeline guiado + gating de análisis | APROBADA (AnalysisTimelineView 4 pasos; gating real; allowContractFallback:false + bloqueo honesto si no hay inferencia real; header "Nuevo análisis" sin run mock; MultiplanarWorkspaceCard fuera de Settings; build 1832). Decisión: artifacts parciales → bloquear todo (criterio formal al chat técnico). |
 | P6 | FE-P6 | Limpieza Settings/Patients (remover paneles técnicos, mover compliance a Help & Support, Settings = perfil) | APROBADA (Settings = ProfessionalSettingsView + upload conservado; paneles técnicos desmontados; Patients sin governance; Help & Support vista real; persistencia honesta; build 1832). Deuda: borrar archivos muertos (AiMvpCompletionCard/DemoReadinessPanel/SystemDiagnosticsView/PipelineContractCard) en cleanup final. |
 
 Orden sugerido: P1 → P6 → P5 → P3 → P4 → **P2 al final** (traducir después de mover/estructurar, para no rehacer). Nota: en P6 se conserva `MultiplanarWorkspaceCard` (upload real) hasta que P5 lo re-hogar en el timeline.
+
+## Deuda registrada (para cleanup / ticket futuro)
+- Borrar archivos muertos: `AiMvpCompletionCard`, `DemoReadinessPanel`, `SystemDiagnosticsView`, `PipelineContractCard` (desmontados en P6).
+- **Pasada de a11y (axe runtime):** violaciones baseline reportadas en P3 — Dashboard `aria-required-children`, `color-contrast`, `empty-table-header`; Case Review 3D `color-contrast`, `scrollable-region-focusable`. Requiere ticket dedicado (posible FE-P7). `color-contrast` puede tocar combos de tokens.
 
 ## Dependencias para el chat técnico (no se resuelven acá)
 - "Charlar con el modelo" (IA conversacional sobre mediciones/diagnósticos): endpoint nuevo.
