@@ -56,7 +56,7 @@ button  {
   display: block;
 }
 .brand span, .sidebar-footer  {
-  color: color-mix(in srgb, var(--text-muted) 62%, var(--surface));
+  color: var(--sidebar-text-muted);
   font-size: 0.84rem;
 }
 .side-nav  {
@@ -817,8 +817,8 @@ textarea  {
   padding: 0;
 }
 .check-list li::before  {
-  color: var(--success);
-  content: "âœ“ ";
+  color: var(--text-success-strong);
+  content: "OK ";
   font-weight: 900;
 }
 .export-rules  {
@@ -3032,6 +3032,10 @@ body {
   display: grid;
   overflow: hidden;
 }
+.measurement-review-table thead,
+.measurement-review-table tbody {
+  display: grid;
+}
 .measurement-review-head, .measurement-review-row {
   align-items: center;
   display: grid;
@@ -3055,8 +3059,8 @@ body {
 .measurement-review-row.is-draft {
   background: var(--surface-warm);
 }
-.measurement-review-head > span,
-.measurement-review-row > [role="cell"] {
+.measurement-review-head > th,
+.measurement-review-row > td {
   min-width: 0;
 }
 .measurement-review-row small {
@@ -3112,7 +3116,7 @@ body {
 }
 .measurement-review-row .delta-chip,
 .measurement-review-row .confidence-pill,
-.measurement-review-row > [role="cell"]:last-child {
+.measurement-review-row > td:last-child {
   justify-self: stretch;
   text-align: center;
 }
@@ -3120,7 +3124,7 @@ body {
 .measurement-review-row .confidence-pill {
   width: 100%;
 }
-.measurement-review-row > [role="cell"]:last-child {
+.measurement-review-row > td:last-child {
   align-items: center;
   display: flex;
   justify-content: center;
@@ -3146,15 +3150,15 @@ body {
 .confidence-medium {
   background: var(--surface-warm);
   border-color: var(--border-warning);
-  color: var(--text);
+  color: var(--text-warning-strong);
 }
 .confidence-low {
   background: var(--surface-danger);
   border-color: var(--border-danger);
   color: var(--text-danger-strong);
 }
-.measurement-review-row > [role="cell"]:last-child .badge-amber {
-  color: var(--text);
+.measurement-review-row > td:last-child .badge-amber {
+  color: var(--text-warning-strong);
 }
 .confidence-muted {
   background: var(--surface-subtle);

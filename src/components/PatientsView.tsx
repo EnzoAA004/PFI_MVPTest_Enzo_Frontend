@@ -82,18 +82,20 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
         {loading ? (
           <div className="panel-hidden-placeholder">Consultando filas de estudios de pacientes desde backend.</div>
         ) : visiblePatients.length ? (
-          <div className="table-wrap">
+          <>
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- axe requires keyboard focus for horizontally scrollable tables. */}
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Tabla de pacientes">
             <table className="worklist-table patient-index-table">
               <thead>
                 <tr>
-                  <th>Patient</th>
+                  <th>Paciente</th>
                   <th>Estudios</th>
                   <th>Primer estudio</th>
                   <th>Más reciente</th>
-                  <th>Pending</th>
-                  <th>Priority</th>
+                  <th>Pendientes</th>
+                  <th>Prioridad</th>
                   <th>Estado</th>
-                  <th aria-label="Actions" />
+                  <th aria-label="Acciones"><span className="sr-only">Acciones</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -112,6 +114,7 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
               </tbody>
             </table>
           </div>
+          </>
         ) : (
           <div className="panel-hidden-placeholder">No hay lista de pacientes disponible desde filas reales de estudios.</div>
         )}

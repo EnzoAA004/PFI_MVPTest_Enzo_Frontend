@@ -111,7 +111,8 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
   }
 
   return (
-    <div className="table-wrap">
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- axe requires keyboard focus for horizontally scrollable tables.
+    <div className="table-wrap" tabIndex={0} role="region" aria-label="Tabla de lista de trabajo">
       <table className="worklist-table selectable-worklist">
         <thead>
           <tr>
@@ -121,7 +122,7 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
             <SortHeader column="modelStatus">Modelo</SortHeader>
             <SortHeader column="reviewStatus">Revisión</SortHeader>
             <SortHeader column="priority">Prioridad</SortHeader>
-            <th aria-label="Acciones" />
+            <th aria-label="Acciones"><span className="sr-only">Acciones</span></th>
           </tr>
         </thead>
         <tbody>
@@ -144,9 +145,9 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
       <div className="table-pagination" aria-label="Paginación de lista de trabajo">
         <span>Mostrando {firstVisible} a {lastVisible} de {sortedStudies.length} estudios</span>
         <div>
-          <button className="ghost-button" disabled={safePage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} type="button">Previous</button>
+          <button className="ghost-button" disabled={safePage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} type="button">Anterior</button>
           <span>{safePage + 1}</span>
-          <button className="ghost-button" disabled={safePage >= pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))} type="button">Next</button>
+          <button className="ghost-button" disabled={safePage >= pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))} type="button">Siguiente</button>
         </div>
       </div>
     </div>

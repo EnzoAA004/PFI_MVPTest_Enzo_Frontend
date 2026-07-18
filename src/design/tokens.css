@@ -6,7 +6,7 @@
     --surface: #FFFFFF;
     --border: #E5E7EB;
     --text: #0F172A;
-    --text-muted: #64748B;
+    --text-muted: #5F6B7A;
     --primary: #2563EB;
     --ai: #7C3AED;
     --success: #16A34A;
@@ -52,6 +52,7 @@
     --surface-dark-3: #1F2937;
     --surface-scan: #05070A;
     --sidebar-text: color-mix(in srgb, var(--surface) 82%, var(--primary));
+    --sidebar-text-muted: #B8C7DA;
     --border-strong: #CBD5E1;
     --border-info: #BFDBFE;
     --border-warning: #FED7AA;

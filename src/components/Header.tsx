@@ -257,7 +257,7 @@ export function Header({ activeView, onChangeView, currentRunId, onNewAnalysis, 
             <ChevronDown aria-hidden size={16} />
           </button>
           {profileMenuOpen && (
-            <div className="profile-menu-panel" role="menu" aria-label="Profile menu">
+            <div className="profile-menu-panel" role="menu" aria-label="Menú de perfil">
               <button onClick={openProfileSettings} role="menuitem" type="button"><UserCog aria-hidden size={16} />Ver / editar perfil</button>
               <button onClick={logoutFromMenu} role="menuitem" type="button"><LogOut aria-hidden size={16} />Cerrar sesión</button>
             </div>

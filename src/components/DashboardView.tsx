@@ -182,9 +182,9 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
               <button className="ghost-button" disabled={!activeFilterCount} onClick={clearFilters} type="button">Limpiar</button>
             </div>
 
-            <div className="worklist-filter-tabs" role="tablist" aria-label="Filtros rápidos de worklist">
+            <div className="worklist-filter-tabs" role="tablist" aria-label="Filtros rápidos de lista de trabajo">
               {quickFilters.map((filter) => (
-                <button className={quickFilter === filter.id ? "active" : ""} key={filter.id} onClick={() => setQuickFilter(filter.id)} type="button">
+                <button className={quickFilter === filter.id ? "active" : ""} key={filter.id} onClick={() => setQuickFilter(filter.id)} role="tab" aria-selected={quickFilter === filter.id} type="button">
                   {filter.label}
                 </button>
               ))}

@@ -79,7 +79,7 @@ function TrendChart({ studies, metric }: { studies: PatientStudy[]; metric: Metr
         <strong>{metricLabels[metric].label}</strong>
         {latest && <span>Latest {latest.value.toFixed(1)} {metricLabels[metric].unit}</span>}
       </figcaption>
-      <svg className="trend-chart" viewBox="0 0 310 140" role="img" aria-label={`${metricLabels[metric].label} real stored trend`}>
+      <svg className="trend-chart" viewBox="0 0 310 140" role="img" aria-label={`Tendencia real almacenada de ${metricLabels[metric].label}`}>
         <line x1="20" y1="116" x2="292" y2="116" />
         <line x1="20" y1="20" x2="20" y2="116" />
         <polyline points={polyline} />
@@ -217,7 +217,9 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
           <article className="panel-card compact-card">
             <PanelTitle id="measurement-history" title="Mediciones clave"><span>Solo valores backend almacenados</span></PanelTitle>
             {visible("measurement-history") ? rows.length ? (
-              <div className="table-wrap">
+              <>
+              {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- axe requires keyboard focus for horizontally scrollable tables. */}
+              <div className="table-wrap" tabIndex={0} role="region" aria-label="Tabla de mediciones longitudinales">
                 <table className="worklist-table longitudinal-measurements-table">
                   <thead><tr><th>Estudio</th><th>Métrica</th><th>Valor almacenado</th>{hasAiInitialColumn && <th>IA inicial</th>}{hasReviewerFinalColumn && <th>Revisor final</th>}{hasAiInitialColumn && hasReviewerFinalColumn && <th>Delta</th>}</tr></thead>
                   <tbody>
@@ -238,6 +240,7 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
                   </tbody>
                 </table>
               </div>
+              </>
             ) : <EmptyLongitudinalState detail="Mediciones clave longitudinales no disponibles - requiere histórico de mediciones en backend." /> : hidden}
           </article>
         </section>

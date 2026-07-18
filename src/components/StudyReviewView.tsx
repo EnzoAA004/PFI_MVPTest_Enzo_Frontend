@@ -635,30 +635,34 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               <button className="text-link-button" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Restaurar valores del revisor al valor IA original" : "No hay mediciones del revisor editadas"} type="button">Restaurar valor IA</button>
             </div>
             <p className="muted compact-copy">IA inicial y revisor se mantienen separados. La confianza y el valor atípico pertenecen a IA; no se inventan para la corrección del revisor.</p>
-            <div className="measurement-review-table" role="table" aria-label="Mediciones">
-              <div className="measurement-review-head" role="row">
-                <span role="columnheader">Medición</span>
-                <span role="columnheader">IA inicial</span>
-                <span role="columnheader">Revisor</span>
-                <span role="columnheader">Delta</span>
-                <span role="columnheader">Confianza IA</span>
-                <span role="columnheader">Atípico</span>
-              </div>
-              {resultRows.map((item) => (
-                <div className={`measurement-review-row ${item.draftValue !== undefined && item.draftValue !== "" ? "is-draft" : ""}`} role="row" key={item.id}>
-                  <span role="cell"><strong>{item.label}</strong><small>{item.level}</small></span>
-                  <span role="cell" className="tabular-value"><em>IA</em>{item.aiValue} {item.unit}</span>
-                  <span role="cell" className="reviewer-input-cell">
+            <table className="measurement-review-table" aria-label="Mediciones">
+              <thead>
+                <tr className="measurement-review-head">
+                  <th scope="col">Medición</th>
+                  <th scope="col">IA inicial</th>
+                  <th scope="col">Revisor</th>
+                  <th scope="col">Delta</th>
+                  <th scope="col">Confianza IA</th>
+                  <th scope="col">Atípico</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resultRows.map((item) => (
+                  <tr className={`measurement-review-row ${item.draftValue !== undefined && item.draftValue !== "" ? "is-draft" : ""}`} key={item.id}>
+                    <td><strong>{item.label}</strong><small>{item.level}</small></td>
+                    <td className="tabular-value"><em>IA</em>{item.aiValue} {item.unit}</td>
+                    <td className="reviewer-input-cell">
                     <input aria-label={`Valor del revisor para ${item.label}`} className="reviewer-value-input" inputMode="decimal" onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder={String(item.aiValue ?? "")} value={String(item.reviewerValue ?? "")} />
                     <button className="measurement-reset-button" disabled={item.draftValue === undefined && !item.persistedValue} onClick={() => resetReviewerValue(item.id)} title="Restaurar valor IA para esta medición" type="button">Restaurar</button>
                     {item.draftValue !== undefined && item.draftValue !== "" && <span className="draft-chip">Borrador</span>}
-                  </span>
-                  <span role="cell" className={`delta-chip delta-${item.severity}`}>{formatDelta(item.delta, item.unit)}</span>
-                  <span role="cell" className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `${Math.round(item.confidence * 100)}%` : "N/D"}</span>
-                  <span role="cell">{item.outlier ? <StatusBadge tone="amber">Atípico IA</StatusBadge> : "—"}</span>
-                </div>
-              ))}
-            </div>
+                    </td>
+                    <td><span className={`delta-chip delta-${item.severity}`}>{formatDelta(item.delta, item.unit)}</span></td>
+                    <td><span className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `${Math.round(item.confidence * 100)}%` : "N/D"}</span></td>
+                    <td>{item.outlier ? <StatusBadge tone="amber">Atípico IA</StatusBadge> : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medición/es y {landmarkDraftCount} landmark/s en borrador. Mediciones persisten por el flujo existente; landmarks quedan en borrador local no persistido, pendiente BE-008/FE-010 + AI-011.</p>}
           </section>
 
