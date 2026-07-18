@@ -32,7 +32,7 @@ Plataforma web para radiólogos / centros / hospitales que asiste el análisis e
 | 4 | FE-RD-004 | Landmarks y mediciones editables | APROBADA con fix pendiente (Reset to AI cableado; mediciones persisten vía PUT .../measurements; landmarks move/add gated por coordinateSpace; versionado marcado pendiente). FIX: no anexar landmarks al campo de notas → borrador local marcado "no persistido". |
 | 5 | FE-RD-005 | Patient longitudinal (estados honestos) | APROBADA (datos inventados eliminados: +0.4/delta/serie AI-initial; Key Measurements solo dato real; empty states honestos; provenance declara "no fabricated series"; build 1831). Incluyó fix Parte A de FE-RD-004 (landmarks fuera de notas). |
 | 6 | FE-RD-006 | Vista 3D honesta (atlas genérico) | APROBADA (three@0.185.1 lazy-loaded; atlas procedural rotable con tokens; etiqueta persistente "no paciente-específico"; toggle Volume removido; Modo B deshabilitado con requiredInputs reales; build 1834). Chunk warning three: aceptado (code-split). |
-| 7 | FE-RD-007 | Limpieza de bloques legacy (deuda) | EN CURSO (brief: FE-RD-007_BRIEF.md) — quitar paneles/JSX/CSS legacy duplicados ocultos desde Fase 2, sin tocar export/reportes ni lógica. |
+| 7 | FE-RD-007 | Limpieza de bloques legacy (deuda) | APROBADA con FIX pendiente (bloques legacy-* eliminados, exports intactos, Case Review idéntico, build 1834). FIX: se borraron .unified-results-table/.compact-comparison-row del CSS pero las usan AiMvpCompletionCard/DemoReadinessPanel (vista Settings) → restaurar reglas + smoke de Settings. |
 Orden recomendado: 0 → 1 → 2 → 3 → 4; 5 en paralelo tras 0/1; 6 al final. Mayor impacto visual: 0, 1, 2.
 
 ## 5. Entorno del frontend (gotchas al revisar)
