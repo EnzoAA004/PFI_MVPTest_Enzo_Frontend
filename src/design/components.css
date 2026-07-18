@@ -3321,7 +3321,13 @@ body {
 }
 .three-d-controls {
   align-items: center;
-  justify-content: flex-end;
+  gap: var(--sp-2);
+  justify-content: center;
+}
+.three-d-controls .ghost-button,
+.three-d-controls .primary-button {
+  min-height: 34px;
+  padding: var(--sp-2) var(--sp-3);
 }
 .surface-mode-pill {
   background: color-mix(in srgb, var(--primary) 18%, var(--surface-dark));
@@ -3381,16 +3387,37 @@ body {
   right: var(--sp-3);
   top: 28%;
 }
-.spine-level-labels span {
+.spine-level-labels button {
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   color: var(--text);
+  cursor: pointer;
   font-size: var(--fs-xs);
   font-weight: 900;
+  min-height: 30px;
   min-width: 34px;
   padding: var(--sp-1) var(--sp-2);
   text-align: center;
+}
+.spine-level-labels button.active {
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 52%, var(--border));
+  color: var(--text-primary-strong);
+}
+.spine-level-labels button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.recent-activity-card {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+.recent-activity-card .timeline,
+.recent-activity-card .audit-list {
+  max-width: 100%;
+  width: 100%;
 }
 .three-d-disabled-panel {
   background: color-mix(in srgb, var(--surface) 92%, var(--bg-app));

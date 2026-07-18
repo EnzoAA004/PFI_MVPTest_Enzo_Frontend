@@ -11,6 +11,7 @@ type Props = {
 };
 
 const defaultRequiredInputs = ["sagittal_masks", "axial_masks", "spacing", "slice_index_mapping"];
+const levels = ["L1", "L2", "L3", "L4", "L5", "S1"];
 
 function cssToken(name: string, fallback: string) {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -23,8 +24,12 @@ function requiredInputsFrom(threeD?: ThreeDContract | null) {
 
 export function SpineReconstructionPreview({ threeD }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const controlsRef = useRef<{ rotate: (delta: number) => void; zoom: (delta: number) => void; fit: () => void } | null>(null);
+  const controlsRef = useRef<{ rotate: (delta: number) => void; zoom: (delta: number) => void; fit: () => void; selectLevel: (level: string | null) => void; setRotationEnabled: (enabled: boolean) => void } | null>(null);
+  const selectedLevelRef = useRef<string | null>(null);
+  const rotationEnabledRef = useRef(false);
   const [rendererState, setRendererState] = useState<"loading" | "ready" | "failed">("loading");
+  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  const [rotationEnabled, setRotationEnabled] = useState(false);
   const threeDEnabled = threeD?.enabled === true;
   const threeDStatus = threeD?.status ?? "disabled_waiting_for_volumetric_pipeline";
   const requiredInputs = requiredInputsFrom(threeD);
@@ -74,15 +79,35 @@ export function SpineReconstructionPreview({ threeD }: Props) {
         const processMaterial = new THREE.MeshStandardMaterial({ color: border, roughness: 0.64 });
         const sacrumMaterial = new THREE.MeshStandardMaterial({ color: warning, roughness: 0.6, transparent: true, opacity: 0.82 });
 
-        const levels = ["L1", "L2", "L3", "L4", "L5", "S1"];
+        const vertebraByLevel: Record<string, InstanceType<typeof THREE.Mesh>> = {};
+        const vertebraMaterials: Record<string, InstanceType<typeof THREE.MeshStandardMaterial>> = {};
+
+        function applyLevelHighlight(level: string | null) {
+          levels.forEach((item) => {
+            const mesh = vertebraByLevel[item];
+            const material = vertebraMaterials[item];
+            if (!mesh || !material) return;
+            const isSelected = level === item;
+            mesh.userData.selected = isSelected;
+            material.color.set(isSelected ? primary : item === "S1" ? warning : surface);
+            material.emissive.set(isSelected ? primary : surface);
+            material.emissiveIntensity = isSelected ? 0.38 : 0;
+            material.needsUpdate = true;
+          });
+          render();
+        }
+
         levels.forEach((level, index) => {
           const y = 1.75 - index * 0.58;
           const width = 0.82 + index * 0.035;
-          const body = new THREE.Mesh(new THREE.CylinderGeometry(width, width * 0.94, 0.28, 36), level === "S1" ? sacrumMaterial : vertebraMaterial);
+          const bodyMaterial = (level === "S1" ? sacrumMaterial : vertebraMaterial).clone();
+          const body = new THREE.Mesh(new THREE.CylinderGeometry(width, width * 0.94, 0.28, 36), bodyMaterial);
           body.scale.set(1.12, 1, 0.58);
           body.rotation.z = (index - 2) * 0.025;
           body.position.set(Math.sin(index * 0.42) * 0.08, y, 0);
           body.castShadow = false;
+          vertebraByLevel[level] = body;
+          vertebraMaterials[level] = bodyMaterial;
           spine.add(body);
 
           const arch = new THREE.Mesh(new THREE.TorusGeometry(width * 0.56, 0.035, 8, 32, Math.PI), processMaterial);
@@ -177,11 +202,11 @@ export function SpineReconstructionPreview({ threeD }: Props) {
         if (canvas.parentElement) resizeObserver.observe(canvas.parentElement);
 
         let animation = 0;
-        function gentleIntro() {
-          if (disposed || reducedMotion) return;
+        function animateRotation() {
+          if (disposed || reducedMotion || !rotationEnabledRef.current) return;
           orbit.yaw += 0.002;
           render();
-          animation = window.requestAnimationFrame(gentleIntro);
+          animation = window.requestAnimationFrame(animateRotation);
         }
 
         controlsRef.current = {
@@ -199,10 +224,21 @@ export function SpineReconstructionPreview({ threeD }: Props) {
             orbit.radius = 6.6;
             render();
           },
+          selectLevel(level) {
+            selectedLevelRef.current = level;
+            applyLevelHighlight(level);
+          },
+          setRotationEnabled(enabled) {
+            rotationEnabledRef.current = enabled;
+            window.cancelAnimationFrame(animation);
+            if (enabled && !reducedMotion) animation = window.requestAnimationFrame(animateRotation);
+            else render();
+          },
         };
 
         render();
-        if (!reducedMotion) animation = window.requestAnimationFrame(gentleIntro);
+        applyLevelHighlight(selectedLevelRef.current);
+        if (rotationEnabledRef.current && !reducedMotion) animation = window.requestAnimationFrame(animateRotation);
         setRendererState("ready");
 
         cleanup = () => {
@@ -234,13 +270,28 @@ export function SpineReconstructionPreview({ threeD }: Props) {
     };
   }, []);
 
+  function toggleLevel(level: string) {
+    const next = selectedLevel === level ? null : level;
+    selectedLevelRef.current = next;
+    setSelectedLevel(next);
+    controlsRef.current?.selectLevel(next);
+  }
+
+  function toggleRotation() {
+    const next = !rotationEnabled;
+    rotationEnabledRef.current = next;
+    setRotationEnabled(next);
+    controlsRef.current?.setRotationEnabled(next);
+  }
+
   return (
     <div className="spine-preview generic-spine-preview">
       <div className="viewer-controls three-d-controls">
-        <button onClick={() => controlsRef.current?.zoom(-0.6)} type="button">Zoom In</button>
-        <button onClick={() => controlsRef.current?.zoom(0.6)} type="button">Zoom Out</button>
-        <button onClick={() => controlsRef.current?.rotate(-0.42)} type="button">Rotate</button>
-        <button onClick={() => controlsRef.current?.fit()} type="button">Fit</button>
+        <button className="ghost-button" onClick={() => controlsRef.current?.zoom(-0.6)} type="button">Zoom In</button>
+        <button className="ghost-button" onClick={() => controlsRef.current?.zoom(0.6)} type="button">Zoom Out</button>
+        <button className="ghost-button" onClick={() => controlsRef.current?.rotate(-0.42)} type="button">Rotate</button>
+        <button className={rotationEnabled ? "primary-button" : "ghost-button"} onClick={toggleRotation} type="button" aria-pressed={rotationEnabled}>{rotationEnabled ? "Pausar rotación" : "Activar rotación"}</button>
+        <button className="ghost-button" onClick={() => controlsRef.current?.fit()} type="button">Fit</button>
         <span className="surface-mode-pill">Surface atlas</span>
       </div>
 
@@ -257,8 +308,20 @@ export function SpineReconstructionPreview({ threeD }: Props) {
           </div>
         )}
         <div className="generic-spine-label">Representacion anatomica de referencia - no paciente-especifico</div>
-        <div className="spine-level-labels" aria-hidden="true">
-          {["L1", "L2", "L3", "L4", "L5", "S1"].map((level) => <span key={level}>{level}</span>)}
+        <div className="spine-level-labels" aria-label="Niveles del atlas lumbar">
+          {levels.map((level) => (
+            <button
+              aria-current={selectedLevel === level ? "true" : undefined}
+              aria-pressed={selectedLevel === level}
+              className={selectedLevel === level ? "active" : ""}
+              key={level}
+              onClick={() => toggleLevel(level)}
+              title={`${level}: resaltar nivel del atlas generico, no paciente-especifico`}
+              type="button"
+            >
+              {level}
+            </button>
+          ))}
         </div>
       </div>
 

@@ -258,7 +258,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
             <SpineReconstructionPreview />
             <p className="preview-meta">Representacion anatomica de referencia, no paciente-especifica.</p>
           </article>
-          <article className="panel-card">
+          <article className="panel-card recent-activity-card">
             <div className="section-title"><h2>Recent Activity</h2></div>
             {auditTrail.length ? <AuditTrail events={auditTrail.slice(0, 4)} /> : <div className="panel-hidden-placeholder">Sin actividad reciente disponible.</div>}
           </article>
