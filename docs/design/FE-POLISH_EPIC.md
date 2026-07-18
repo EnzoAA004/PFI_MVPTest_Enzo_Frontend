@@ -13,7 +13,12 @@
 |---|---|---|---|
 | P1 | FE-P1 | Navegación + Header (fix tab activo, alineación, limpiar badges/⌘K/Run ID, campana/perfil) | APROBADA (ViewKey separado; sidebar highlight por item; StudiesView/PatientsView/Review Queue como pantallas propias; header limpio; perfil con menú+logout; empty honesto cuando demo; build 1836). Fix menor pendiente → P6: mantener origen iluminado al abrir un caso. |
 | P2 | FE-P2 | Español total (i18n de toda la UI) + fix de encoding (mojibake) | APROBADA (texto visible en español ≈0 inglés; mojibake 0; 6 archivos muertos borrados + CSS huérfano limpio; build 1832). Requirió 2 pasadas. |
-| P7 | FE-P7 | Pasada de accesibilidad (axe AA: contraste, roles, th vacío, scroll) | EN CURSO (brief: FE-P7_BRIEF.md) |
+| P7 | FE-P7 | Pasada de accesibilidad (axe AA: contraste, roles, th vacío, scroll) | APROBADA Y CERRADA (axe runtime real vía @axe-core/playwright: 0 serious/critical en las 9 vistas; Dashboard 10→0, History 3→0, Case Review 3D 19→0; success/warning-strong a 7.1; script reutilizable scripts/axe-runtime-audit.mjs). |
+| P8 | FE-P8 | QA final (responsive, performance chunk three, estados error/carga, consistencia) | PENDIENTE (brief: FE-P8_QA_BRIEF.md) |
+
+## Documentos de readiness / hand-off (planificación de integración)
+- `FE_MODEL_INTEGRATION_READINESS.md` — qué campo/contrato espera el FE por cada feature Futura para "encenderse".
+- `TECH_CHAT_HANDOFF.md` — dependencias backend/AI/GCP consolidadas para el chat de planificación técnica.
 | P3 | FE-P3 | Vista 3D (botones L1–S1 que colorean región, toggle detener rotación, estilo botones, centrado) | APROBADA (L1–S1 botones con highlight por emissive/token; rotación default quieta + toggle; controles con tokens; 3D + Recent Activity centrados; etiqueta honesta intacta; build 1832). Codex reportó violaciones axe baseline (color-contrast, aria-required-children, etc.) → deuda a11y. |
 | P4 | FE-P4 | Case Review polish (alinear Measurements y Notas) | EN CURSO (brief: FE-P4_BRIEF.md) |
 | P5 | FE-P5 | Carga de resonancia como timeline guiado + gating de análisis (nada de mocks) | PENDIENTE |
@@ -24,7 +29,7 @@ Orden sugerido: P1 → P6 → P5 → P3 → P4 → **P2 al final** (traducir des
 
 ## Deuda registrada (para cleanup / ticket futuro)
 - ~~Borrar archivos muertos~~ ✓ RESUELTO en P2 Parte A (6 archivos borrados: AiMvpCompletionCard, DemoReadinessPanel, SystemDiagnosticsView, PipelineContractCard, MultiplanarWorkspaceCard, MultiplanarReviewView).
-- **Pasada de a11y (axe runtime) — PENDIENTE (candidato a FE-P7):** violaciones baseline reportadas en P3 — Dashboard `aria-required-children`, `color-contrast`, `empty-table-header`; Case Review 3D `color-contrast`, `scrollable-region-focusable`. Requiere ticket dedicado (posible FE-P7). `color-contrast` puede tocar combos de tokens.
+- ~~Pasada de a11y~~ ✓ RESUELTO en FE-P7 (contraste AA, roles, th, scroll). **Pendiente sólo de entorno:** correr axe runtime con backend/sesión real para confirmar 0 violaciones (limitación de entorno, no de código).
 
 ## Dependencias para el chat técnico (no se resuelven acá)
 - "Charlar con el modelo" (IA conversacional sobre mediciones/diagnósticos): endpoint nuevo.

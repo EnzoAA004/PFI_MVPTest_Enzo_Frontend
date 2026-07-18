@@ -332,7 +332,7 @@ h2  {
 
 .badge-slate  {
    background: var(--border);
-   color: var(--text-muted);
+   color: var(--text);
    }
 .model-state, .technical-state  {
   background: var(--surface-ai);
@@ -2991,6 +2991,9 @@ body {
 .inference-card {
   background: var(--surface-ai);
 }
+.inference-card dt {
+  color: var(--text-ai-strong);
+}
 .neutral-thumbnail {
   align-items: center;
   background: var(--surface-subtle);
@@ -3330,6 +3333,17 @@ body {
 .three-d-controls .primary-button {
   min-height: 34px;
   padding: var(--sp-2) var(--sp-3);
+}
+.three-d-controls .ghost-button {
+  background: color-mix(in srgb, var(--surface-dark) 72%, var(--surface));
+  border-color: color-mix(in srgb, var(--surface) 34%, transparent);
+  color: var(--text-on-dark);
+}
+.three-d-controls .ghost-button:hover,
+.three-d-controls .ghost-button:focus-visible {
+  background: color-mix(in srgb, var(--primary) 34%, var(--surface-dark));
+  border-color: var(--primary);
+  color: var(--surface);
 }
 .surface-mode-pill {
   background: color-mix(in srgb, var(--primary) 18%, var(--surface-dark));

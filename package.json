@@ -20,11 +20,13 @@
     "vite": "^7.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@axe-core/react": "^4.12.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.39.5",
     "eslint-plugin-jsx-a11y": "^6.10.2",
+    "playwright": "^1.61.1",
     "typescript-eslint": "^8.64.0"
   }
 }
