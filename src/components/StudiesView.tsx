@@ -32,8 +32,8 @@ export function StudiesView({ studies, mode, loading = false, onOpenReview }: St
     <div className="view-stack">
       <section className="page-heading compact-heading">
         <div>
-          <p>{isQueue ? "Review Queue" : "Studies"}</p>
-          <h1>{isQueue ? "Studies pending review" : "Study Repository"}</h1>
+          <p>{isQueue ? "Cola de revisión" : "Estudios"}</p>
+          <h1>{isQueue ? "Estudios pendientes de revisión" : "Repositorio de estudios"}</h1>
         </div>
         <div className="screen-summary">
           <strong>{visibleStudies.length}</strong>
@@ -64,7 +64,7 @@ export function StudiesView({ studies, mode, loading = false, onOpenReview }: St
           <WorklistTable studies={visibleStudies} onOpenReview={onOpenReview} />
         ) : (
           <div className="panel-hidden-placeholder">
-            {isQueue ? "No studies currently require review." : "No real studies are available for this list."}
+            {isQueue ? "No hay estudios que requieran revisión." : "No hay estudios reales disponibles para esta lista."}
           </div>
         )}
       </section>

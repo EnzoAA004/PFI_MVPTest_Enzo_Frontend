@@ -64,7 +64,7 @@ function reviewRequiresNotes(status: ReviewStatus, notes: string) {
 
 function approvalWasCancelled(status: ReviewStatus) {
   if (status !== "aceptado") return false;
-  return !window.confirm("Confirmo que revisÃ© visualmente las mÃ¡scaras, mediciones, trazabilidad del modelo y que esta aprobaciÃ³n corresponde a una revisiÃ³n profesional humana. Esta salida no constituye diagnÃ³stico clÃ­nico autÃ³nomo.");
+  return !window.confirm("Confirmo que revisé visualmente las máscaras, mediciones, trazabilidad del modelo y que esta aprobación corresponde a una revisión profesional humana. Esta salida no constituye diagnóstico clínico autónomo.");
 }
 
 function isBackendValidationError(error: unknown) {
@@ -105,7 +105,7 @@ function App() {
         caseId: safeRun.caseId ?? row.caseId,
         plane: safeRun.plane ?? row.plane,
         modelKey: safeRun.modelKey ?? row.modelKey,
-        modelStatus: safeRun.measurementsStatus === "pending_real_inference" ? "Pipeline tecnico / inferencia pendiente" : safeRun.degradedMode ? "Modo degradado" : row.modelStatus,
+        modelStatus: safeRun.measurementsStatus === "pending_real_inference" ? "Pipeline técnico / inferencia pendiente" : safeRun.degradedMode ? "Modo degradado" : row.modelStatus,
         reviewStatus: safeRun.review?.status ?? row.reviewStatus,
         priority: safeRun.agentDecision?.priority ?? row.priority,
         runId: safeRun.runId ?? row.runId,
@@ -202,7 +202,7 @@ function App() {
     return () => { cancelled = true; };
   }, [session, pendingApproval]);
 
-  function recordAudit(action: string, detail: string, actor = "Reviewer") {
+  function recordAudit(action: string, detail: string, actor = "Revisor") {
     setAuditTrail(appendAuditEvent({ action, detail, actor }));
     if (session) void appendBackendAudit(actor, action, detail).catch(() => undefined);
   }
@@ -267,7 +267,7 @@ function App() {
     const runId = safeRun.runId ?? "local-run";
     setMeasurements(nextMeasurements);
     saveMeasurementEdits(runId, nextMeasurements);
-    void saveBackendMeasurements(runId, nextMeasurements, session?.user.fullName ?? "Reviewer", detail).catch(() => undefined);
+    void saveBackendMeasurements(runId, nextMeasurements, session?.user.fullName ?? "Revisor", detail).catch(() => undefined);
     recordAudit("medicion editada", detail);
   }
 
@@ -275,18 +275,18 @@ function App() {
     setSaving(true); setError(""); setInfo("");
     const trimmedNotes = notes.trim();
     if (reviewRequiresNotes(status, trimmedNotes)) {
-      setError("Para observar o descartar un caso, agregÃ¡ una nota profesional descriptiva.");
+      setError("Para observar o descartar un caso, agregá una nota profesional descriptiva.");
       setSaving(false);
       return undefined;
     }
     if (approvalWasCancelled(status)) {
-      setInfo("AprobaciÃ³n cancelada. No se guardaron cambios de estado.");
+      setInfo("Aprobación cancelada. No se guardaron cambios de estado.");
       setSaving(false);
       return undefined;
     }
     const runId = safeRun.runId ?? "local-run";
     try {
-      const review = await updateReview(runId, { status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Reviewer" });
+      const review = await updateReview(runId, { status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Revisor" });
       setSelectedRun((current) => ({ ...current, review }));
       setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: review.status ?? status } : row));
       saveProfessionalReview(runId, review);
@@ -295,20 +295,20 @@ function App() {
       return review;
     } catch (reviewError) {
       if (isBackendValidationError(reviewError)) {
-        setError(reviewError instanceof Error ? reviewError.message : "La revisiÃ³n no cumple las reglas profesionales requeridas.");
+        setError(reviewError instanceof Error ? reviewError.message : "La revisión no cumple las reglas profesionales requeridas.");
         return undefined;
       }
-      const fallbackReview = { runId, status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Reviewer", updatedAt: new Date().toISOString() };
+      const fallbackReview = { runId, status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Revisor", updatedAt: new Date().toISOString() };
       setSelectedRun((current) => ({ ...current, review: fallbackReview }));
       setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: status } : row));
       saveProfessionalReview(runId, fallbackReview);
       recordAudit("revision guardada", `Fallback local aplicado para ${runId}.`);
-      setInfo("No se pudo confirmar el PATCH en backend; revision guardada localmente.");
+      setInfo("No se pudo confirmar el PATCH en backend; revisión guardada localmente.");
       return fallbackReview;
     } finally { setSaving(false); }
   }
 
-  if (authBootstrapping) return <LoadingState title="Restaurando sesiÃ³n" detail="Validando credenciales guardadas." />;
+  if (authBootstrapping) return <LoadingState title="Restaurando sesión" detail="Validando credenciales guardadas." />;
   if (!session) return <AuthView onAuthenticated={setSession} />;
   if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
 
@@ -317,7 +317,7 @@ function App() {
       {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
-      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
+      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando lista de trabajo" detail="Consultando estudios deidentificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
       {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} />}
       {activeView === "studies" && <StudiesView studies={realStudyRows} mode="all" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
       {activeView === "queue" && <StudiesView studies={realStudyRows} mode="queue" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
@@ -331,4 +331,3 @@ function App() {
 }
 
 export default App;
-

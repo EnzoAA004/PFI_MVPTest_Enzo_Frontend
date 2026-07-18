@@ -35,6 +35,13 @@ function hasAllowedExtension(fileName: string) {
   return allowedInputExtensions.some((extension) => lower.endsWith(extension));
 }
 
+function reviewStatusLabel(status: RunReviewStatus) {
+  if (status === "accepted") return "aceptado";
+  if (status === "observed") return "observado";
+  if (status === "rejected") return "rechazado";
+  return "editado";
+}
+
 function apiErrorMessage(error: unknown, action: string) {
   if (error instanceof BackendApiError) return `Backend respondió ${error.status} al ${action} (${error.path}).`;
   if (error instanceof Error) return error.message;
@@ -88,8 +95,8 @@ function fallbackReason(run: MultiplanarRunResponse | null, contract: Multiplana
   const readiness = uploadPlanes.map((plane) => `${plane}: ${contract?.planes?.[plane]?.readiness ?? "sin contrato"}`).join(" · ");
   if (!isRealMode(run.effectiveInferenceMode)) return `Modo efectivo del workspace: ${run.effectiveInferenceMode}. ${planeModes}.`;
   if (!uploadPlanes.every((plane) => isRealMode(run.planes?.[plane]?.effectiveInferenceMode))) return `Algún plano no volvió en inferencia real. ${planeModes}.`;
-  if (!measurementsFromRun(run).length) return `El run no devolvió mediciones reales almacenadas. Readiness: ${readiness}.`;
-  return `Readiness insuficiente. ${readiness}.`;
+  if (!measurementsFromRun(run).length) return `El run no devolvió mediciones reales almacenadas. Preparación: ${readiness}.`;
+  return `Preparación insuficiente. ${readiness}.`;
 }
 
 export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }) {
@@ -220,7 +227,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
 
   async function saveReview() {
     if (!run || !reviewer.trim()) {
-      setMessage("Reviewer obligatorio para guardar la revisión.");
+      setMessage("Revisor obligatorio para guardar la revisión.");
       return;
     }
     setSavingReview(true);
@@ -276,7 +283,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           <div className="section-title"><h2>1. Cargar estudio</h2><StatusBadge tone={uploadsComplete ? "green" : "amber"}>{uploadsComplete ? "listo" : "faltan planos"}</StatusBadge></div>
           <div className="settings-form-grid">
             <label>
-              <span>Case ID de-identificado</span>
+              <span>ID de caso deidentificado</span>
               <input value={caseId} onChange={(event) => { setCaseId(event.target.value); setRun(null); }} placeholder="CASE-XXXX" />
             </label>
             <label>
@@ -302,7 +309,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           <div className="analysis-actions">
             <button className="primary-button" disabled={!uploadsComplete} onClick={() => setActiveStep(2)} type="button">Continuar a procesamiento</button>
           </div>
-          {!uploadsComplete && <div className="panel-hidden-placeholder">Para habilitar el paso 2 se requieren Case ID, plano sagital y plano axial cargados por backend.</div>}
+          {!uploadsComplete && <div className="panel-hidden-placeholder">Para habilitar el paso 2 se requieren ID de caso, plano sagital y plano axial cargados por backend.</div>}
         </section>
       )}
 
@@ -351,17 +358,17 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
             <label>
               <span>Estado de revisión</span>
               <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as RunReviewStatus)}>
-                {reviewStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                {reviewStatuses.map((status) => <option key={status} value={status}>{reviewStatusLabel(status)}</option>)}
               </select>
             </label>
             <label>
-              <span>Reviewer</span>
+              <span>Revisor</span>
               <input value={reviewer} onChange={(event) => setReviewer(event.target.value)} placeholder="Nombre del profesional" />
             </label>
           </div>
           <label className="analysis-notes">
-            <span>Notas / feedback profesional</span>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={5} placeholder="Editar el preinforme, justificar observaciones o registrar feedback." />
+            <span>Notas / comentarios profesionales</span>
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={5} placeholder="Editar el preinforme, justificar observaciones o registrar comentarios." />
           </label>
           <div className="analysis-actions">
             <button className="ghost-button" onClick={() => setActiveStep(3)} type="button">Volver a evaluación</button>

@@ -12,7 +12,7 @@
 | # | Ticket | Descripción | Estado |
 |---|---|---|---|
 | P1 | FE-P1 | Navegación + Header (fix tab activo, alineación, limpiar badges/⌘K/Run ID, campana/perfil) | APROBADA (ViewKey separado; sidebar highlight por item; StudiesView/PatientsView/Review Queue como pantallas propias; header limpio; perfil con menú+logout; empty honesto cuando demo; build 1836). Fix menor pendiente → P6: mantener origen iluminado al abrir un caso. |
-| P2 | FE-P2 | Español total (i18n de toda la UI) + fix de encoding (mojibake) | PENDIENTE |
+| P2 | FE-P2 | Español total (i18n de toda la UI) + fix de encoding (mojibake) | EN CURSO (brief: FE-P2_BRIEF.md) |
 | P3 | FE-P3 | Vista 3D (botones L1–S1 que colorean región, toggle detener rotación, estilo botones, centrado) | APROBADA (L1–S1 botones con highlight por emissive/token; rotación default quieta + toggle; controles con tokens; 3D + Recent Activity centrados; etiqueta honesta intacta; build 1832). Codex reportó violaciones axe baseline (color-contrast, aria-required-children, etc.) → deuda a11y. |
 | P4 | FE-P4 | Case Review polish (alinear Measurements y Notas) | EN CURSO (brief: FE-P4_BRIEF.md) |
 | P5 | FE-P5 | Carga de resonancia como timeline guiado + gating de análisis (nada de mocks) | PENDIENTE |

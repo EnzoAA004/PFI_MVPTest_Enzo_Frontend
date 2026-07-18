@@ -21,7 +21,7 @@ function isSession(value: AuthPendingResponse | AuthSession): value is AuthSessi
 export function AuthView({ onAuthenticated }: AuthViewProps) {
   const [mode, setMode] = useState<Mode>("login");
   const [form, setForm] = useState<RegisterRequest>({
-    fullName: "Dra. Demo Reviewer",
+    fullName: "Dra. Demo Revisora",
     email: "doctor.demo@pfi.local",
     password: "Demo1234!",
     licenseNumber: "MN-DEMO-2026",
@@ -87,7 +87,7 @@ export function AuthView({ onAuthenticated }: AuthViewProps) {
       const session = await createDemoDoctorSession();
       onAuthenticated(session as AuthSession);
     } catch (demoError) {
-      setError(demoError instanceof Error ? demoError.message : "No se pudo iniciar la sesion demo");
+      setError(demoError instanceof Error ? demoError.message : "No se pudo iniciar la sesión demo");
     } finally {
       setLoading(false);
     }
@@ -99,8 +99,8 @@ export function AuthView({ onAuthenticated }: AuthViewProps) {
         <div className="auth-brand">
           <div className="brand-mark">LM</div>
           <div>
-            <strong>Lumbar MRI Analysis Platform</strong>
-            <span>Academic / de-identified data · Human review required</span>
+            <strong>Plataforma de análisis de RM lumbar</strong>
+            <span>Datos académicos deidentificados · Revisión humana requerida</span>
           </div>
         </div>
         <div className="auth-copy">
@@ -109,8 +109,8 @@ export function AuthView({ onAuthenticated }: AuthViewProps) {
           <span>El acceso protege el flujo de revision, historial y endpoints del pipeline asistivo.</span>
         </div>
         <div className="auth-tabs">
-          <button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setChallengeState(null); }} type="button">Login</button>
-          <button className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setChallengeState(null); }} type="button">Register</button>
+          <button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setChallengeState(null); }} type="button">Ingresar</button>
+          <button className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setChallengeState(null); }} type="button">Registro</button>
         </div>
         {!challengeState ? (
           <div className="auth-form">
@@ -123,7 +123,7 @@ export function AuthView({ onAuthenticated }: AuthViewProps) {
               </>
             )}
             <label>Email profesional<input value={form.email} onChange={(event) => updateField("email", event.target.value)} /></label>
-            <label>Password<input type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} /></label>
+            <label>Contraseña<input type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} /></label>
             <button className="primary-button" disabled={loading} onClick={() => void submit()} type="button">{loading ? "Procesando..." : mode === "register" ? "Crear cuenta y verificar" : "Ingresar"}</button>
             <button className="ghost-button" disabled={loading} onClick={() => void startDemo()} type="button">Entrar con doctor demo</button>
           </div>

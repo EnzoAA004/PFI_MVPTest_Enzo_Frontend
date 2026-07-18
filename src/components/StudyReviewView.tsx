@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { exportReviewReport } from "../api";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudySeries } from "../appTypes";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
@@ -70,7 +70,7 @@ function maskTokenVar(mask: StudyMask) {
   const key = `${mask.id} ${mask.className} ${mask.label}`.toLowerCase();
   if (key.includes("disc")) return "var(--mask-disc)";
   if (key.includes("canal") || key.includes("spinal")) return "var(--mask-spinal-canal)";
-  if (key.includes("root") || key.includes("raiz") || key.includes("raÃ­z")) return "var(--mask-nerve-root)";
+  if (key.includes("root") || key.includes("raiz") || key.includes("raíz")) return "var(--mask-nerve-root)";
   if (key.includes("foramen") || key.includes("soft")) return "var(--mask-foramen-other-soft-tissue)";
   return "var(--mask-vertebral-body)";
 }
@@ -258,7 +258,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const modelReadiness = aiOutput.modelReadiness ?? modelArtifact?.readiness ?? String(metadata?.modelReadiness ?? "sin datos");
   const selectedStudyRecord = asRecord(selectedDetail?.study);
   const patientSafe = asRecord(selectedStudyRecord?.metadata) ?? asRecord(studyReview?.patientSafeMetadata) ?? asRecord(metadata?.patientSafeMetadata) ?? {};
-  const reviewerName = displayRun.review?.reviewer ?? run.review?.reviewer ?? "Reviewer";
+  const reviewerName = displayRun.review?.reviewer ?? run.review?.reviewer ?? "Revisor";
   const futureFeatureTitle = "Disponible en una fase futura";
 
   function getPersistedReviewerValue(measurementId: string) {
@@ -354,7 +354,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     const appended = studyMeasurements
       .filter((item) => reviewerValues[item.id] !== undefined && reviewerValues[item.id] !== "" && !existingIds.has(item.id))
       .map(toMeasurement);
-    onMeasurementsChange([...updated, ...appended], `${reviewerDraftCount} medicion/es guardadas por Reviewer desde Resultados IA`);
+    onMeasurementsChange([...updated, ...appended], `${reviewerDraftCount} medición/es guardadas por revisor desde resultados IA`);
     setReviewerValues({});
   }
 
@@ -423,7 +423,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     try { await tryBackendExport("json"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
     const cleanPayload = {
-      report: { title: "PFI Lumbar MRI - Resumen academico de revision", generatedAt: payload.generatedAt, caseId: payload.caseId, runId: payload.runId, reviewStatus: payload.reviewStatus, scope: payload.governance.scope },
+      report: { title: "RM lumbar PFI - Resumen académico de revisión", generatedAt: payload.generatedAt, caseId: payload.caseId, runId: payload.runId, reviewStatus: payload.reviewStatus, scope: payload.governance.scope },
       study: { subjectRef: payload.subjectRef, studyDate: payload.studyDate, plane: payload.plane, modelKey: payload.modelKey, modelVersion: payload.modelVersion },
       traceability: { inferenceMode: payload.inferenceMode, requestedInferenceMode: payload.requestedInferenceMode, modelReadiness: payload.modelReadiness, modelArtifact: payload.modelArtifact, quality: payload.quality },
       summary: payload.summary,
@@ -438,7 +438,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   async function exportCsv() {
     try { await tryBackendExport("csv"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
-    const headers = ["Caso", "Run", "Medición", "Nivel", "Valor IA", "Valor Reviewer", "Delta", "Unidad", "Prioridad", "Estado", "Outlier", "Confianza (%)"];
+    const headers = ["Caso", "Run", "Medición", "Nivel", "Valor IA", "Valor revisor", "Delta", "Unidad", "Prioridad", "Estado", "Atípico", "Confianza (%)"];
     const rows = payload.measurements.map((row) => [payload.caseId, payload.runId, row.label, row.level, row.aiValue, row.reviewerValue ?? "sin cambios", row.deltaFormatted, row.unit, row.severity, row.status, row.outlier ? "si" : "no", row.confidence !== undefined ? Math.round(row.confidence * 100) : ""]);
     const csv = "\ufeff" + [headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-mediciones.csv`, csv, "text/csv;charset=utf-8");
@@ -448,7 +448,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     try { await tryBackendExport("html"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
     const measurementRows = payload.measurements.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong><br><span>${escapeHtml(row.level)}</span></td><td>${escapeHtml(row.aiValue)} ${escapeHtml(row.unit)}</td><td>${escapeHtml(row.reviewerValue ?? "sin cambios")}</td><td>${escapeHtml(row.deltaFormatted)}</td><td>${escapeHtml(row.status)}</td><td>${row.outlier ? "Si" : "No"}</td></tr>`).join("");
-    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>PFI Lumbar MRI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">PFI Lumbar MRI Analysis Platform</div><h1>Resumen academico de revision</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Run ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatus)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Outliers<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso academico/investigacion, datos de-identificados, requiere revision profesional y no constituye diagnostico clinico. No incluye imagenes crudas. Readiness: ${escapeHtml(payload.modelReadiness)}.</section><h2>Mediciones IA vs Reviewer</h2><table><thead><tr><th>Medicion</th><th>IA</th><th>Reviewer</th><th>Delta</th><th>Estado</th><th>Outlier</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Subject ref de-identificado: ${escapeHtml(payload.subjectRef)} · Study date: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
+    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Run ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatus)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-informe.html`, html, "text/html;charset=utf-8");
   }
 
@@ -488,7 +488,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       <section className="page-heading compact-heading">
         <div>
           <p>Espacio de revisión</p>
-          <button className="back-link" onClick={onBackToStudies} type="button">← Back to Studies</button>
+          <button className="back-link" onClick={onBackToStudies} type="button">← Volver a estudios</button>
           <div className="case-title-row">
             <h1>{displayRun.caseId ?? studyReview?.caseId ?? "CASE-DEMO-0142"}</h1>
             <ReviewBadge status={review.status ?? "pendiente"} />
@@ -496,8 +496,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </div>
           <div className="review-mode-row">
             <StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceModeLabel(inferenceMode)}</StatusBadge>
-            <StatusBadge tone="amber">Human review required</StatusBadge>
-            <StatusBadge tone="purple">AI output may be inaccurate</StatusBadge>
+            <StatusBadge tone="amber">Revisión humana requerida</StatusBadge>
+            <StatusBadge tone="purple">La salida IA puede ser inexacta</StatusBadge>
           </div>
         </div>
         <div className="safety-copy">
@@ -509,16 +509,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       <section className="review-grid">
         <aside className="left-column case-review-left">
           <article className="panel-card compact-card">
-            <PanelTitle panelId="case-summary" title="Case Information"><button className="inline-edit-button" type="button">Edit</button></PanelTitle>
+            <PanelTitle panelId="case-summary" title="Información del caso"><button className="inline-edit-button" type="button">Editar</button></PanelTitle>
             {panelVisible("case-summary") ? (
               <dl className="info-list compact-info">
-                <div><dt>Case ID</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
-                <div><dt>Study Date</dt><dd>{selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? "2026-07-01"}</dd></div>
+                <div><dt>ID de caso</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
+                <div><dt>Fecha de estudio</dt><dd>{selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? "2026-07-01"}</dd></div>
                 <div><dt>Modality</dt><dd>MRI</dd></div>
                 <div><dt>Plane</dt><dd>{currentSeries?.plane ?? displayRun.plane}</dd></div>
                 <div><dt>Model Version</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayRun.modelKey}</dd></div>
-                <div><dt>Review Status</dt><dd><ReviewBadge status={review.status ?? "pendiente"} /></dd></div>
-                <div><dt>Reviewer</dt><dd>{reviewerName}</dd></div>
+                <div><dt>Estado de revisión</dt><dd><ReviewBadge status={review.status ?? "pendiente"} /></dd></div>
+                <div><dt>Revisor</dt><dd>{reviewerName}</dd></div>
               </dl>
             ) : hiddenPlaceholder}
           </article>
@@ -555,13 +555,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </article>
 
           <article className="panel-card compact-card inference-card">
-            <PanelTitle panelId="inference" title="Inference Mode"><StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceModeLabel(inferenceMode)}</StatusBadge></PanelTitle>
+            <PanelTitle panelId="inference" title="Modo de inferencia"><StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceModeLabel(inferenceMode)}</StatusBadge></PanelTitle>
             {panelVisible("inference") ? (
               <dl className="info-list compact-info">
                 <div><dt>Requested</dt><dd>{inferenceModeLabel(requestedInferenceMode)}</dd></div>
-                <div><dt>Readiness</dt><dd>{readinessLabel(modelReadiness)}</dd></div>
-                <div><dt>Human Review</dt><dd>Required</dd></div>
-                <div><dt>Clinical Use</dt><dd>Not for diagnosis</dd></div>
+                <div><dt>Preparación</dt><dd>{readinessLabel(modelReadiness)}</dd></div>
+                <div><dt>Revisión humana</dt><dd>Requerida</dd></div>
+                <div><dt>Uso clínico</dt><dd>No apto para diagnóstico</dd></div>
               </dl>
             ) : hiddenPlaceholder}
           </article>
@@ -571,20 +571,20 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           <div className="workspace-tabs">
             {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item === "3D Reconstruction" ? "Reconstrucción 3D" : item}</button>)}
           </div>
-          <div className="toolbar compact-toolbar review-toolbar" role="toolbar" aria-label="Review tools">
-            <button disabled title={futureFeatureTitle} type="button">Edit Mask</button>
+          <div className="toolbar compact-toolbar review-toolbar" role="toolbar" aria-label="Herramientas de revisión">
+            <button disabled title={futureFeatureTitle} type="button">Editar máscara</button>
             <button className={editMode ? "active" : ""} disabled={!activeCoordinateSpace} onClick={() => {
               setEditMode((value) => !value);
               setLandmarkAddMode(false);
-            }} title={activeCoordinateSpace ? "Habilita mover landmarks IA como borrador Reviewer" : "Espacio de coordenadas no informado por backend"} type="button">Landmark Edit</button>
-            <button className={landmarkAddMode ? "active" : ""} disabled={!editMode || !activeCoordinateSpace} onClick={() => setLandmarkAddMode((value) => !value)} title={!activeCoordinateSpace ? "Espacio de coordenadas no informado por backend" : editMode ? "Click sobre la imagen real para agregar landmark Reviewer" : "Activar Landmark Edit primero"} type="button">Add Landmark</button>
+            }} title={activeCoordinateSpace ? "Habilita mover landmarks IA como borrador del revisor" : "Espacio de coordenadas no informado por backend"} type="button">Editar landmark</button>
+            <button className={landmarkAddMode ? "active" : ""} disabled={!editMode || !activeCoordinateSpace} onClick={() => setLandmarkAddMode((value) => !value)} title={!activeCoordinateSpace ? "Espacio de coordenadas no informado por backend" : editMode ? "Click sobre la imagen real para agregar landmark del revisor" : "Activar Editar landmark primero"} type="button">Agregar landmark</button>
             <button disabled title={futureFeatureTitle} type="button">Recalculate</button>
-            <button disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores Reviewer" : "No hay borradores Reviewer"} type="button">Undo</button>
-            <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve</button>
+            <button disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores del revisor"} type="button">Deshacer</button>
+            <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Aprobar</button>
             <button className={overlayEnabled && overlayAvailable ? "active" : ""} disabled={!overlayAvailable} onClick={() => setOverlayEnabled((value) => !value)} title={overlayAvailable ? "Toggle overlay.png real" : "overlay.png no disponible desde backend"} type="button">AI Overlay</button>
             <label className="opacity-control">Opacity <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Asset servido: <strong>input.png unico</strong> · Overlay: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong> · Borradores Reviewer: <strong>{reviewerDraftCount} medicion/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
+          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Recurso servido: <strong>input.png único</strong> · Overlay: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong> · Borradores del revisor: <strong>{reviewerDraftCount} medición/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
           {tab === "3D Reconstruction" ? (
             <article className="panel-card full-viewer"><SpineReconstructionPreview threeD={displayRun.threeD} /></article>
           ) : (
@@ -631,51 +631,51 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         <aside className="right-column">
           <section className="panel-card results-panel measurements-review-panel">
             <div className="section-title">
-              <h2>Measurements</h2>
-              <button className="text-link-button" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Restaurar valores Reviewer al valor IA original" : "No hay mediciones Reviewer editadas"} type="button">Reset to AI</button>
+              <h2>Mediciones</h2>
+              <button className="text-link-button" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Restaurar valores del revisor al valor IA original" : "No hay mediciones del revisor editadas"} type="button">Restaurar valor IA</button>
             </div>
-            <p className="muted compact-copy">AI Initial y Reviewer se mantienen separados. La confidence y outlier pertenecen a IA; no se inventan para la correccion Reviewer.</p>
-            <div className="measurement-review-table" role="table" aria-label="Measurements">
+            <p className="muted compact-copy">IA inicial y revisor se mantienen separados. La confianza y el valor atípico pertenecen a IA; no se inventan para la corrección del revisor.</p>
+            <div className="measurement-review-table" role="table" aria-label="Mediciones">
               <div className="measurement-review-head" role="row">
-                <span role="columnheader">Measurement</span>
-                <span role="columnheader">AI Initial</span>
-                <span role="columnheader">Reviewer</span>
+                <span role="columnheader">Medición</span>
+                <span role="columnheader">IA inicial</span>
+                <span role="columnheader">Revisor</span>
                 <span role="columnheader">Delta</span>
                 <span role="columnheader">AI Confidence</span>
-                <span role="columnheader">Outlier</span>
+                <span role="columnheader">Atípico</span>
               </div>
               {resultRows.map((item) => (
                 <div className={`measurement-review-row ${item.draftValue !== undefined && item.draftValue !== "" ? "is-draft" : ""}`} role="row" key={item.id}>
                   <span role="cell"><strong>{item.label}</strong><small>{item.level}</small></span>
-                  <span role="cell" className="tabular-value"><em>AI</em>{item.aiValue} {item.unit}</span>
+                  <span role="cell" className="tabular-value"><em>IA</em>{item.aiValue} {item.unit}</span>
                   <span role="cell" className="reviewer-input-cell">
-                    <input aria-label={`Reviewer value for ${item.label}`} className="reviewer-value-input" inputMode="decimal" onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder={String(item.aiValue ?? "")} value={String(item.reviewerValue ?? "")} />
-                    <button className="measurement-reset-button" disabled={item.draftValue === undefined && !item.persistedValue} onClick={() => resetReviewerValue(item.id)} title="Reset to AI for this measurement" type="button">Reset</button>
-                    {item.draftValue !== undefined && item.draftValue !== "" && <span className="draft-chip">Draft</span>}
+                    <input aria-label={`Valor del revisor para ${item.label}`} className="reviewer-value-input" inputMode="decimal" onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder={String(item.aiValue ?? "")} value={String(item.reviewerValue ?? "")} />
+                    <button className="measurement-reset-button" disabled={item.draftValue === undefined && !item.persistedValue} onClick={() => resetReviewerValue(item.id)} title="Restaurar valor IA para esta medición" type="button">Restaurar</button>
+                    {item.draftValue !== undefined && item.draftValue !== "" && <span className="draft-chip">Borrador</span>}
                   </span>
                   <span role="cell" className={`delta-chip delta-${item.severity}`}>{formatDelta(item.delta, item.unit)}</span>
-                  <span role="cell" className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `${Math.round(item.confidence * 100)}%` : "N/A"}</span>
-                  <span role="cell">{item.outlier ? <StatusBadge tone="amber">AI outlier</StatusBadge> : "—"}</span>
+                  <span role="cell" className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `${Math.round(item.confidence * 100)}%` : "N/D"}</span>
+                  <span role="cell">{item.outlier ? <StatusBadge tone="amber">Atípico IA</StatusBadge> : "—"}</span>
                 </div>
               ))}
             </div>
-            {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medicion/es y {landmarkDraftCount} landmark/s en borrador. Mediciones persisten por el flujo existente; landmarks quedan en borrador local no persistido, pendiente BE-008/FE-010 + AI-011.</p>}
+            {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medición/es y {landmarkDraftCount} landmark/s en borrador. Mediciones persisten por el flujo existente; landmarks quedan en borrador local no persistido, pendiente BE-008/FE-010 + AI-011.</p>}
           </section>
 
           <section className="panel-card notes-card compact-card decision-panel">
-            <PanelTitle panelId="decision-visible" title="Notes" />
+            <PanelTitle panelId="decision-visible" title="Notas" />
             {panelVisible("decision-visible") ? (
               <>
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Add notes about measurements or findings..." />
+                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Agregar notas sobre mediciones o hallazgos..." />
                 <div className="review-actions compact-actions decision-actions">
-                  <select aria-label="Review status" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
+                  <select aria-label="Estado de revisión" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
                     <option value="pendiente">pendiente</option>
                     <option value="aceptado">aceptado</option>
                     <option value="observado">observado</option>
                     <option value="descartado">descartado</option>
                   </select>
-                  <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Save Draft</button>
-                  <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Approve & Complete</button>
+                  <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Guardar borrador</button>
+                  <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Aprobar y completar</button>
                 </div>
               </>
             ) : hiddenPlaceholder}

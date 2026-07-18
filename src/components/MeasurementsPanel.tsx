@@ -1,4 +1,4 @@
-import type { Measurement } from "../appTypes";
+﻿import type { Measurement } from "../appTypes";
 
 interface MeasurementsPanelProps {
   measurements: Measurement[];
@@ -14,35 +14,41 @@ export function MeasurementsPanel({ measurements, inferenceStatus, description, 
         ? { ...measurement, value, source: "Reviewer" as const, status: "editado" as const, placeholder: false }
         : measurement,
     );
-    onChange(updated, `${id} actualizado por Reviewer`);
+    onChange(updated, `${id} actualizado por revisor`);
+  }
+
+  function sourceLabel(source?: Measurement["source"]) {
+    if (source === "Reviewer") return "Revisor";
+    if (source === "Placeholder") return "Marcador";
+    return "IA";
   }
 
   return (
     <section className="panel-card measurements-panel">
       <div className="section-title">
-        <h2>Measurements</h2>
+        <h2>Mediciones</h2>
         <span className="technical-state">{inferenceStatus === "pending_real_inference" ? "Inferencia real pendiente" : "Revisable"}</span>
       </div>
       {description && <p className="technical-note">{description}</p>}
       <div className="measurement-table">
         <div className="measurement-head">
-          <span>Measurement</span>
-          <span>Value</span>
-          <span>Unit</span>
+          <span>Medición</span>
+          <span>Valor</span>
+          <span>Unidad</span>
           <span>Conf.</span>
-          <span>Source</span>
-          <span>Status</span>
-          <span>Outlier</span>
+          <span>Origen</span>
+          <span>Estado</span>
+          <span>Atípico</span>
         </div>
         {measurements.map((measurement) => (
           <div className="measurement-row" key={measurement.id}>
             <span>{measurement.label}</span>
             <input value={String(measurement.value)} onChange={(event) => updateValue(measurement.id, event.target.value)} />
             <span>{measurement.unit}</span>
-            <span>{measurement.confidence ? `${Math.round(measurement.confidence * 100)}%` : "N/A"}</span>
-            <span>{measurement.source}</span>
+            <span>{measurement.confidence ? `${Math.round(measurement.confidence * 100)}%` : "N/D"}</span>
+            <span>{sourceLabel(measurement.source)}</span>
             <span>{measurement.status}</span>
-            <span>{measurement.outlier ? "Yes" : "No"}</span>
+            <span>{measurement.outlier ? "Sí" : "No"}</span>
           </div>
         ))}
       </div>

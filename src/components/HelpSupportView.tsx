@@ -5,7 +5,7 @@ export function HelpSupportView() {
     <div className="view-stack help-support-view">
       <section className="page-heading compact-heading">
         <div>
-          <p>Help & Support</p>
+          <p>Ayuda y soporte</p>
           <h1>Ayuda, privacidad y alcance de uso</h1>
         </div>
         <div className="screen-summary">
@@ -48,7 +48,7 @@ export function HelpSupportView() {
           <div className="section-title"><h2><HelpCircle aria-hidden size={18} /> Cómo usar la app</h2></div>
           <ol className="support-steps">
             <li>Entrar con una cuenta profesional aprobada.</li>
-            <li>Ir a Studies o Review Queue y abrir un caso disponible.</li>
+            <li>Ir a Estudios o Cola de revisión y abrir un caso disponible.</li>
             <li>Revisar imágenes, overlays reales, mediciones y notas del caso.</li>
             <li>Guardar borrador o completar la revisión según corresponda.</li>
           </ol>

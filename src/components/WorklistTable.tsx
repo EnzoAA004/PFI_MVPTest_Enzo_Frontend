@@ -141,8 +141,8 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
           })}
         </tbody>
       </table>
-      <div className="table-pagination" aria-label="Worklist pagination">
-        <span>Showing {firstVisible} to {lastVisible} of {sortedStudies.length} studies</span>
+      <div className="table-pagination" aria-label="Paginación de lista de trabajo">
+        <span>Mostrando {firstVisible} a {lastVisible} de {sortedStudies.length} estudios</span>
         <div>
           <button className="ghost-button" disabled={safePage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} type="button">Previous</button>
           <span>{safePage + 1}</span>

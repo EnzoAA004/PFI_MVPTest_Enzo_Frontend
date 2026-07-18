@@ -259,7 +259,7 @@ export function Header({ activeView, onChangeView, currentRunId, onNewAnalysis, 
           {profileMenuOpen && (
             <div className="profile-menu-panel" role="menu" aria-label="Profile menu">
               <button onClick={openProfileSettings} role="menuitem" type="button"><UserCog aria-hidden size={16} />Ver / editar perfil</button>
-              <button onClick={logoutFromMenu} role="menuitem" type="button"><LogOut aria-hidden size={16} />Cerrar sesiÃ³n</button>
+              <button onClick={logoutFromMenu} role="menuitem" type="button"><LogOut aria-hidden size={16} />Cerrar sesión</button>
             </div>
           )}
         </div>
