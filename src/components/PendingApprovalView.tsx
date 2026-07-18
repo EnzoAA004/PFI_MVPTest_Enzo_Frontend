@@ -25,7 +25,7 @@ export function PendingApprovalView({ session, onLogout }: PendingApprovalViewPr
         </div>
         <dl className="info-list compact-info">
           <div><dt>Profesional</dt><dd>{session.user.fullName}</dd></div>
-          <div><dt>Email</dt><dd>{session.user.email}</dd></div>
+          <div><dt>Correo</dt><dd>{session.user.email}</dd></div>
           <div><dt>Matrícula</dt><dd>{session.user.licenseNumber ?? "pendiente"}</dd></div>
           <div><dt>Estado</dt><dd>pending approval</dd></div>
         </dl>

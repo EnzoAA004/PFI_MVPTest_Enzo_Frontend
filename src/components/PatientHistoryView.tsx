@@ -13,13 +13,13 @@ interface PatientHistoryViewProps {
 type HistoryTab = "overview" | "repository" | "activity";
 type MetricKey = "lordosisAngle" | "canalDiameter" | "averageDiscHeight" | "l45DiscHeight";
 
-const longitudinalUnavailable = "Historico longitudinal no disponible - requiere modelo longitudinal en backend.";
+const longitudinalUnavailable = "Histórico longitudinal no disponible - requiere modelo longitudinal en backend.";
 
 const metricLabels: Record<MetricKey, { label: string; unit: string }> = {
-  lordosisAngle: { label: "Lumbar Lordosis Angle", unit: "deg" },
-  canalDiameter: { label: "Central Canal Diameter", unit: "mm" },
-  averageDiscHeight: { label: "Average Disc Height", unit: "mm" },
-  l45DiscHeight: { label: "L4-L5 Disc Height", unit: "mm" },
+  lordosisAngle: { label: "Ángulo de lordosis lumbar", unit: "deg" },
+  canalDiameter: { label: "Diámetro del canal central", unit: "mm" },
+  averageDiscHeight: { label: "Altura discal promedio", unit: "mm" },
+  l45DiscHeight: { label: "Altura discal L4-L5", unit: "mm" },
 };
 
 function formatDate(value?: string) {
@@ -48,11 +48,11 @@ function hasAiReviewerPair(study: PatientStudy, key: MetricKey) {
 }
 
 function EmptyLongitudinalState({ detail = longitudinalUnavailable }: { detail?: string }) {
-  const message = detail.includes("Historico longitudinal no disponible") ? detail : `Historico longitudinal no disponible - ${detail}`;
+  const message = detail.includes("Histórico longitudinal no disponible") ? detail : `Histórico longitudinal no disponible - ${detail}`;
   return (
     <div className="panel-hidden-placeholder honest-empty-state">
       <strong>{message}</strong>
-      <span>No se muestran tendencias, AI Initial ni deltas derivados si el backend no los entrega como datos almacenados.</span>
+      <span>No se muestran tendencias, IA inicial ni deltas derivados si el backend no los entrega como datos almacenados.</span>
     </div>
   );
 }
@@ -85,7 +85,7 @@ function TrendChart({ studies, metric }: { studies: PatientStudy[]; metric: Metr
         <polyline points={polyline} />
         {plotted.map(({ x, y, point }) => <circle cx={x} cy={y} r="4" key={`${point.study.caseId}-${metric}`} />)}
         <text x="24" y="132">Stored values</text>
-        <text x="198" y="132">No AI series unless stored</text>
+        <text x="198" y="132">Sin serie IA salvo que est? almacenada</text>
       </svg>
     </figure>
   );
@@ -126,7 +126,7 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
   const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
   const visible = (id: string) => !hiddenPanels[id];
   const toggle = (id: string) => setHiddenPanels((current) => ({ ...current, [id]: !current[id] }));
-  const hidden = <div className="panel-hidden-placeholder">Informacion oculta. Usa el control de visualizacion para desplegarla.</div>;
+  const hidden = <div className="panel-hidden-placeholder">Información oculta. Usá el control de visualización para desplegarla.</div>;
   const totalStudies = summary?.totalStudies ?? studies.length;
   const firstStudy = summary?.firstStudy ?? studies[studies.length - 1]?.studyDate;
   const mostRecent = summary?.mostRecent ?? studies[0]?.studyDate;
@@ -175,37 +175,37 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
       <section className="history-hero compact-heading patient-history-header">
         <div className="patient-avatar" aria-hidden="true">{subjectRef.slice(0, 1)}</div>
         <div>
-          <p>Patients / <strong>{subjectRef}</strong></p>
+          <p>Pacientes / <strong>{subjectRef}</strong></p>
           <h1>{subjectRef}</h1>
-          <div className="patient-header-badges"><StatusBadge tone="teal">De-identified</StatusBadge>{source && <StatusBadge tone={hasLongitudinalModel ? "green" : "amber"}>{source}</StatusBadge>}</div>
+          <div className="patient-header-badges"><StatusBadge tone="teal">Deidentificado</StatusBadge>{source && <StatusBadge tone={hasLongitudinalModel ? "green" : "amber"}>{source}</StatusBadge>}</div>
         </div>
         <dl className="patient-header-grid">
-          <div><dt>Sex</dt><dd>Unknown</dd></div>
-          <div><dt>Age at First Study</dt><dd>Unknown</dd></div>
-          <div><dt>Total Studies</dt><dd>{studyCountLabel(totalStudies)}</dd></div>
-          <div><dt>First Study</dt><dd>{formatDate(firstStudy)}</dd></div>
-          <div><dt>Most Recent</dt><dd>{formatDate(mostRecent)}</dd></div>
+          <div><dt>Sexo</dt><dd>Desconocido</dd></div>
+          <div><dt>Edad en primer estudio</dt><dd>Desconocida</dd></div>
+          <div><dt>Total de estudios</dt><dd>{studyCountLabel(totalStudies)}</dd></div>
+          <div><dt>Primer estudio</dt><dd>{formatDate(firstStudy)}</dd></div>
+          <div><dt>Más reciente</dt><dd>{formatDate(mostRecent)}</dd></div>
         </dl>
         <div className="history-actions">
-          <button className="ghost-button" disabled={studies.length === 0} onClick={exportSummary} title="Exportar resumen derivado de-identificado" type="button">Export Summary</button>
-          <button className="ghost-button" disabled title="Carga longitudinal pendiente de backend" type="button">Add Study</button>
+          <button className="ghost-button" disabled={studies.length === 0} onClick={exportSummary} title="Exportar resumen derivado de-identificado" type="button">Exportar resumen</button>
+          <button className="ghost-button" disabled title="Carga longitudinal pendiente de backend" type="button">Agregar estudio</button>
         </div>
       </section>
 
-      <div className="workspace-tabs history-tabs" role="tablist" aria-label="Patient history tabs">
-        <button className={activeTab === "overview" ? "active" : ""} onClick={() => setActiveTab("overview")} role="tab" aria-selected={activeTab === "overview"} type="button">Longitudinal Overview</button>
-        <button className={activeTab === "repository" ? "active" : ""} onClick={() => setActiveTab("repository")} role="tab" aria-selected={activeTab === "repository"} type="button">Study Repository</button>
-        <button className={activeTab === "activity" ? "active" : ""} onClick={() => setActiveTab("activity")} role="tab" aria-selected={activeTab === "activity"} type="button">Activity & Audit</button>
+      <div className="workspace-tabs history-tabs" role="tablist" aria-label="Tabs de historial de paciente">
+        <button className={activeTab === "overview" ? "active" : ""} onClick={() => setActiveTab("overview")} role="tab" aria-selected={activeTab === "overview"} type="button">Resumen longitudinal</button>
+        <button className={activeTab === "repository" ? "active" : ""} onClick={() => setActiveTab("repository")} role="tab" aria-selected={activeTab === "repository"} type="button">Repositorio de estudios</button>
+        <button className={activeTab === "activity" ? "active" : ""} onClick={() => setActiveTab("activity")} role="tab" aria-selected={activeTab === "activity"} type="button">Actividad y auditoría</button>
       </div>
 
       {activeTab === "overview" && (
         <section className="patient-overview-grid">
           <article className="panel-card compact-card">
-            <PanelTitle id="timeline" title={`Study Timeline (${totalStudies})`} />
+            <PanelTitle id="timeline" title={`Línea de tiempo de estudios (${totalStudies})`} />
             {visible("timeline") ? renderTimeline(studies) : hidden}
           </article>
           <article className="panel-card compact-card patient-trends-panel">
-            <PanelTitle id="trends" title="Trends Over Time"><span>Stored real metrics only</span></PanelTitle>
+            <PanelTitle id="trends" title="Tendencias en el tiempo"><span>Solo métricas reales almacenadas</span></PanelTitle>
             {visible("trends") ? (
               <div className="trend-grid">
                 <TrendChart studies={studies} metric="lordosisAngle" />
@@ -215,11 +215,11 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
             ) : hidden}
           </article>
           <article className="panel-card compact-card">
-            <PanelTitle id="measurement-history" title="Key Measurements"><span>Stored backend values only</span></PanelTitle>
+            <PanelTitle id="measurement-history" title="Mediciones clave"><span>Solo valores backend almacenados</span></PanelTitle>
             {visible("measurement-history") ? rows.length ? (
               <div className="table-wrap">
                 <table className="worklist-table longitudinal-measurements-table">
-                  <thead><tr><th>Study</th><th>Metric</th><th>Stored Value</th>{hasAiInitialColumn && <th>AI Initial</th>}{hasReviewerFinalColumn && <th>Reviewer Final</th>}{hasAiInitialColumn && hasReviewerFinalColumn && <th>Delta</th>}</tr></thead>
+                  <thead><tr><th>Estudio</th><th>Métrica</th><th>Valor almacenado</th>{hasAiInitialColumn && <th>IA inicial</th>}{hasReviewerFinalColumn && <th>Revisor final</th>}{hasAiInitialColumn && hasReviewerFinalColumn && <th>Delta</th>}</tr></thead>
                   <tbody>
                     {rows.map(({ study, metric, stored, ai, reviewer }) => {
                       const pair = hasAiReviewerPair(study, metric);
@@ -238,20 +238,20 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
                   </tbody>
                 </table>
               </div>
-            ) : <EmptyLongitudinalState detail="Key Measurements longitudinales no disponibles - requiere historico de mediciones en backend." /> : hidden}
+            ) : <EmptyLongitudinalState detail="Mediciones clave longitudinales no disponibles - requiere histórico de mediciones en backend." /> : hidden}
           </article>
         </section>
       )}
 
       {activeTab === "repository" && (
         <section className="history-grid quiet-history-grid">
-          <article className="panel-card compact-card"><PanelTitle id="repository" title="Study Repository" />{visible("repository") ? renderTimeline(studies) : hidden}</article>
+          <article className="panel-card compact-card"><PanelTitle id="repository" title="Repositorio de estudios" />{visible("repository") ? renderTimeline(studies) : hidden}</article>
         </section>
       )}
 
       {activeTab === "activity" && (
         <section className="history-grid quiet-history-grid">
-          <article className="panel-card compact-card"><PanelTitle id="activity-empty" title="Activity Feed" />{visible("activity-empty") ? <EmptyLongitudinalState detail="Audit longitudinal por paciente no disponible - requiere agregacion backend." /> : hidden}</article>
+          <article className="panel-card compact-card"><PanelTitle id="activity-empty" title="Actividad" />{visible("activity-empty") ? <EmptyLongitudinalState detail="Auditoría longitudinal por paciente no disponible - requiere agregación backend." /> : hidden}</article>
         </section>
       )}
     </div>

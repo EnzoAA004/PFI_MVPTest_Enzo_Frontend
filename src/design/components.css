@@ -1845,43 +1845,11 @@ body {
   font-size:.84rem;
   padding:10px 12px;
   background:var(--surface-subtle)}
-.ai-completion-card,
-.pipeline-contract-card,
-.professional-admin-card,
 .measurements-panel,
 .wide-card {
   min-width:0}
 .wide-card {
   grid-column:1 / -1}
-.ai-artifact-readiness {
-  display:grid;
-  gap:var(--sp-3)}
-.ai-artifact-table {
-  display:grid;
-  gap:var(--sp-2)}
-.unified-results-table {
-  gap:7px}
-.unified-results-table .comparison-head {
-  grid-template-columns:1.18fr .58fr .9fr .52fr;
-  font-size:.68rem}
-.ai-completion-table {
-  gap:7px}
-.ai-completion-table .comparison-head {
-  grid-template-columns:1fr 1fr}
-.ai-completion-table .comparison-head:has(span:nth-child(3)),
-.ai-completion-table .compact-comparison-row:has(> span:nth-child(3)) {
-  grid-template-columns:1.05fr .68fr 1.35fr}
-.compact-comparison-row {
-  grid-template-columns:1.18fr .58fr .9fr .52fr;
-  padding:8px;
-  min-height:48px}
-.compact-comparison-row strong {
-  font-size:.86rem}
-.compact-comparison-row small {
-  font-size:.72rem}
-.compact-comparison-row input {
-  min-height:28px;
-  font-size:.82rem}
 .compact-actions {
   gap:7px;
   flex-wrap:wrap}
@@ -1922,26 +1890,6 @@ body {
   border-radius:10px;
   padding:9px 10px;
   background:var(--surface-soft)}
-.diagnostics-view {
-  max-width:1200px}
-.diagnostics-summary {
-  display:grid;
-  gap:10px}
-.diagnostics-actions {
-  align-items:center;
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px}
-.diagnostics-grid {
-  display:grid;
-  grid-template-columns:repeat(4, minmax(0, 1fr));
-  gap:14px}
-.diagnostic-card .info-list dd {
-  overflow-wrap:anywhere}
-.diagnostic-card .section-title {
-  align-items:start}
-.diagnostic-card .status-badge {
-  white-space:nowrap}
 @media (max-width:1180px) {
   .top-header {
   grid-template-columns:1fr}
@@ -1949,27 +1897,11 @@ body {
   justify-content:flex-start}
 .results-panel {
   position:static}
-.compact-comparison-row, .unified-results-table .comparison-head {
-  grid-template-columns:1fr .5fr .8fr .55fr}
-.ai-completion-table .comparison-head,
-.ai-completion-table .compact-comparison-row {
-  grid-template-columns:1fr 1fr}
-.ai-completion-table .comparison-head:has(span:nth-child(3)),
-.ai-completion-table .compact-comparison-row:has(> span:nth-child(3)) {
-  grid-template-columns:1fr .72fr 1.15fr}
-.diagnostics-grid {
-  grid-template-columns:repeat(2, minmax(0, 1fr))}
 }
 @media (max-width:760px) {
   .top-header {
   padding:12px}
 .header-actions .primary-button, .header-actions .ghost-button {
-  width:100%}
-.compact-comparison-row, .unified-results-table .comparison-head,
-.ai-completion-table .comparison-head,
-.ai-completion-table .compact-comparison-row {
-  grid-template-columns:1fr}
-.compact-comparison-row span, .compact-comparison-row input {
   width:100%}
 .compact-info div {
   grid-template-columns:1fr}
@@ -1978,10 +1910,6 @@ body {
   grid-template-columns:1fr 1fr}
 .export-rules span {
   display:grid}
-.diagnostics-grid {
-  grid-template-columns:1fr}
-.diagnostics-actions button {
-  width:100%}
 }
 
 /* Source: src/visibility-controls.css */

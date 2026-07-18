@@ -55,7 +55,7 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
     <div className="view-stack">
       <section className="page-heading compact-heading">
         <div>
-          <p>Patients</p>
+          <p>Pacientes</p>
           <h1>Patient Index</h1>
         </div>
         <div className="screen-summary">
@@ -67,32 +67,32 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
       <section className="panel-card worklist-panel">
         <div className="section-title">
           <div>
-            <h2>Patients</h2>
-            <p className="muted compact-copy">Derived from real study rows available to the frontend. No longitudinal metrics are inferred here.</p>
+            <h2>Pacientes</h2>
+            <p className="muted compact-copy">Derivado de filas reales de estudios disponibles para el frontend. No se infieren métricas longitudinales acá.</p>
           </div>
         </div>
         <div className="worklist-filter-shell">
           <div className="worklist-search-row single-action">
             <label className="worklist-search-input">
-              <span>Search</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Patient ID, date, status..." type="search" />
+              <span>Buscar</span>
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID de paciente, fecha, estado..." type="search" />
             </label>
           </div>
         </div>
         {loading ? (
-          <div className="panel-hidden-placeholder">Consulting patient study rows from backend.</div>
+          <div className="panel-hidden-placeholder">Consultando filas de estudios de pacientes desde backend.</div>
         ) : visiblePatients.length ? (
           <div className="table-wrap">
             <table className="worklist-table patient-index-table">
               <thead>
                 <tr>
                   <th>Patient</th>
-                  <th>Studies</th>
-                  <th>First Study</th>
-                  <th>Most Recent</th>
+                  <th>Estudios</th>
+                  <th>Primer estudio</th>
+                  <th>Más reciente</th>
                   <th>Pending</th>
                   <th>Priority</th>
-                  <th>Status</th>
+                  <th>Estado</th>
                   <th aria-label="Actions" />
                 </tr>
               </thead>
@@ -106,14 +106,14 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
                     <td>{patient.pending}</td>
                     <td><PriorityBadge priority={patient.highestPriority} /></td>
                     <td><ReviewBadge status={patient.latestReviewStatus} /></td>
-                    <td><button className="ghost-button" onClick={() => onOpenHistory(patient.patientId)} type="button">Open history</button></td>
+                    <td><button className="ghost-button" onClick={() => onOpenHistory(patient.patientId)} type="button">Abrir historial</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <div className="panel-hidden-placeholder">No patient list is available from real study rows.</div>
+          <div className="panel-hidden-placeholder">No hay lista de pacientes disponible desde filas reales de estudios.</div>
         )}
       </section>
     </div>

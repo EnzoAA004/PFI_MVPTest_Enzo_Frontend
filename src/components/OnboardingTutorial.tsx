@@ -5,12 +5,12 @@ interface OnboardingTutorialProps {
 
 const steps = [
   {
-    title: "1. Worklist de estudios",
+    title: "1. Lista de trabajo de estudios",
     detail: "Revisá casos de-identificados, prioridad, estado del modelo y estado de revisión profesional.",
   },
   {
     title: "2. Workspace de revisión",
-    detail: "Abrí un estudio para ver series, slices, overlays, máscaras, landmarks y resultados IA vs Reviewer.",
+    detail: "Abrí un estudio para ver series, cortes, superposiciones, máscaras, landmarks y resultados IA vs revisor.",
   },
   {
     title: "3. Guardado y trazabilidad",

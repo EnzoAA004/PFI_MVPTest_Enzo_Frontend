@@ -173,7 +173,7 @@ export function MriSliceViewer({
       if (point && landmark) {
         onLandmarkDraftChange?.(
           { ...landmark, x: point.x, y: point.y, editable: true },
-          `Landmark ${landmark.label} movido por Reviewer en ${coordinateSpace}`,
+          `Landmark ${landmark.label} movido por revisor en ${coordinateSpace}`,
         );
       }
       return;
@@ -224,7 +224,7 @@ export function MriSliceViewer({
       y: point.y,
       editable: true,
     };
-    onLandmarkDraftChange?.(landmark, `Landmark ${landmark.label} agregado por Reviewer en ${coordinateSpace}`);
+    onLandmarkDraftChange?.(landmark, `Landmark ${landmark.label} agregado por revisor en ${coordinateSpace}`);
     onSelectLandmark(landmark.id);
     onLandmarkAddComplete?.();
   }
@@ -233,8 +233,8 @@ export function MriSliceViewer({
     <div className={`mri-viewer real-asset-viewer ${variant}`}>
       <div className="viewer-caption">
         <div>
-          <strong>{series?.name ?? (variant === "sagittal" ? "Sagittal asset" : "Axial asset")}</strong>
-          <span>{imageLoaded ? "Real backend asset" : inputState === "failed" ? "Imagen no disponible desde backend" : "Verificando asset real"}</span>
+          <strong>{series?.name ?? (variant === "sagittal" ? "Recurso sagital" : "Recurso axial")}</strong>
+          <span>{imageLoaded ? "Recurso real del backend" : inputState === "failed" ? "Imagen no disponible desde backend" : "Verificándo recurso real"}</span>
         </div>
         <div className="dicom-meta">
           <em>Single served PNG</em>
@@ -243,22 +243,22 @@ export function MriSliceViewer({
         </div>
       </div>
 
-      <div className="viewer-controls" role="toolbar" aria-label="2D viewer controls">
-        <select aria-label="Window and level preset" onChange={(event) => {
+      <div className="viewer-controls" role="toolbar" aria-label="Controles del visor 2D">
+        <select aria-label="Preset de ventana y nivel" onChange={(event) => {
           const preset = windowPresets.find((item) => item.id === event.target.value);
           if (preset) applyPreset(preset);
         }} defaultValue="neutral">
           {windowPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
         </select>
-        <button className={mode === "window" ? "active" : ""} disabled={!imageLoaded} onClick={() => setMode("window")} type="button">W/L drag</button>
-        <button className={mode === "pan" ? "active" : ""} disabled={!imageLoaded} onClick={() => setMode("pan")} type="button">Pan</button>
+        <button className={mode === "window" ? "active" : ""} disabled={!imageLoaded} onClick={() => setMode("window")} type="button">Arrastrar W/L</button>
+        <button className={mode === "pan" ? "active" : ""} disabled={!imageLoaded} onClick={() => setMode("pan")} type="button">Desplazar</button>
         <button disabled={!imageLoaded} onClick={() => setZoom((value) => clamp(Number((value - 0.2).toFixed(2)), 0.5, 4))} type="button">-</button>
         <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
         <button disabled={!imageLoaded} onClick={() => setZoom((value) => clamp(Number((value + 0.2).toFixed(2)), 0.5, 4))} type="button">+</button>
-        <button disabled={!imageLoaded} onClick={fitImage} type="button">Fit</button>
+        <button disabled={!imageLoaded} onClick={fitImage} type="button">Ajustar</button>
       </div>
 
-      <p className="viewer-limit-note">W/L is an approximate brightness/contrast filter over an 8-bit PNG asset. DICOM windowing and multi-slice navigation require AI-009.</p>
+      <p className="viewer-limit-note">W/L es un filtro aproximado de brillo/contraste sobre un PNG de 8 bits. El ventaneo DICOM y la navegación multicorte requieren AI-009.</p>
 
       <div
         className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"} ${landmarkAddMode ? "landmark-add-mode" : ""}`}
@@ -270,9 +270,9 @@ export function MriSliceViewer({
       >
         {inputState === "loaded" && inputUrl ? (
           <div className="asset-transform" style={{ transform }}>
-            <img ref={imageRef} alt={`${series?.name ?? variant} input asset`} className="mri-asset-img" draggable={false} src={inputUrl} style={{ filter }} />
+            <img ref={imageRef} alt={`${series?.name ?? variant} recurso de entrada`} className="mri-asset-img" draggable={false} src={inputUrl} style={{ filter }} />
             {overlayEnabled && overlayLoaded && overlayUrl && (
-              <img alt={`${series?.name ?? variant} AI overlay asset`} className="mri-overlay-img" draggable={false} src={overlayUrl} style={{ opacity: overlayOpacity, transform: "translateZ(0)" }} />
+              <img alt={`${series?.name ?? variant} recurso de superposición IA`} className="mri-overlay-img" draggable={false} src={overlayUrl} style={{ opacity: overlayOpacity, transform: "translateZ(0)" }} />
             )}
             {realLandmarks.map((landmark) => (
               <button
@@ -299,16 +299,16 @@ export function MriSliceViewer({
           </div>
         ) : (
           <div className="asset-empty-state">
-            <strong>{inputState === "failed" ? "Imagen no disponible desde backend" : "Verificando input.png real"}</strong>
-            <span>No se renderiza una resonancia simulada. El visor espera el asset real `input.png` del run.</span>
+            <strong>{inputState === "failed" ? "Imagen no disponible desde backend" : "Verificándo input.png real"}</strong>
+            <span>No se renderiza una resonancia simulada. El visor espera el recurso real `input.png` de la corrida.</span>
           </div>
         )}
       </div>
 
       <div className="viewer-footer real-viewer-footer">
-        <span>{overlayLoaded ? "overlay.png disponible" : overlayState === "failed" ? "overlay.png no disponible" : "overlay pendiente"}</span>
-        <span>{overlayEnabled && overlayLoaded ? `${Math.round(overlayOpacity * 100)}% opacity` : "AI Overlay deshabilitado si falta asset"}</span>
-        <span>{landmarkEditMode && canEditLandmarks ? "Reviewer landmark editing" : "Single slice served"}</span>
+        <span>{overlayLoaded ? "overlay.png disponible" : overlayState === "failed" ? "overlay.png no disponible" : "superposición pendiente"}</span>
+        <span>{overlayEnabled && overlayLoaded ? `${Math.round(overlayOpacity * 100)}% opacidad` : "Superposición IA deshabilitada si falta el recurso"}</span>
+        <span>{landmarkEditMode && canEditLandmarks ? "Edición de landmarks del revisor" : "Corte único servido"}</span>
       </div>
       {overlayState === "failed" && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend. No se muestra superposición simulada.</div>}
       {!coordinateSpace && <div className="panel-hidden-placeholder">Espacio de coordenadas no informado por backend; mover/agregar landmarks queda deshabilitado para no inventar model_256/original.</div>}

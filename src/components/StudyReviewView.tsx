@@ -191,11 +191,11 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [selectedSeriesId, setSelectedSeriesId] = useState("");
   const [maskVisibility, setMaskVisibility] = useState<Record<string, boolean>>({});
   const [overlayEnabled, setOverlayEnabled] = useState(true);
-  const [overlayOpacity, setOverlayOpacity] = useState(74);
+  const [overlayOpacidad, setOverlayOpacidad] = useState(74);
   const [editMode, setEditMode] = useState(false);
   const [selectedMask, setSelectedMask] = useState("mask-disc");
   const [selectedLandmark, setSelectedLandmark] = useState("L4");
-  const [overlayAvailableByPlane, setOverlayAvailableByPlane] = useState<Record<string, boolean>>({});
+  const [overlayAvailableByPlano, setOverlayAvailableByPlano] = useState<Record<string, boolean>>({});
   const [reviewerValues, setReviewerValues] = useState<Record<string, string>>({});
   const [landmarkDrafts, setLandmarkDrafts] = useState<Record<string, StudyLandmark>>({});
   const [landmarkAddMode, setLandmarkAddMode] = useState(false);
@@ -239,8 +239,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     description: run.measurementsDescription ?? "Pipeline técnico preparado para recibir inferencia real.",
   };
   const currentSeries = seriesList.find((item: any) => item.id === selectedSeriesId) ?? seriesList.find((item: any) => item.plane === tab.toLowerCase()) ?? seriesList[0];
-  const activePlane = currentSeries?.plane === "axial" ? "axial" : "sagittal";
-  const overlayAvailable = overlayAvailableByPlane[activePlane] === true;
+  const activePlano = currentSeries?.plane === "axial" ? "axial" : "sagittal";
+  const overlayAvailable = overlayAvailableByPlano[activePlano] === true;
   const activeCoordinateSpace = coordinateSpaceFrom(currentSeries, displayLandmarks);
 
   const studyMeasurements: MeasurementRow[] = hasPipelineVisualContract && pipelineMeasurements.length
@@ -438,7 +438,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   async function exportCsv() {
     try { await tryBackendExport("csv"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
-    const headers = ["Caso", "Run", "Medición", "Nivel", "Valor IA", "Valor revisor", "Delta", "Unidad", "Prioridad", "Estado", "Atípico", "Confianza (%)"];
+    const headers = ["Caso", "Corrida", "Medición", "Nivel", "Valor IA", "Valor revisor", "Delta", "Unidad", "Prioridad", "Estado", "Atípico", "Confianza (%)"];
     const rows = payload.measurements.map((row) => [payload.caseId, payload.runId, row.label, row.level, row.aiValue, row.reviewerValue ?? "sin cambios", row.deltaFormatted, row.unit, row.severity, row.status, row.outlier ? "si" : "no", row.confidence !== undefined ? Math.round(row.confidence * 100) : ""]);
     const csv = "\ufeff" + [headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\n");
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-mediciones.csv`, csv, "text/csv;charset=utf-8");
@@ -448,7 +448,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     try { await tryBackendExport("html"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
     const measurementRows = payload.measurements.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong><br><span>${escapeHtml(row.level)}</span></td><td>${escapeHtml(row.aiValue)} ${escapeHtml(row.unit)}</td><td>${escapeHtml(row.reviewerValue ?? "sin cambios")}</td><td>${escapeHtml(row.deltaFormatted)}</td><td>${escapeHtml(row.status)}</td><td>${row.outlier ? "Si" : "No"}</td></tr>`).join("");
-    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Run ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatus)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
+    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Corrida ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatus)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-informe.html`, html, "text/html;charset=utf-8");
   }
 
@@ -514,9 +514,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               <dl className="info-list compact-info">
                 <div><dt>ID de caso</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
                 <div><dt>Fecha de estudio</dt><dd>{selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? "2026-07-01"}</dd></div>
-                <div><dt>Modality</dt><dd>MRI</dd></div>
-                <div><dt>Plane</dt><dd>{currentSeries?.plane ?? displayRun.plane}</dd></div>
-                <div><dt>Model Version</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayRun.modelKey}</dd></div>
+                <div><dt>Modalidad</dt><dd>RM</dd></div>
+                <div><dt>Plano</dt><dd>{currentSeries?.plane ?? displayRun.plane}</dd></div>
+                <div><dt>Versión del modelo</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayRun.modelKey}</dd></div>
                 <div><dt>Estado de revisión</dt><dd><ReviewBadge status={review.status ?? "pendiente"} /></dd></div>
                 <div><dt>Revisor</dt><dd>{reviewerName}</dd></div>
               </dl>
@@ -524,16 +524,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </article>
 
           <article className="panel-card compact-card">
-            <PanelTitle panelId="patient-safe" title="Patient-Safe Metadata" />
+            <PanelTitle panelId="patient-safe" title="Metadatos deidentificados" />
             {panelVisible("patient-safe") ? (
               <>
                 <dl className="info-list compact-info">
-                  <div><dt>Age (at study)</dt><dd>{String(patientSafe.ageAtStudy ?? patientSafe.age ?? "Unknown")}</dd></div>
-                  <div><dt>Sex</dt><dd>{String(patientSafe.sex ?? "Unknown")}</dd></div>
-                  <div><dt>Body Region</dt><dd>{String(patientSafe.bodyRegion ?? "Lumbar Spine")}</dd></div>
-                  <div><dt>Description</dt><dd>{String(patientSafe.studyDescription ?? "Lumbar spine without contrast")}</dd></div>
+                  <div><dt>Edad al estudio</dt><dd>{String(patientSafe.ageAtStudy ?? patientSafe.age ?? "Desconocido")}</dd></div>
+                  <div><dt>Sexo</dt><dd>{String(patientSafe.sex ?? "Desconocido")}</dd></div>
+                  <div><dt>Región corporal</dt><dd>{String(patientSafe.bodyRegion ?? "Columna lumbar")}</dd></div>
+                  <div><dt>Descripción</dt><dd>{String(patientSafe.studyDescription ?? "Columna lumbar sin contraste")}</dd></div>
                   <div><dt>Series Count</dt><dd>{seriesList.length}</dd></div>
-                  <div><dt>Image Resolution</dt><dd>{String(patientSafe.imageResolution ?? (quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm spacing` : "sin datos"))}</dd></div>
+                  <div><dt>Resolución de imagen</dt><dd>{String(patientSafe.imageResolution ?? (quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm de espaciado` : "sin datos"))}</dd></div>
                 </dl>
                 <button className="text-link-button" type="button">Show more</button>
               </>
@@ -541,7 +541,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </article>
 
           <article className="panel-card compact-card">
-            <PanelTitle panelId="series-nav" title="Series Navigator"><span className="muted">{seriesList.length} series</span></PanelTitle>
+            <PanelTitle panelId="series-nav" title="Navegador de series"><span className="muted">{seriesList.length} series</span></PanelTitle>
             {panelVisible("series-nav") ? (
               <div className="series-list compact-list">
                 {seriesList.map((item: any, index) => (
@@ -558,10 +558,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <PanelTitle panelId="inference" title="Modo de inferencia"><StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceModeLabel(inferenceMode)}</StatusBadge></PanelTitle>
             {panelVisible("inference") ? (
               <dl className="info-list compact-info">
-                <div><dt>Requested</dt><dd>{inferenceModeLabel(requestedInferenceMode)}</dd></div>
+                <div><dt>Solicitado</dt><dd>{inferenceModeLabel(requestedInferenceMode)}</dd></div>
                 <div><dt>Preparación</dt><dd>{readinessLabel(modelReadiness)}</dd></div>
                 <div><dt>Revisión humana</dt><dd>Requerida</dd></div>
-                <div><dt>Uso clínico</dt><dd>No apto para diagnóstico</dd></div>
+                <div><dt>Usá clínico</dt><dd>No apto para diagnóstico</dd></div>
               </dl>
             ) : hiddenPlaceholder}
           </article>
@@ -569,7 +569,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
         <section className="center-column">
           <div className="workspace-tabs">
-            {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item === "3D Reconstruction" ? "Reconstrucción 3D" : item}</button>)}
+            {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item === "3D Reconstruction" ? "Reconstrucción 3D" : item === "Sagittal" ? "Sagital" : "Axial"}</button>)}
           </div>
           <div className="toolbar compact-toolbar review-toolbar" role="toolbar" aria-label="Herramientas de revisión">
             <button disabled title={futureFeatureTitle} type="button">Editar máscara</button>
@@ -577,14 +577,14 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               setEditMode((value) => !value);
               setLandmarkAddMode(false);
             }} title={activeCoordinateSpace ? "Habilita mover landmarks IA como borrador del revisor" : "Espacio de coordenadas no informado por backend"} type="button">Editar landmark</button>
-            <button className={landmarkAddMode ? "active" : ""} disabled={!editMode || !activeCoordinateSpace} onClick={() => setLandmarkAddMode((value) => !value)} title={!activeCoordinateSpace ? "Espacio de coordenadas no informado por backend" : editMode ? "Click sobre la imagen real para agregar landmark del revisor" : "Activar Editar landmark primero"} type="button">Agregar landmark</button>
-            <button disabled title={futureFeatureTitle} type="button">Recalculate</button>
+            <button className={landmarkAddMode ? "active" : ""} disabled={!editMode || !activeCoordinateSpace} onClick={() => setLandmarkAddMode((value) => !value)} title={!activeCoordinateSpace ? "Espacio de coordenadas no informado por backend" : editMode ? "Clic sobre la imagen real para agregar landmark del revisor" : "Activar Editar landmark primero"} type="button">Agregar landmark</button>
+            <button disabled title={futureFeatureTitle} type="button">Recalcular</button>
             <button disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores del revisor"} type="button">Deshacer</button>
             <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Aprobar</button>
-            <button className={overlayEnabled && overlayAvailable ? "active" : ""} disabled={!overlayAvailable} onClick={() => setOverlayEnabled((value) => !value)} title={overlayAvailable ? "Toggle overlay.png real" : "overlay.png no disponible desde backend"} type="button">AI Overlay</button>
-            <label className="opacity-control">Opacity <input min="25" max="100" value={overlayOpacity} onChange={(event) => setOverlayOpacity(Number(event.target.value))} type="range" /></label>
+            <button className={overlayEnabled && overlayAvailable ? "active" : ""} disabled={!overlayAvailable} onClick={() => setOverlayEnabled((value) => !value)} title={overlayAvailable ? "Activar o desactivar overlay.png real" : "overlay.png no disponible desde backend"} type="button">Superposición IA</button>
+            <label className="opacity-control">Opacidad <input min="25" max="100" value={overlayOpacidad} onChange={(event) => setOverlayOpacidad(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Recurso servido: <strong>input.png único</strong> · Overlay: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong> · Borradores del revisor: <strong>{reviewerDraftCount} medición/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
+          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Recurso servido: <strong>input.png único</strong> · Superposición: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong> · Borradores del revisor: <strong>{reviewerDraftCount} medición/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
           {tab === "3D Reconstruction" ? (
             <article className="panel-card full-viewer"><SpineReconstructionPreview threeD={displayRun.threeD} /></article>
           ) : (
@@ -598,7 +598,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 maskVisibility={maskVisibility}
                 selectedMask={selectedMask}
                 overlayEnabled={overlayEnabled}
-                overlayOpacity={overlayOpacity / 100}
+                overlayOpacidad={overlayOpacidad / 100}
                 editMode={editMode}
                 selectedLandmark={selectedLandmark}
                 onSelectMask={setSelectedMask}
@@ -607,7 +607,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 landmarkAddMode={landmarkAddMode}
                 onLandmarkDraftChange={updateLandmarkDraft}
                 onLandmarkAddComplete={() => setLandmarkAddMode(false)}
-                onOverlayAvailableChange={(available) => setOverlayAvailableByPlane((current) => ({ ...current, [activePlane]: available }))}
+                onOverlayAvailableChange={(available) => setOverlayAvailableByPlano((current) => ({ ...current, [activePlano]: available }))}
               />
               <article className="panel-card compact-card legend-card">
                 <PanelTitle panelId="legend" title="Leyenda" />
@@ -615,12 +615,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   <>
                     <div className="legend-grid layer-legend-grid">
                       {masks.map((mask: any) => (
-                        <button disabled key={mask.id} title="Requiere mascaras por clase desde backend (FE-007/AI-017); hoy solo hay overlay.png combinado." type="button">
+                        <button disabled key={mask.id} title="Requiere máscaras por clase desde backend (FE-007/AI-017); hoy solo hay overlay.png combinado." type="button">
                           <i style={{ background: maskTokenVar(mask) }} />{mask.label}
                         </button>
                       ))}
                     </div>
-                    <p className="viewer-limit-note">Layer visibility by class requires per-class masks from backend. Current viewer uses combined overlay.png when available.</p>
+                    <p className="viewer-limit-note">La visibilidad por clase requiere máscaras por clase desde backend. El visor actual usa overlay.png combinado cuando está disponible.</p>
                   </>
                 ) : hiddenPlaceholder}
               </article>
@@ -641,7 +641,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <span role="columnheader">IA inicial</span>
                 <span role="columnheader">Revisor</span>
                 <span role="columnheader">Delta</span>
-                <span role="columnheader">AI Confidence</span>
+                <span role="columnheader">Confianza IA</span>
                 <span role="columnheader">Atípico</span>
               </div>
               {resultRows.map((item) => (

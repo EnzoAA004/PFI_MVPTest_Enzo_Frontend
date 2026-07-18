@@ -88,7 +88,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
   const highPriority = studies.filter((study) => study.priority === "alta").length;
   const aiReady = studies.filter(isAiReady).length;
   const flagged = summary?.flagged ?? studies.filter((study) => study.priority === "alta" || study.reviewStatus === "observado").length;
-  const modelStatusLabel = degradedMode ? "Degraded" : aiModuleAvailable === false ? "Unavailable" : health === "consultando" ? "Checking" : "Operational";
+  const modelStatusLabel = degradedMode ? "Degradado" : aiModuleAvailable === false ? "No disponible" : health === "consultando" ? "Consultando" : "Operativo";
   const modelOptions = useMemo(() => uniqueValues(studies.map((study) => study.modelKey)), [studies]);
   const filteredStudies = useMemo(() => studies.filter((study) => {
     if (!matchesSearch(study, query)) return false;
@@ -139,8 +139,8 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
     <div className="view-stack">
       <section className="page-heading">
         <div>
-          <h1>Dashboard</h1>
-          <p>Overview of studies and system status</p>
+          <h1>Inicio</h1>
+          <p>Resumen de estudios y estado del sistema</p>
         </div>
         <div className="safety-copy">
           <strong>Requiere revisión profesional.</strong>
@@ -149,17 +149,17 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
       </section>
 
       <section className="metric-grid">
-        <MetricCard icon={<ClipboardCheck aria-hidden size={24} />} label="Pending Reviews" value={String(pending)} detail={`${highPriority} high priority`} tone="blue" />
-        <MetricCard icon={<Brain aria-hidden size={24} />} label="AI-Ready Studies" value={String(aiReady)} detail={`${total} studies loaded`} tone="teal" />
-        <MetricCard icon={<CheckCircle2 aria-hidden size={24} />} label="Model Status" value={modelStatusLabel} detail="View diagnostics" tone={degradedMode ? "amber" : aiModuleAvailable === false ? "amber" : "purple"} actionLabel="Open diagnostics" onAction={onOpenDiagnostics} />
-        <MetricCard icon={<Flag aria-hidden size={24} />} label="Flagged Cases" value={String(flagged)} detail="Require attention" tone="amber" />
+        <MetricCard icon={<ClipboardCheck aria-hidden size={24} />} label="Revisiónes pendientes" value={String(pending)} detail={`${highPriority} prioridad alta`} tone="blue" />
+        <MetricCard icon={<Brain aria-hidden size={24} />} label="Estudios listos para IA" value={String(aiReady)} detail={`${total} estudios cargados`} tone="teal" />
+        <MetricCard icon={<CheckCircle2 aria-hidden size={24} />} label="Estado del modelo" value={modelStatusLabel} detail="Ver diagnóstico" tone={degradedMode ? "amber" : aiModuleAvailable === false ? "amber" : "purple"} actionLabel="Abrir diagnóstico" onAction={onOpenDiagnostics} />
+        <MetricCard icon={<Flag aria-hidden size={24} />} label="Casos marcados" value={String(flagged)} detail="Requieren atención" tone="amber" />
       </section>
 
       <section className="dashboard-grid">
         <article className="panel-card wide-card worklist-panel">
           <div className="section-title">
             <div>
-              <h2>Worklist</h2>
+              <h2>Lista de trabajo</h2>
               <p className="muted compact-copy">{filteredStudies.length} de {studies.length} estudios visibles{activeFilterCount ? ` · ${activeFilterCount} filtro/s activo/s` : ""}</p>
             </div>
             <button className="ghost-button" disabled={!latestStudy} onClick={() => latestStudy && onOpenReview(latestStudy)} type="button">Abrir revisión</button>
@@ -172,7 +172,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Caso, paciente, run/informe, modelo, estado..."
+                  placeholder="Caso, paciente, corrida/informe, modelo, estado..."
                   type="search"
                 />
               </label>
@@ -201,7 +201,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
                   </select>
                 </label>
                 <label>
-                  <span>Estado revisión</span>
+                  <span>Estado de revisión</span>
                   <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus | AllOption)}>
                     <option value="todos">Todos</option>
                     <option value="pendiente">Pendiente</option>
@@ -238,28 +238,28 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
         </article>
         <aside className="right-rail">
           <article className="panel-card">
-            <div className="section-title"><h2>Latest Segmentation Preview</h2><span>{latestStudy?.caseId ?? "No case"}</span></div>
+            <div className="section-title"><h2>Vista previa de segmentación más reciente</h2><span>{latestStudy?.caseId ?? "Sin caso"}</span></div>
             {latestOverlayUrl && previewState === "loaded" ? (
               <>
                 <div className="segmentation-preview">
-                  <img alt={`Segmentation overlay for ${latestStudy?.caseId}`} src={latestOverlayUrl} />
-                  <div className="segmentation-legend" aria-label="Segmentation legend">
+                  <img alt={`Superposición de segmentación para ${latestStudy?.caseId}`} src={latestOverlayUrl} />
+                  <div className="segmentation-legend" aria-label="Leyenda de segmentación">
                     {["L1", "L2", "L3", "L4", "L5", "S1"].map((level) => <span key={level}><i />{level}</span>)}
                   </div>
                 </div>
                 <p className="preview-meta">{latestStudy?.caseId} - {latestStudy?.plane}</p>
               </>
             ) : (
-              <div className="panel-hidden-placeholder">{previewState === "loading" ? "Verificando preview real disponible..." : "Sin preview real disponible para este estudio. No se muestra una segmentacion simulada."}</div>
+              <div className="panel-hidden-placeholder">{previewState === "loading" ? "Verificando vista previa real disponible..." : "Sin vista previa real disponible para este estudio. No se muestra una segmentación simulada."}</div>
             )}
           </article>
           <article className="panel-card">
-            <div className="section-title"><h2>3D Lumbar Spine Preview</h2><span>Atlas generico</span></div>
+            <div className="section-title"><h2>Vista 3D de columna lumbar</h2><span>Atlas genérico</span></div>
             <SpineReconstructionPreview />
-            <p className="preview-meta">Representacion anatomica de referencia, no paciente-especifica.</p>
+            <p className="preview-meta">Representación anatómica de referencia, no paciente-específica.</p>
           </article>
           <article className="panel-card recent-activity-card">
-            <div className="section-title"><h2>Recent Activity</h2></div>
+            <div className="section-title"><h2>Actividad reciente</h2></div>
             {auditTrail.length ? <AuditTrail events={auditTrail.slice(0, 4)} /> : <div className="panel-hidden-placeholder">Sin actividad reciente disponible.</div>}
           </article>
         </aside>

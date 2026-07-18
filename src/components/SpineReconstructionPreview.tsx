@@ -287,27 +287,27 @@ export function SpineReconstructionPreview({ threeD }: Props) {
   return (
     <div className="spine-preview generic-spine-preview">
       <div className="viewer-controls three-d-controls">
-        <button className="ghost-button" onClick={() => controlsRef.current?.zoom(-0.6)} type="button">Zoom In</button>
-        <button className="ghost-button" onClick={() => controlsRef.current?.zoom(0.6)} type="button">Zoom Out</button>
-        <button className="ghost-button" onClick={() => controlsRef.current?.rotate(-0.42)} type="button">Rotate</button>
+        <button className="ghost-button" onClick={() => controlsRef.current?.zoom(-0.6)} type="button">Acercar</button>
+        <button className="ghost-button" onClick={() => controlsRef.current?.zoom(0.6)} type="button">Alejar</button>
+        <button className="ghost-button" onClick={() => controlsRef.current?.rotate(-0.42)} type="button">Rotar</button>
         <button className={rotationEnabled ? "primary-button" : "ghost-button"} onClick={toggleRotation} type="button" aria-pressed={rotationEnabled}>{rotationEnabled ? "Pausar rotación" : "Activar rotación"}</button>
-        <button className="ghost-button" onClick={() => controlsRef.current?.fit()} type="button">Fit</button>
+        <button className="ghost-button" onClick={() => controlsRef.current?.fit()} type="button">Ajustar</button>
         <span className="surface-mode-pill">Surface atlas</span>
       </div>
 
       <div className="generic-spine-canvas-wrap">
         <canvas
-          aria-label="Interactive generic lumbar spine reference atlas. Not patient-specific."
+          aria-label="Atlas lumbar genérico interactivo de referencia. No paciente-específico."
           className="generic-spine-canvas"
           ref={canvasRef}
           role="img"
         />
         {rendererState !== "ready" && (
           <div className="three-d-loading-state" aria-live="polite">
-            {rendererState === "failed" ? "No se pudo cargar el atlas 3D generico." : "Cargando atlas 3D generico..."}
+            {rendererState === "failed" ? "No se pudo cargar el atlas 3D genérico." : "Cargando atlas 3D genérico..."}
           </div>
         )}
-        <div className="generic-spine-label">Representacion anatomica de referencia - no paciente-especifico</div>
+        <div className="generic-spine-label">Representación anatómica de referencia - no paciente-específico</div>
         <div className="spine-level-labels" aria-label="Niveles del atlas lumbar">
           {levels.map((level) => (
             <button
@@ -316,7 +316,7 @@ export function SpineReconstructionPreview({ threeD }: Props) {
               className={selectedLevel === level ? "active" : ""}
               key={level}
               onClick={() => toggleLevel(level)}
-              title={`${level}: resaltar nivel del atlas generico, no paciente-especifico`}
+              title={`${level}: resaltar nivel del atlas genérico, no paciente-específico`}
               type="button"
             >
               {level}
@@ -327,10 +327,10 @@ export function SpineReconstructionPreview({ threeD }: Props) {
 
       <section className="three-d-disabled-panel">
         <div>
-          <strong>Reconstruccion volumetrica paciente-especifica deshabilitada</strong>
-          <span>Status: {threeDStatus}</span>
+          <strong>Reconstrucción volumétrica paciente-específica deshabilitada</strong>
+          <span>Estado: {threeDStatus}</span>
         </div>
-        <p>Requiere pipeline volumetrico nuevo con stack, spacing, orientacion y mascaras 3D. No se simula progreso ni resultado paciente-especifico.</p>
+        <p>Requiere pipeline volumétrico nuevo con stack, spacing, orientación y máscaras 3D. No se simula progreso ni resultado paciente-específico.</p>
         <ul>
           {requiredInputs.map((input) => <li key={input}>{input}</li>)}
         </ul>

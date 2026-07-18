@@ -122,7 +122,7 @@ export function AuthView({ onAuthenticated }: AuthViewProps) {
                 <label>Institucion<input value={form.institution ?? ""} onChange={(event) => updateField("institution", event.target.value)} /></label>
               </>
             )}
-            <label>Email profesional<input value={form.email} onChange={(event) => updateField("email", event.target.value)} /></label>
+            <label>Correo profesional<input value={form.email} onChange={(event) => updateField("email", event.target.value)} /></label>
             <label>Contraseña<input type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} /></label>
             <button className="primary-button" disabled={loading} onClick={() => void submit()} type="button">{loading ? "Procesando..." : mode === "register" ? "Crear cuenta y verificar" : "Ingresar"}</button>
             <button className="ghost-button" disabled={loading} onClick={() => void startDemo()} type="button">Entrar con doctor demo</button>

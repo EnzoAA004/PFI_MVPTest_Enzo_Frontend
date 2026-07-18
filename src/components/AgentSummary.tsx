@@ -10,22 +10,22 @@ export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision 
   return (
     <section className="panel-card">
       <div className="section-title">
-        <h2>AI Agent Summary</h2>
+        <h2>Resumen del agente IA</h2>
         <div className="panel-title-actions">
           <StatusBadge tone="amber">{agentDecision?.priority ?? "media"}</StatusBadge>
-          <button className={`visibility-toggle ${visible ? "is-visible" : "is-hidden"}`} onClick={() => setVisible((value) => !value)} type="button" aria-label={visible ? "Hide AI Agent Summary" : "Show AI Agent Summary"} title={visible ? "Hide AI Agent Summary" : "Show AI Agent Summary"}><VisibilityIcon visible={visible} /></button>
+          <button className={`visibility-toggle ${visible ? "is-visible" : "is-hidden"}`} onClick={() => setVisible((value) => !value)} type="button" aria-label={visible ? "Ocultar resumen del agente IA" : "Mostrar resumen del agente IA"} title={visible ? "Ocultar resumen del agente IA" : "Mostrar resumen del agente IA"}><VisibilityIcon visible={visible} /></button>
         </div>
       </div>
       {visible ? (
         <>
           <dl className="agent-grid">
-            <div><dt>Status</dt><dd>{agentDecision?.status ?? agentDecision?.agentStatus ?? "requiere_revision"}</dd></div>
-            <div><dt>Human review</dt><dd>{agentDecision?.humanReviewRequired === false ? "Optional" : "Required"}</dd></div>
-            <div><dt>Clinical use</dt><dd>{agentDecision?.notClinicalDiagnosis === false ? "Restricted" : "Not for clinical diagnosis"}</dd></div>
+            <div><dt>Estado</dt><dd>{agentDecision?.status ?? agentDecision?.agentStatus ?? "requiere_revisión"}</dd></div>
+            <div><dt>Revisión humana</dt><dd>{agentDecision?.humanReviewRequerida === false ? "Opcional" : "Requerida"}</dd></div>
+            <div><dt>Usá clínico</dt><dd>{agentDecision?.notClinicalDiagnosis === false ? "Restringido" : "No apto para diagnóstico clínico"}</dd></div>
           </dl>
           <div className="ai-honesty-row">
-            <StatusBadge tone="amber">Human review required</StatusBadge>
-            <StatusBadge tone="purple">AI output may be inaccurate. Please verify all results.</StatusBadge>
+            <StatusBadge tone="amber">Revisión humana requerida</StatusBadge>
+            <StatusBadge tone="purple">La salida IA puede ser inexacta. Verificá todos los resultados.</StatusBadge>
           </div>
           <p className="muted">{agentDecision?.recommendedAction}</p>
           <div className="chip-row">
@@ -35,7 +35,7 @@ export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision 
             {reasons.map((reason) => <li key={reason}>{reason}</li>)}
           </ul>
         </>
-      ) : <div className="panel-hidden-placeholder">Panel hidden. Use the visibility control to expand it.</div>}
+      ) : <div className="panel-hidden-placeholder">Panel oculto. Usá el control de visualización para desplegarlo.</div>}
     </section>
   );
 }

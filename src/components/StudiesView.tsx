@@ -46,20 +46,20 @@ export function StudiesView({ studies, mode, loading = false, onOpenReview }: St
           <div>
             <h2>{isQueue ? "Pending worklist" : "All studies"}</h2>
             <p className="muted compact-copy">
-              {isQueue ? "Filtered to pending or observed reviews only." : "Complete study list from backend or configured demo fallback."}
+              {isQueue ? "Filtrado solo a revisiónes pendientes u observadas." : "Lista completa de estudios desde backend o fallback demo configurado."}
             </p>
           </div>
         </div>
         <div className="worklist-filter-shell">
           <div className="worklist-search-row single-action">
             <label className="worklist-search-input">
-              <span>Search</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Case, patient, run, model, status..." type="search" />
+              <span>Buscar</span>
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Caso, paciente, corrida, modelo, estado..." type="search" />
             </label>
           </div>
         </div>
         {loading ? (
-          <div className="panel-hidden-placeholder">Consulting studies from backend.</div>
+          <div className="panel-hidden-placeholder">Consultando estudios desde backend.</div>
         ) : visibleStudies.length ? (
           <WorklistTable studies={visibleStudies} onOpenReview={onOpenReview} />
         ) : (

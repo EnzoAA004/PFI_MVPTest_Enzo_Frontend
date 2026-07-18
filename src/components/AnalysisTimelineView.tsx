@@ -91,11 +91,11 @@ function runHasRealInference(run: MultiplanarRunResponse | null) {
 
 function fallbackReason(run: MultiplanarRunResponse | null, contract: MultiplanarContract | null) {
   if (!run) return "";
-  const planeModes = uploadPlanes.map((plane) => `${plane}: ${run.planes?.[plane]?.effectiveInferenceMode ?? "sin run"}`).join(" · ");
+  const planeModes = uploadPlanes.map((plane) => `${plane}: ${run.planes?.[plane]?.effectiveInferenceMode ?? "sin corrida"}`).join(" · ");
   const readiness = uploadPlanes.map((plane) => `${plane}: ${contract?.planes?.[plane]?.readiness ?? "sin contrato"}`).join(" · ");
-  if (!isRealMode(run.effectiveInferenceMode)) return `Modo efectivo del workspace: ${run.effectiveInferenceMode}. ${planeModes}.`;
+  if (!isRealMode(run.effectiveInferenceMode)) return `Modo efectivo del espacio de trabajo: ${run.effectiveInferenceMode}. ${planeModes}.`;
   if (!uploadPlanes.every((plane) => isRealMode(run.planes?.[plane]?.effectiveInferenceMode))) return `Algún plano no volvió en inferencia real. ${planeModes}.`;
-  if (!measurementsFromRun(run).length) return `El run no devolvió mediciones reales almacenadas. Preparación: ${readiness}.`;
+  if (!measurementsFromRun(run).length) return `La corrida no devolvió mediciones reales almacenadas. Preparación: ${readiness}.`;
   return `Preparación insuficiente. ${readiness}.`;
 }
 
@@ -132,7 +132,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
     notClinicalDiagnosis: true,
     recommendedAction: realInferenceReady ? "Revisar mediciones, resumen del agente y confirmar o editar el reporte." : "Esperar inferencia real del backend antes de evaluar mediciones.",
     flags: realInferenceReady ? ["preinforme generado", "revisión humana requerida"] : ["sin inferencia real"],
-    reasons: realInferenceReady ? [`Run ${run?.runId}`, `Modo efectivo ${run?.effectiveInferenceMode}`] : [fallbackReason(run, contract) || "Sin run real disponible."],
+    reasons: realInferenceReady ? [`Corrida ${run?.runId}`, `Modo efectivo ${run?.effectiveInferenceMode}`] : [fallbackReason(run, contract) || "Sin corrida real disponible."],
   }), [contract, realInferenceReady, run]);
 
   useEffect(() => {
@@ -207,10 +207,10 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
       if (runHasRealInference(result)) {
         setEvaluationVisited(true);
         setActiveStep(3);
-        setMessage(`Run ${result.runId} finalizado con inferencia real disponible.`);
+        setMessage(`Corrida ${result.runId} finalizada con inferencia real disponible.`);
       } else {
         setActiveStep(2);
-        setMessage(`Run ${result.runId} finalizado sin inferencia real evaluable. ${fallbackReason(result, contract)}`);
+        setMessage(`Corrida ${result.runId} finalizada sin inferencia real evaluable. ${fallbackReason(result, contract)}`);
       }
     } catch (error) {
       setMessage(apiErrorMessage(error, "ejecutar análisis real"));
@@ -241,7 +241,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           .map((measurement) => ({ measurementId: measurement.id, value: measurement.value, unit: measurement.unit, comment: "Corrección desde timeline FE-P5" })),
       });
       setReviewSaved(true);
-      setMessage("Revisión guardada por el flujo existente de runs.");
+      setMessage("Revisión guardada por el flujo existente de corridas.");
     } catch (error) {
       setMessage(apiErrorMessage(error, "guardar revisión"));
     } finally {
@@ -300,7 +300,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
                   <p>{upload.fileName ?? "Sin archivo cargado"}</p>
                   <input aria-label={`Cargar plano ${planeLabel(plane)}`} accept={uploadAccept} disabled={!normalizedCaseId || upload.status === "uploading"} onChange={(event) => handleFileChange(plane, event)} type="file" />
                   {upload.status === "uploading" && <span className="technical-state">subiendo...</span>}
-                  {upload.status === "uploaded" && <StatusBadge tone="green">input real cargado</StatusBadge>}
+                  {upload.status === "uploaded" && <StatusBadge tone="green">entrada real cargada</StatusBadge>}
                   {upload.status === "error" && <span className="delta-alert">{upload.error}</span>}
                 </article>
               );
@@ -318,13 +318,13 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           <div className="section-title"><h2>2. Procesamiento</h2><StatusBadge tone={running ? "blue" : run ? realInferenceReady ? "green" : "amber" : "blue"}>{running ? "esperando modelo" : run ? realInferenceReady ? "real disponible" : "sin inferencia real" : "pendiente"}</StatusBadge></div>
           <p className="muted compact-copy">El backend no expone una señal de progreso granular. Se muestra espera honesta sin barra ni porcentaje inventado.</p>
           <dl className="settings-details">
-            <div><dt>Sagital input</dt><dd>{uploads.sagittal.input?.inputId ?? "pendiente"}</dd></div>
-            <div><dt>Axial input</dt><dd>{uploads.axial.input?.inputId ?? "pendiente"}</dd></div>
+            <div><dt>Entrada sagital</dt><dd>{uploads.sagittal.input?.inputId ?? "pendiente"}</dd></div>
+            <div><dt>Entrada axial</dt><dd>{uploads.axial.input?.inputId ?? "pendiente"}</dd></div>
             <div><dt>Modo solicitado</dt><dd>{contract?.readyForRealBaseline ? "real_baseline" : "contract"}</dd></div>
-            <div><dt>Run</dt><dd>{run?.runId ?? "sin ejecutar"}</dd></div>
+            <div><dt>Corrida</dt><dd>{run?.runId ?? "sin ejecutar"}</dd></div>
           </dl>
           {running && <div className="clinical-loading-state inline-loading"><span className="clinical-spinner" /><div><h2>Procesando</h2><p>Esperando respuesta del modelo.</p></div></div>}
-          {run && !realInferenceReady && <div className="panel-hidden-placeholder"><strong>El modelo aún no tiene inferencia real disponible.</strong><span>{fallbackReason(run, contract)}</span><span>No se habilita evaluación con mediciones placeholder.</span></div>}
+          {run && !realInferenceReady && <div className="panel-hidden-placeholder"><strong>El modelo aún no tiene inferencia real disponible.</strong><span>{fallbackReason(run, contract)}</span><span>No se habilita evaluación con mediciones de marcador.</span></div>}
           <div className="analysis-actions">
             <button className="ghost-button" onClick={() => setActiveStep(1)} type="button">Volver a carga</button>
             <button className="primary-button" disabled={!uploadsComplete || running} onClick={() => void executeRun()} type="button">{running ? "Procesando..." : "Ejecutar análisis real"}</button>
@@ -374,7 +374,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
             <button className="ghost-button" onClick={() => setActiveStep(3)} type="button">Volver a evaluación</button>
             <button className="primary-button" disabled={savingReview || !run || !reviewer.trim()} onClick={() => void saveReview()} type="button">{savingReview ? "Guardando..." : "Guardar revisión"}</button>
           </div>
-          <p className="settings-persistence-note">La revisión se persiste con `submitRunReview` sobre el run real generado. Las correcciones de mediciones editadas se envían como `measurementCorrections`.</p>
+          <p className="settings-persistence-note">La revisión se persiste con `submitRunReview` sobre la corrida real generada. Las correcciones de mediciones editadas se envían como `measurementCorrections`.</p>
         </section>
       )}
     </div>

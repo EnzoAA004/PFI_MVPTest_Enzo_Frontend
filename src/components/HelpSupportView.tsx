@@ -18,7 +18,7 @@ export function HelpSupportView() {
         <article className="panel-card compact-card help-card">
           <div className="section-title"><h2><ShieldCheck aria-hidden size={18} /> Alcance de la plataforma</h2></div>
           <ul className="check-list clean-list">
-            <li>Uso académico y de investigación sobre datos de-identificados.</li>
+            <li>Usá académico y de investigación sobre datos de-identificados.</li>
             <li>La salida del modelo es asistiva y requiere revisión humana profesional.</li>
             <li>No constituye diagnóstico clínico autónomo.</li>
             <li>Las capacidades futuras se muestran como pendientes cuando no existe soporte backend.</li>
@@ -49,7 +49,7 @@ export function HelpSupportView() {
           <ol className="support-steps">
             <li>Entrar con una cuenta profesional aprobada.</li>
             <li>Ir a Estudios o Cola de revisión y abrir un caso disponible.</li>
-            <li>Revisar imágenes, overlays reales, mediciones y notas del caso.</li>
+            <li>Revisar imágenes, superposiciones reales, mediciones y notas del caso.</li>
             <li>Guardar borrador o completar la revisión según corresponda.</li>
           </ol>
         </article>

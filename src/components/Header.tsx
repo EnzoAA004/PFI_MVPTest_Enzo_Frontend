@@ -81,12 +81,12 @@ function renderTechnicalReportHtml(payload: any) {
 </head>
 <body>
   <main>
-    <div class="eyebrow">PFI Lumbar MRI · Reporte técnico autenticado</div>
+    <div class="eyebrow">PFI Lumbar RM · Reporte técnico autenticado</div>
     <h1>${escapeHtml(payload.caseId)} · ${escapeHtml(payload.runId)}</h1>
     <p class="subtitle">Salida técnica generada por el módulo IA para revisión profesional. Datos de-identificados.</p>
 
     <section class="grid">
-      <article class="card"><span>Estado revisión</span><strong>${escapeHtml(review.status ?? payload.reviewStatus)}</strong></article>
+      <article class="card"><span>Estado de revisión</span><strong>${escapeHtml(review.status ?? payload.reviewStatus)}</strong></article>
       <article class="card"><span>Modo inferencia</span><strong>${escapeHtml(aiOutput.inferenceMode ?? asRecord(payload.metadata).inferenceMode)}</strong></article>
       <article class="card"><span>Mediciones</span><strong>${escapeHtml(quality.measurementCount ?? measurements.length)}</strong></article>
       <article class="card"><span>Modelo real</span><strong>${boolText(asRecord(payload.modelArtifact).availableForRealInference)}</strong></article>
@@ -102,7 +102,7 @@ function renderTechnicalReportHtml(payload: any) {
         <div class="fact"><dt>Fecha estudio</dt><dd>${escapeHtml(payload.studyDate)}</dd></div>
         <div class="fact"><dt>Plano</dt><dd>${escapeHtml(payload.plane)}</dd></div>
         <div class="fact"><dt>Modelo</dt><dd>${escapeHtml(payload.modelKey)} · ${escapeHtml(payload.modelVersion)}</dd></div>
-        <div class="fact"><dt>Readiness</dt><dd>${escapeHtml(aiOutput.modelReadiness ?? asRecord(payload.modelArtifact).readiness)}</dd></div>
+        <div class="fact"><dt>Preparación</dt><dd>${escapeHtml(aiOutput.modelReadiness ?? asRecord(payload.modelArtifact).readiness)}</dd></div>
         <div class="fact"><dt>Artifact</dt><dd>${escapeHtml(artifact.path)}</dd></div>
         <div class="fact"><dt>Artifact existe</dt><dd>${boolText(artifact.exists)}</dd></div>
         <div class="fact"><dt>Máscaras</dt><dd>${escapeHtml(quality.maskCount)}</dd></div>
@@ -115,7 +115,7 @@ function renderTechnicalReportHtml(payload: any) {
     <section class="section">
       <h2>Mediciones</h2>
       <table>
-        <thead><tr><th>Medición</th><th>Valor IA</th><th>Reviewer</th><th>Confianza</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Medición</th><th>Valor IA</th><th>Revisor</th><th>Confianza</th><th>Estado</th></tr></thead>
         <tbody>${rows || `<tr><td colspan="5">Sin mediciones disponibles.</td></tr>`}</tbody>
       </table>
     </section>
@@ -124,7 +124,7 @@ function renderTechnicalReportHtml(payload: any) {
       <h2>Revisión</h2>
       <dl class="facts">
         <div class="fact"><dt>Estado</dt><dd>${escapeHtml(review.status ?? payload.reviewStatus)}</dd></div>
-        <div class="fact"><dt>Reviewer</dt><dd>${escapeHtml(review.reviewer)}</dd></div>
+        <div class="fact"><dt>Revisor</dt><dd>${escapeHtml(review.reviewer)}</dd></div>
         <div class="fact"><dt>Actualizado</dt><dd>${escapeHtml(review.updatedAt)}</dd></div>
         <div class="fact"><dt>Notas</dt><dd>${escapeHtml(review.notes || "Sin notas registradas")}</dd></div>
       </dl>
@@ -247,13 +247,13 @@ export function Header({ activeView, onChangeView, currentRunId, onNewAnalysis, 
     <header className="top-header">
       <div className="search-box">
         <Search aria-hidden size={18} />
-        <input ref={searchRef} placeholder="Search studies, cases, or patients..." aria-label="Search studies, cases, or patients" />
+        <input ref={searchRef} placeholder="Buscar estudios, casos o pacientes..." aria-label="Buscar estudios, casos o pacientes" />
       </div>
       <div className="header-actions">
         <div className="profile-menu" ref={profileMenuRef}>
           <button className="profile-chip" aria-expanded={profileMenuOpen} aria-haspopup="menu" onClick={() => setProfileMenuOpen((open) => !open)} type="button">
             <UserCircle aria-hidden size={28} />
-            <span><strong>{userName ?? "Reviewer"}</strong><small>Reviewer</small></span>
+            <span><strong>{userName ?? "Revisor"}</strong><small>Revisor</small></span>
             <ChevronDown aria-hidden size={16} />
           </button>
           {profileMenuOpen && (

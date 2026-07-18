@@ -59,7 +59,7 @@ export function ProfessionalSettingsView({ user, onUserUpdated, onLogout }: Prof
     <div className="view-stack professional-settings-view">
       <section className="page-heading compact-heading">
         <div>
-          <p>Settings</p>
+          <p>Configuración</p>
           <h1>Configuración profesional</h1>
         </div>
         <div className="screen-summary">
@@ -78,7 +78,7 @@ export function ProfessionalSettingsView({ user, onUserUpdated, onLogout }: Prof
             <div><dt>Rol</dt><dd>{roles}</dd></div>
             <div><dt>Matrícula / credencial</dt><dd>{user.licenseNumber || "sin datos"}</dd></div>
             <div><dt>Centro / institución</dt><dd>{user.institution || "sin datos"}</dd></div>
-            <div><dt>Email</dt><dd>{user.email}</dd></div>
+            <div><dt>Correo</dt><dd>{user.email}</dd></div>
           </dl>
           <p className="settings-persistence-note">Edición de perfil pendiente de endpoint backend. Los datos visibles vienen de la sesión autenticada.</p>
         </article>

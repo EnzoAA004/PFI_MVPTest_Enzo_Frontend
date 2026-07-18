@@ -6,10 +6,10 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ComponentType<{ size?
   { key: "dashboard", label: "Inicio", icon: Home },
   { key: "analysis", label: "Nuevo análisis", icon: UploadCloud },
   { key: "studies", label: "Estudios", icon: Folder },
-  { key: "queue", label: "Cola de revisi?n", icon: ClipboardList, badge: "reviewQueue" },
+  { key: "queue", label: "Cola de revisión", icon: ClipboardList, badge: "reviewQueue" },
   { key: "patients", label: "Pacientes", icon: Users },
   { key: "history", label: "Historial", icon: History },
-  { key: "settings", label: "Configuraci?n", icon: Settings },
+  { key: "settings", label: "Configuración", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -34,7 +34,7 @@ export function Sidebar({ activeView, activeNavView = activeView, onChangeView, 
         </div>
         <div>
           <strong>RM lumbar</strong>
-          <span>Plataforma de an?lisis</span>
+          <span>Plataforma de análisis</span>
         </div>
       </div>
       <nav className="side-nav">
