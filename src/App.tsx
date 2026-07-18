@@ -4,17 +4,16 @@ import { logoutDoctor, updateDoctorSettings } from "./authClient";
 import { hydrateAuthSession, loadAuthSession } from "./authStorage";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
-import { AiMvpCompletionCard } from "./components/AiMvpCompletionCard";
 import { DashboardView } from "./components/DashboardView";
-import { DemoReadinessPanel } from "./components/DemoReadinessPanel";
+import { HelpSupportView } from "./components/HelpSupportView";
 import { MultiplanarWorkspaceCard } from "./components/MultiplanarWorkspaceCard";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { PatientHistoryView } from "./components/PatientHistoryView";
 import { PatientsView } from "./components/PatientsView";
 import { PendingApprovalView } from "./components/PendingApprovalView";
+import { ProfessionalSettingsView } from "./components/ProfessionalSettingsView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { StudiesView } from "./components/StudiesView";
-import { SystemDiagnosticsView } from "./components/SystemDiagnosticsView";
 import { initialAuditTrail, worklistStudies } from "./data/mockStudies";
 import { sampleRun } from "./mock/sampleRun";
 import { appendBackendAudit, getBackendReviewSnapshot, saveBackendMeasurements } from "./reviewPersistenceApi";
@@ -88,6 +87,7 @@ function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
   const [authBootstrapping, setAuthBootstrapping] = useState(true);
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
+  const [lastStudyNavView, setLastStudyNavView] = useState<"studies" | "queue">("studies");
   const [health, setHealth] = useState("consultando");
   const [models, setModels] = useState<AiModel[]>([]);
   const [backendStudies, setBackendStudies] = useState<StudyRow[]>([]);
@@ -228,6 +228,11 @@ function App() {
     void logoutDoctor().finally(() => setSession(null));
   }
 
+  function changeView(view: ViewKey) {
+    if (view === "studies" || view === "queue") setLastStudyNavView(view);
+    setActiveView(view);
+  }
+
   async function completeOnboarding() {
     setOnboardingSaving(true);
     try {
@@ -241,6 +246,7 @@ function App() {
   }
 
   function handleOpenReview(study: StudyRow) {
+    if (activeView === "studies" || activeView === "queue") setLastStudyNavView(activeView);
     saveSelectedStudyFallback(study);
     setWorkspaceCaseId(study.caseId);
     setSelectedRun(runFromStudy(study));
@@ -367,17 +373,18 @@ function App() {
   if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
 
   return (
-    <AppShell activeView={activeView} onChangeView={setActiveView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onRunDemo={handleRunDemo} loading={loading} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
+    <AppShell activeView={activeView} activeNavView={activeView === "review" ? lastStudyNavView : activeView} onChangeView={changeView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onRunDemo={handleRunDemo} loading={loading} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
       {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
       {error && <div className="toast error">{error}</div>}
       {info && <div className="toast info">{info}</div>}
-      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => setActiveView("settings")} onOpenReview={handleOpenReview} />)}
+      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando worklist" detail="Consultando estudios de-identificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
       {activeView === "studies" && <StudiesView studies={realStudyRows} mode="all" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
       {activeView === "queue" && <StudiesView studies={realStudyRows} mode="queue" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
-      {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => setActiveView("studies")} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
+      {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
       {activeView === "patients" && <PatientsView studies={realStudyRows} loading={shouldShowDataLoading} onOpenHistory={handleOpenPatientHistory} />}
-      {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (backendPatientStudies.length ? "studies-index-no-longitudinal-model" : "no-longitudinal-backend-data")} summary={patientHistoryResponse?.summary} governance={patientHistoryResponse?.governance} />)}
-      {activeView === "settings" && <><AiMvpCompletionCard /><DemoReadinessPanel /><MultiplanarWorkspaceCard caseId={workspaceCaseId} /><SystemDiagnosticsView /></>}
+      {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (backendPatientStudies.length ? "studies-index-no-longitudinal-model" : "no-longitudinal-backend-data")} summary={patientHistoryResponse?.summary} />)}
+      {activeView === "settings" && <><ProfessionalSettingsView user={session.user} onUserUpdated={(user) => setSession((current) => current ? { ...current, user } : current)} onLogout={logout} /><MultiplanarWorkspaceCard caseId={workspaceCaseId} /></>}
+      {activeView === "help" && <HelpSupportView />}
     </AppShell>
   );
 }

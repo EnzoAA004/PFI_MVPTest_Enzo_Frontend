@@ -1,6 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { PatientHistoryGovernance, PatientHistorySummary, PatientStudy } from "../appTypes";
-import { PrivacyBanner } from "./PrivacyBanner";
+import type { PatientHistorySummary, PatientStudy } from "../appTypes";
 import { PriorityBadge, ReviewBadge, StatusBadge } from "./StatusBadge";
 import { VisibilityIcon } from "./VisibilityIcon";
 
@@ -9,10 +8,9 @@ interface PatientHistoryViewProps {
   subjectRef?: string;
   source?: string;
   summary?: PatientHistorySummary;
-  governance?: PatientHistoryGovernance;
 }
 
-type HistoryTab = "overview" | "repository" | "activity" | "governance";
+type HistoryTab = "overview" | "repository" | "activity";
 type MetricKey = "lordosisAngle" | "canalDiameter" | "averageDiscHeight" | "l45DiscHeight";
 
 const longitudinalUnavailable = "Historico longitudinal no disponible - requiere modelo longitudinal en backend.";
@@ -123,7 +121,7 @@ function measurementRows(studies: PatientStudy[]) {
   }));
 }
 
-export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, summary, governance }: PatientHistoryViewProps) {
+export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, summary }: PatientHistoryViewProps) {
   const [activeTab, setActiveTab] = useState<HistoryTab>("overview");
   const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
   const visible = (id: string) => !hiddenPanels[id];
@@ -136,7 +134,6 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
   const hasAiInitialColumn = rows.some((row) => typeof row.ai === "number" && Number.isFinite(row.ai));
   const hasReviewerFinalColumn = rows.some((row) => typeof row.reviewer === "number" && Number.isFinite(row.reviewer));
   const hasLongitudinalModel = Boolean(source && !source.includes("no-longitudinal") && rows.length > 0);
-  const derivedExportPermitted = governance?.derivedMetricsExport === "permitted";
 
   function PanelTitle({ id, title, children }: { id: string; title: string; children?: ReactNode }) {
     const isVisible = visible(id);
@@ -190,7 +187,7 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
           <div><dt>Most Recent</dt><dd>{formatDate(mostRecent)}</dd></div>
         </dl>
         <div className="history-actions">
-          <button className="ghost-button" disabled={!derivedExportPermitted || studies.length === 0} onClick={exportSummary} title={derivedExportPermitted ? "Exportar resumen derivado de-identificado" : "Export restringido por governance"} type="button">Export Summary</button>
+          <button className="ghost-button" disabled={studies.length === 0} onClick={exportSummary} title="Exportar resumen derivado de-identificado" type="button">Export Summary</button>
           <button className="ghost-button" disabled title="Carga longitudinal pendiente de backend" type="button">Add Study</button>
         </div>
       </section>
@@ -199,7 +196,6 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
         <button className={activeTab === "overview" ? "active" : ""} onClick={() => setActiveTab("overview")} role="tab" aria-selected={activeTab === "overview"} type="button">Longitudinal Overview</button>
         <button className={activeTab === "repository" ? "active" : ""} onClick={() => setActiveTab("repository")} role="tab" aria-selected={activeTab === "repository"} type="button">Study Repository</button>
         <button className={activeTab === "activity" ? "active" : ""} onClick={() => setActiveTab("activity")} role="tab" aria-selected={activeTab === "activity"} type="button">Activity & Audit</button>
-        <button className={activeTab === "governance" ? "active" : ""} onClick={() => setActiveTab("governance")} role="tab" aria-selected={activeTab === "governance"} type="button">Data Governance</button>
       </div>
 
       {activeTab === "overview" && (
@@ -244,49 +240,20 @@ export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, s
               </div>
             ) : <EmptyLongitudinalState detail="Key Measurements longitudinales no disponibles - requiere historico de mediciones en backend." /> : hidden}
           </article>
-          <aside className="patient-side-stack">
-            <GovernancePanel governance={governance} visible={visible("governance-side")} hidden={hidden} title={<PanelTitle id="governance-side" title="Data Governance & Privacy" />} />
-            <ExportRulesPanel governance={governance} visible={visible("export-side")} hidden={hidden} title={<PanelTitle id="export-side" title="Export & Sharing Restrictions" />} />
-          </aside>
         </section>
       )}
 
       {activeTab === "repository" && (
-        <section className="history-grid quiet-history-grid two">
+        <section className="history-grid quiet-history-grid">
           <article className="panel-card compact-card"><PanelTitle id="repository" title="Study Repository" />{visible("repository") ? renderTimeline(studies) : hidden}</article>
-          <StudyLibrary title={<PanelTitle id="library-repository" title="Study Library"><span>Research/testing sources only</span></PanelTitle>} visible={visible("library-repository")} hidden={hidden} />
         </section>
       )}
 
       {activeTab === "activity" && (
-        <section className="history-grid quiet-history-grid two">
-          <article className="panel-card compact-card"><PanelTitle id="audit-summary" title="Data Provenance & Audit" />{visible("audit-summary") ? <ul className="check-list"><li>Human review required for every AI output.</li><li>Longitudinal model not available in current backend response.</li><li>No fabricated AI Initial or Reviewer Final series shown.</li><li>Data remains de-identified as PAT reference only.</li></ul> : hidden}</article>
+        <section className="history-grid quiet-history-grid">
           <article className="panel-card compact-card"><PanelTitle id="activity-empty" title="Activity Feed" />{visible("activity-empty") ? <EmptyLongitudinalState detail="Audit longitudinal por paciente no disponible - requiere agregacion backend." /> : hidden}</article>
         </section>
       )}
-
-      {activeTab === "governance" && (
-        <>
-          <section className="history-grid two">
-            <GovernancePanel governance={governance} visible={visible("governance")} hidden={hidden} title={<PanelTitle id="governance" title="Data Governance & Privacy" />} />
-            <ExportRulesPanel governance={governance} visible={visible("export")} hidden={hidden} title={<PanelTitle id="export" title="Export & Sharing Restrictions" />} />
-            <StudyLibrary title={<PanelTitle id="library" title="Study Library"><span>Research/testing sources only</span></PanelTitle>} visible={visible("library")} hidden={hidden} />
-          </section>
-          <PrivacyBanner />
-        </>
-      )}
     </div>
   );
-}
-
-function GovernancePanel({ governance, visible, hidden, title }: { governance?: PatientHistoryGovernance; visible: boolean; hidden: ReactNode; title: ReactNode }) {
-  return <article className="panel-card compact-card">{title}{visible ? <ul className="check-list"><li>Academic/research use only</li><li>Data de-identified</li><li>No direct identifiers</li><li>Human review required: {governance?.humanReviewRequired === false ? "No informado" : "Yes"}</li><li>Not for clinical diagnosis: {governance?.notClinicalDiagnosis === false ? "No informado" : "Yes"}</li><li>Longitudinal backend model required for trends.</li></ul> : hidden}</article>;
-}
-
-function ExportRulesPanel({ governance, visible, hidden, title }: { governance?: PatientHistoryGovernance; visible: boolean; hidden: ReactNode; title: ReactNode }) {
-  return <article className="panel-card compact-card">{title}{visible ? <div className="export-rules"><span>Raw images <strong>Not permitted</strong></span><span>Full reports <strong>Not permitted</strong></span><span>Per-patient export <strong>Not permitted</strong></span><span>Derived metrics & de-identified visuals <strong>{governance?.derivedMetricsExport === "permitted" ? "Permitted" : "Restricted"}</strong></span></div> : hidden}</article>;
-}
-
-function StudyLibrary({ title, visible, hidden }: { title: ReactNode; visible: boolean; hidden: ReactNode }) {
-  return <article className="panel-card compact-card study-library-card">{title}{visible ? <div className="library-grid quiet-library"><article><strong>Public Lumbar MRI Dataset</strong><p>Open-access multi-center lumbar MRI dataset for research/testing.</p></article><article><strong>VerSe (De-identified)</strong><p>External de-identified reference for academic benchmarking.</p></article><article><strong>SpineXchange (De-identified)</strong><p>Research/testing source only; not internal patient data.</p></article></div> : hidden}</article>;
 }

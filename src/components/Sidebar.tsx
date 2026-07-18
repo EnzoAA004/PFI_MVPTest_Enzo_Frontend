@@ -13,12 +13,13 @@ const navItems: Array<{ key: ViewKey; label: string; icon: ComponentType<{ size?
 
 interface SidebarProps {
   activeView: ViewKey;
+  activeNavView?: ViewKey;
   onChangeView: (view: ViewKey) => void;
   reviewQueueCount: number;
   systemOnline?: boolean;
 }
 
-export function Sidebar({ activeView, onChangeView, reviewQueueCount, systemOnline = true }: SidebarProps) {
+export function Sidebar({ activeView, activeNavView = activeView, onChangeView, reviewQueueCount, systemOnline = true }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -38,7 +39,7 @@ export function Sidebar({ activeView, onChangeView, reviewQueueCount, systemOnli
       <nav className="side-nav">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const selected = activeView === item.key;
+          const selected = activeNavView === item.key;
           return (
             <button className={selected ? "active" : ""} key={item.key} onClick={() => onChangeView(item.key)} type="button" aria-current={selected ? "page" : undefined}>
               <span className="side-nav-label"><Icon aria-hidden size={18} />{item.label}</span>
@@ -48,7 +49,7 @@ export function Sidebar({ activeView, onChangeView, reviewQueueCount, systemOnli
         })}
       </nav>
       <div className="sidebar-footer">
-        <button type="button"><HelpCircle aria-hidden size={16} />Help & Support</button>
+        <button className={activeNavView === "help" ? "active" : ""} type="button" onClick={() => onChangeView("help")} aria-current={activeNavView === "help" ? "page" : undefined}><HelpCircle aria-hidden size={16} />Help & Support</button>
         <span className={systemOnline ? "system-status is-online" : "system-status is-degraded"}><ShieldCheck aria-hidden size={16} />v1.3.2</span>
       </div>
     </aside>
