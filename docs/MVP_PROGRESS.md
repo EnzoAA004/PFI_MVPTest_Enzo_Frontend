@@ -21,10 +21,12 @@
 - Settings incluye panel admin para aprobar o pausar profesionales.
 - Un profesional pendiente de aprobacion ve una pantalla restringida y no accede a worklist/estudios.
 - El primer ingreso de un profesional aprobado muestra un mini tutorial de uso de la herramienta.
+- La inferencia real estricta usa el flujo recomendado `POST /api/ai/inputs` -> `inputId` opaco -> `POST /api/ai/pipeline/run`/multiplanar con `metadata.inferenceMode=real_baseline` y `allowContractFallback=false`; no se usa `inputPath: demo/...` en modo real.
+- La revisión persistida de corridas multiplanar envía `corrections` con snapshot `beforeValue`/`afterValue`, alineado con `/api/ai/runs/{multiplanarRunId}/review`.
 
 ## Pendiente
 
 - Agregar endpoint backend de export si se quiere auditar descargas desde servidor.
 - Reemplazar codigos demo por envio real de email/SMS si el alcance lo requiere.
 - Persistir historial longitudinal completo por sujeto en tablas dedicadas.
-- Conectar overlayUrl/maskContours reales cuando el AI Module entregue inferencia real.
+- Conectar maskContours por clase cuando el AI Module entregue máscaras por clase; los assets visuales se consumen via `/api/ai/assets/{runId}/{plane}/{assetName}`.

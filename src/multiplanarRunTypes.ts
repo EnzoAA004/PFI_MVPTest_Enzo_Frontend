@@ -85,12 +85,18 @@ export type MultiplanarReview = {
   recommendations?: string[];
 };
 
-export type RunReviewStatus = "accepted" | "observed" | "rejected" | "edited";
+export type RunReviewStatus = "pending" | "accepted" | "observed" | "rejected" | "edited";
 
-export type ReviewMeasurementCorrection = Record<string, string | number | boolean | null | undefined> & {
-  measurementId?: string;
-  value?: number | string | null;
+export type ReviewCorrectionValue = {
+  value: number | string | null;
   unit?: string;
+};
+
+export type ReviewMeasurementCorrection = Record<string, unknown> & {
+  measurementId?: string;
+  label?: string;
+  beforeValue?: ReviewCorrectionValue;
+  afterValue?: ReviewCorrectionValue;
   comment?: string;
 };
 
@@ -98,7 +104,7 @@ export type RunReviewRequest = {
   reviewStatus: RunReviewStatus;
   reviewer: string;
   comments?: string;
-  measurementCorrections?: ReviewMeasurementCorrection[];
+  corrections?: ReviewMeasurementCorrection[];
 };
 
 export type RunReviewResponse = {
@@ -106,7 +112,7 @@ export type RunReviewResponse = {
   reviewer: string;
   reviewedAt?: string;
   comments?: string;
-  measurementCorrections?: ReviewMeasurementCorrection[];
+  corrections?: ReviewMeasurementCorrection[];
 };
 
 export type DiagnosticEndpointResponse = Record<string, unknown> & {

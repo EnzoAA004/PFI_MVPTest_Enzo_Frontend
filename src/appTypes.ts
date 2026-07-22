@@ -7,6 +7,7 @@ export type PipelineRunRequest = {
   caseId: string;
   plane: Plane;
   modelKey: string;
+  inputId?: string;
   inputPath?: string;
   metadata?: Record<string, unknown>;
 };
@@ -200,6 +201,7 @@ export type AiRunResponse = {
   plane?: Plane;
   modelKey?: string;
   modelVersion?: string;
+  inputId?: string;
   inputPath?: string;
   metadata?: Record<string, unknown>;
   agentDecision?: AgentDecision;

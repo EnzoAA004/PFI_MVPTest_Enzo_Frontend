@@ -10,9 +10,8 @@ export interface PipelineRunRequest {
   caseId: string;
   plane: Plane;
   modelKey: string;
+  inputId?: string;
   inputPath?: string;
-  metadata?: Record<string, unknown>;
-  imageRef?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -73,6 +72,7 @@ export interface AiRunResponse {
   caseId?: string;
   plane?: Plane;
   modelKey?: string;
+  inputId?: string;
   inputPath?: string;
   metadata?: Record<string, unknown>;
   agentDecision?: AgentDecision;

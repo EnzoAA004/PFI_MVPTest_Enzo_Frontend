@@ -89,6 +89,22 @@ function runHasRealInference(run: MultiplanarRunResponse | null) {
   return workspaceReal && allPlanesReal && hasMeasurements;
 }
 
+function reviewCorrectionsFrom(measurements: Measurement[]) {
+  return measurements
+    .filter((measurement) => measurement.source === "Reviewer" || measurement.status === "editado")
+    .map((measurement) => {
+      const aiValue = measurement.aiValue ?? measurement.value;
+      const reviewerValue = measurement.reviewerValue ?? measurement.value;
+      return {
+        measurementId: measurement.id,
+        label: measurement.label,
+        beforeValue: { value: aiValue, unit: measurement.unit },
+        afterValue: { value: reviewerValue, unit: measurement.unit },
+        comment: "Corrección desde timeline FE-P5",
+      };
+    });
+}
+
 function fallbackReason(run: MultiplanarRunResponse | null, contract: MultiplanarContract | null) {
   if (!run) return "";
   const planeModes = uploadPlanes.map((plane) => `${plane}: ${run.planes?.[plane]?.effectiveInferenceMode ?? "sin corrida"}`).join(" · ");
@@ -205,7 +221,9 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
         metadata: {
           source: "frontend-analysis-timeline",
           uiFlow: "fe-p5-guided-analysis",
-          requestedInferenceMode: contract?.readyForRealBaseline ? "real_baseline" : "contract",
+          inferenceMode: "real_baseline",
+          requestedInferenceMode: "real_baseline",
+          allowContractFallback: false,
         },
       });
       setRun(result);
@@ -241,9 +259,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
         reviewStatus,
         reviewer: reviewer.trim(),
         comments: notes.trim(),
-        measurementCorrections: measurements
-          .filter((measurement) => measurement.source === "Reviewer" || measurement.status === "editado")
-          .map((measurement) => ({ measurementId: measurement.id, value: measurement.value, unit: measurement.unit, comment: "Corrección desde timeline FE-P5" })),
+        corrections: reviewCorrectionsFrom(measurements),
       });
       setReviewSaved(true);
       setMessage("Revisión guardada por el flujo existente de corridas.");
@@ -330,7 +346,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           <dl className="settings-details">
             <div><dt>Entrada sagital</dt><dd>{uploads.sagittal.input?.inputId ?? "pendiente"}</dd></div>
             <div><dt>Entrada axial</dt><dd>{uploads.axial.input?.inputId ?? "pendiente"}</dd></div>
-            <div><dt>Modo solicitado</dt><dd>{contract?.readyForRealBaseline ? "real_baseline" : "contract"}</dd></div>
+            <div><dt>Modo solicitado</dt><dd>real_baseline</dd></div>
             <div><dt>Corrida</dt><dd>{run?.runId ?? "sin ejecutar"}</dd></div>
           </dl>
           {running && <div className="clinical-loading-state inline-loading"><span className="clinical-spinner" /><div><h2>Procesando</h2><p>Esperando respuesta del modelo.</p></div></div>}
@@ -384,7 +400,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
             <button className="ghost-button" onClick={() => setActiveStep(3)} type="button">Volver a evaluación</button>
             <button className="primary-button" disabled={savingReview || !run || !reviewer.trim()} onClick={() => void saveReview()} type="button">{savingReview ? "Guardando..." : "Guardar revisión"}</button>
           </div>
-          <p className="settings-persistence-note">La revisión se persiste con `submitRunReview` sobre la corrida real generada. Las correcciones de mediciones editadas se envían como `measurementCorrections`.</p>
+          <p className="settings-persistence-note">La revisión se persiste con `submitRunReview` sobre la corrida real generada. Las correcciones de mediciones editadas se envían como `corrections` con valores before/after.</p>
         </section>
       )}
     </div>

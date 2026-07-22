@@ -36,7 +36,7 @@ Cada bloque: **Feature Futura → qué muestra hoy (estado honesto) → qué cam
 - **Se enciende:** trends (≥2 puntos reales), tabla Key Measurements AI-vs-Reviewer, Study Timeline con histórico real.
 
 ## 6. Persistencia versionada de correcciones (BE-007 / BE-008 / FE-010)
-- **Hoy:** mediciones editadas persisten vía `PUT .../measurements` (`submitRunReview` con `measurementCorrections`); landmarks quedan como **borrador local no persistido** ("pendiente BE-008/FE-010"); versionado marcado pendiente en UI.
+- **Hoy:** mediciones editadas se envían con `submitRunReview` a `/api/ai/runs/{multiplanarRunId}/review` usando `corrections` con snapshot `beforeValue`/`afterValue`; landmarks quedan como **borrador local no persistido** ("pendiente BE-008/FE-010"); versionado marcado pendiente en UI.
 - **Espera:** endpoint/modelo de **persistencia versionada** para correcciones de mediciones y **landmarks** (guardar, versionar, historial AI↔Reviewer).
 - **Se enciende:** persistencia real de landmarks, historial de versiones, "Reset to AI" contra el valor versionado.
 
