@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { BackendApiError, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
+import { BackendApiError, aiAssetUrl, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
 import type { Measurement, Plane } from "../appTypes";
-import type { InputResponse, MultiplanarMeasurementValue, MultiplanarPlaneRun, MultiplanarRunResponse, RunReviewStatus } from "../multiplanarRunTypes";
+import type { AssetName, InputResponse, MultiplanarMeasurementValue, MultiplanarPlaneRun, MultiplanarRunResponse, RunReviewStatus } from "../multiplanarRunTypes";
 import type { MultiplanarContract } from "../multiplanarTypes";
+import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
 import { AgentSummary } from "./AgentSummary";
 import { MeasurementsPanel } from "./MeasurementsPanel";
 import { SpineReconstructionPreview } from "./SpineReconstructionPreview";
@@ -43,7 +44,12 @@ function reviewStatusLabel(status: RunReviewStatus) {
 }
 
 function apiErrorMessage(error: unknown, action: string) {
-  if (error instanceof BackendApiError) return `Backend respondió ${error.status} al ${action} (${error.path}).`;
+  if (error instanceof BackendApiError) {
+    if (error.status === 408 || error.status === 504) return "La inferencia agotó el tiempo de espera.";
+    if (error.status >= 500 && error.message.toLowerCase().includes("connect")) return "El Backend no pudo conectarse con el AI Module.";
+    if (error.code === "AI_MULTIPLANAR_CONTRACT_VIOLATION" || error.code === "AI_CONTRACT_VIOLATION") return error.message;
+    return `${error.message} al ${action}. Código ${error.status}. Trace ${error.traceId ?? "no informado"}.`;
+  }
   if (error instanceof Error) return error.message;
   return `No se pudo ${action}.`;
 }
@@ -68,25 +74,13 @@ function toMeasurement(row: MultiplanarMeasurementValue, plane: Plane, index: nu
     source: "AI",
     status: "pendiente",
     outlier: Boolean(row.outlier),
+    placeholder: Boolean(row.placeholder),
   };
 }
 
 function measurementsFromRun(run: MultiplanarRunResponse | null): Measurement[] {
   if (!run?.planes) return [];
   return uploadPlanes.flatMap((plane) => measurementRows(run.planes?.[plane]).map((row, index) => toMeasurement(row, plane, index)));
-}
-
-function isRealMode(value?: string) {
-  return value === "real" || value === "real_baseline";
-}
-
-function runHasRealInference(run: MultiplanarRunResponse | null) {
-  if (!run) return false;
-  const planeRuns = uploadPlanes.map((plane) => run.planes?.[plane]);
-  const allPlanesReal = planeRuns.every((planeRun) => planeRun && isRealMode(planeRun.effectiveInferenceMode));
-  const workspaceReal = isRealMode(run.effectiveInferenceMode);
-  const hasMeasurements = measurementsFromRun(run).some((measurement) => !measurement.placeholder);
-  return workspaceReal && allPlanesReal && hasMeasurements;
 }
 
 function reviewCorrectionsFrom(measurements: Measurement[]) {
@@ -105,14 +99,105 @@ function reviewCorrectionsFrom(measurements: Measurement[]) {
     });
 }
 
+export function reviewPayloadReady(run: MultiplanarRunResponse | null, reviewer: string) {
+  return Boolean(run && evaluateDualReadiness(run).ready && reviewer.trim());
+}
+
 function fallbackReason(run: MultiplanarRunResponse | null, contract: MultiplanarContract | null) {
   if (!run) return "";
-  const planeModes = uploadPlanes.map((plane) => `${plane}: ${run.planes?.[plane]?.effectiveInferenceMode ?? "sin corrida"}`).join(" · ");
-  const readiness = uploadPlanes.map((plane) => `${plane}: ${contract?.planes?.[plane]?.readiness ?? "sin contrato"}`).join(" · ");
-  if (!isRealMode(run.effectiveInferenceMode)) return `Modo efectivo del espacio de trabajo: ${run.effectiveInferenceMode}. ${planeModes}.`;
-  if (!uploadPlanes.every((plane) => isRealMode(run.planes?.[plane]?.effectiveInferenceMode))) return `Algún plano no volvió en inferencia real. ${planeModes}.`;
-  if (!measurementsFromRun(run).length) return `La corrida no devolvió mediciones reales almacenadas. Preparación: ${readiness}.`;
-  return `Preparación insuficiente. ${readiness}.`;
+  const readiness = evaluateRealInferenceReadiness(run);
+  const contractReadiness = uploadPlanes.map((plane) => `${plane}: ${contract?.planes?.[plane]?.readiness ?? "sin contrato"}`).join(" · ");
+  return readiness.reasons.length ? `${readiness.reasons.join(" ")} Preparación: ${contractReadiness}.` : `Preparación insuficiente. ${contractReadiness}.`;
+}
+
+function planeRunStatus(run: MultiplanarRunResponse | null, plane: Plane) {
+  const result = plane === "sagittal" ? evaluateSagittalReadiness(run) : evaluateAxialReadiness(run);
+  return {
+    result,
+    mode: resolvePlaneInferenceMode(run?.planes?.[plane]) ?? "no informado",
+  };
+}
+
+function allowedAssetValue(url: string | undefined) {
+  if (!url) return "no disponible";
+  if (url.includes("mask.npy") || url.includes("confidence.npy")) return "bloqueado";
+  return url;
+}
+
+function assetRows(planeRun: MultiplanarPlaneRun | undefined, plane: Plane) {
+  const urls = resolvePlaneAssetUrls(planeRun, plane, aiAssetUrl);
+  return (["input.png", "overlay.png", "mask-preview.png"] as AssetName[]).map((assetName) => ({
+    assetName,
+    url: allowedAssetValue(urls[assetName]),
+  }));
+}
+
+function ProvenancePanel({ run }: { run: MultiplanarRunResponse | null }) {
+  const sagittal = run?.planes?.sagittal;
+  const metadata = readSpiderRuntimeMetadata(sagittal);
+  const sagittalReadiness = evaluateSagittalReadiness(run);
+  const artifactHash = sagittal?.artifactHash ?? sagittal?.aiOutput?.artifactHash;
+  const spacing = metadata.inPlaneSpacing?.length ? `${metadata.inPlaneSpacing.join(" x ")} ${metadata.inPlaneSpacingUnit ?? ""}`.trim() : "no informado";
+  return (
+    <section className="panel-card compact-card analysis-panel">
+      <div className="section-title">
+        <h2>Provenance técnica de inferencia</h2>
+        <StatusBadge tone={sagittalReadiness.ready ? "green" : "amber"}>{sagittalReadiness.ready ? "sagital final" : "incompleta"}</StatusBadge>
+      </div>
+      <p className="muted compact-copy">Evaluación técnica del runtime; no es validación clínica.</p>
+      <dl className="settings-details">
+        <div><dt>Modelo</dt><dd>{sagittal?.modelKey ?? "no informado"}</dd></div>
+        <div><dt>Versión</dt><dd>{sagittal?.modelVersion ?? "no informado"}</dd></div>
+        <div><dt>Huella</dt><dd title={artifactHash}>{abbreviateArtifactHash(artifactHash)}</dd></div>
+        <div><dt>Modo efectivo</dt><dd>{resolvePlaneInferenceMode(sagittal) ?? "no informado"}</dd></div>
+        <div><dt>inputId</dt><dd>{sagittal?.inputId ?? "no informado"}</dd></div>
+        <div><dt>Corte</dt><dd>{metadata.selectedSlice ?? "no informado"}</dd></div>
+        <div><dt>Eje</dt><dd>{metadata.selectedAxis ?? "no informado"}</dd></div>
+        <div><dt>Slices</dt><dd>{metadata.sliceCount ?? "no informado"}</dd></div>
+        <div><dt>Transformación</dt><dd>{metadata.inputOrientationTransform ?? "no informado"}</dd></div>
+        <div><dt>Spacing</dt><dd>{spacing}</dd></div>
+        <div><dt>Revisión humana</dt><dd>{String(sagittal?.humanReviewRequired ?? sagittal?.aiOutput?.humanReviewRequired ?? run?.humanReviewRequired ?? "no informado")}</dd></div>
+        <div><dt>No diagnóstico clínico</dt><dd>{String(sagittal?.notClinicalDiagnosis ?? sagittal?.aiOutput?.notClinicalDiagnosis ?? run?.notClinicalDiagnosis ?? "no informado")}</dd></div>
+      </dl>
+      {metadata.spiderShapeDetected && <p className="settings-persistence-note">Runtime SPIDER: canonicalización [512,512,17], eje sagital 2, {metadata.sliceCount ?? 17} slices, transformación move_axis_0_to_last.</p>}
+      {sagittal?.modelVersion && sagittal.modelVersion !== SAGITTAL_FINAL_MODEL_VERSION && <p className="delta-alert">La versión o huella del modelo sagital no coincide.</p>}
+      {artifactHash && artifactHash !== SAGITTAL_FINAL_ARTIFACT_HASH && <p className="delta-alert">La versión o huella del modelo sagital no coincide.</p>}
+    </section>
+  );
+}
+
+function TechnicalStatusPanel({ run }: { run: MultiplanarRunResponse | null }) {
+  const sagittal = planeRunStatus(run, "sagittal");
+  const axial = planeRunStatus(run, "axial");
+  const dual = evaluateDualReadiness(run);
+  return (
+    <section className="panel-card compact-card analysis-panel">
+      <div className="section-title">
+        <h2>Evaluación técnica del runtime</h2>
+        <StatusBadge tone={dual.ready ? "green" : "amber"}>{dual.ready ? "workspace dual disponible" : "workspace dual bloqueado"}</StatusBadge>
+      </div>
+      <dl className="settings-details">
+        <div><dt>Sagital</dt><dd>{sagittal.result.ready ? "real disponible" : "no disponible"} · {sagittal.mode}</dd></div>
+        <div><dt>Axial</dt><dd>{axial.result.ready ? "real disponible" : "no disponible"} · {axial.mode}</dd></div>
+        <div><dt>Workspace</dt><dd>{resolveWorkspaceInferenceMode(run) ?? "no informado"}</dd></div>
+      </dl>
+      {!dual.ready && <div className="panel-hidden-placeholder"><strong>Evaluación bloqueada.</strong><span>{dual.reasons.join(" ")}</span></div>}
+    </section>
+  );
+}
+
+function AssetProvenancePanel({ run }: { run: MultiplanarRunResponse | null }) {
+  if (!run?.planes) return null;
+  return (
+    <section className="panel-card compact-card analysis-panel">
+      <div className="section-title"><h2>Assets proxy del Backend</h2><StatusBadge tone="blue">sin rutas internas</StatusBadge></div>
+      <dl className="settings-details">
+        {uploadPlanes.flatMap((plane) => assetRows(run.planes?.[plane], plane).map((asset) => (
+          <div key={`${plane}-${asset.assetName}`}><dt>{planeLabel(plane)} {asset.assetName}</dt><dd>{asset.url}</dd></div>
+        )))}
+      </dl>
+    </section>
+  );
 }
 
 export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }) {
@@ -134,7 +219,10 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
 
   const normalizedCaseId = caseId.trim();
   const uploadsComplete = Boolean(normalizedCaseId && uploads.sagittal.input?.inputId && uploads.axial.input?.inputId);
-  const realInferenceReady = runHasRealInference(run);
+  const sagittalRunReady = evaluateSagittalReadiness(run);
+  const axialRunReady = evaluateAxialReadiness(run);
+  const dualRunReady = evaluateDualReadiness(run);
+  const realInferenceReady = dualRunReady.ready;
   const canOpenStep: Record<Step, boolean> = {
     1: true,
     2: uploadsComplete,
@@ -148,7 +236,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
     notClinicalDiagnosis: true,
     recommendedAction: realInferenceReady ? "Revisar mediciones, resumen del agente y confirmar o editar el reporte." : "Esperar inferencia real del backend antes de evaluar mediciones.",
     flags: realInferenceReady ? ["preinforme generado", "revisión humana requerida"] : ["sin inferencia real"],
-    reasons: realInferenceReady ? [`Corrida ${run?.runId}`, `Modo efectivo ${run?.effectiveInferenceMode}`] : [fallbackReason(run, contract) || "Sin corrida real disponible."],
+    reasons: realInferenceReady ? [`Corrida ${run?.runId}`, `Modo efectivo ${resolveWorkspaceInferenceMode(run)}`] : [fallbackReason(run, contract) || "Sin corrida real disponible."],
   }), [contract, realInferenceReady, run]);
 
   useEffect(() => {
@@ -226,16 +314,18 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           allowContractFallback: false,
         },
       });
+      const readiness = evaluateRealInferenceReadiness(result);
       setRun(result);
-      if (runHasRealInference(result)) {
+      if (readiness.ready) {
         setEvaluationVisited(true);
         setActiveStep(3);
         setMessage(`Corrida ${result.runId} finalizada con inferencia real disponible.`);
       } else {
         setActiveStep(2);
-        setMessage(`Corrida ${result.runId} finalizada sin inferencia real evaluable. ${fallbackReason(result, contract)}`);
+        setMessage(`Corrida ${result.runId} finalizada sin inferencia real evaluable. ${readiness.reasons.join(" ")}`);
       }
     } catch (error) {
+      setActiveStep(2);
       setMessage(apiErrorMessage(error, "ejecutar análisis real"));
     } finally {
       setRunning(false);
@@ -249,13 +339,15 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   }
 
   async function saveReview() {
-    if (!run || !reviewer.trim()) {
-      setMessage("Revisor obligatorio para guardar la revisión.");
+    if (!reviewPayloadReady(run, reviewer)) {
+      setMessage(!reviewer.trim() ? "Revisor obligatorio para guardar la revisión." : `La revisión requiere corrida dual real. ${dualRunReady.reasons.join(" ")}`);
       return;
     }
+    const currentRun = run;
+    if (!currentRun) return;
     setSavingReview(true);
     try {
-      await submitRunReview(run.runId, {
+      await submitRunReview(currentRun.runId, {
         reviewStatus,
         reviewer: reviewer.trim(),
         comments: notes.trim(),
@@ -340,34 +432,40 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
       )}
 
       {activeStep === 2 && (
-        <section className="panel-card compact-card analysis-panel">
-          <div className="section-title"><h2>2. Procesamiento</h2><StatusBadge tone={running ? "blue" : run ? realInferenceReady ? "green" : "amber" : "blue"}>{running ? "esperando modelo" : run ? realInferenceReady ? "real disponible" : "sin inferencia real" : "pendiente"}</StatusBadge></div>
-          <p className="muted compact-copy">El backend no expone una señal de progreso granular. Se muestra espera honesta sin barra ni porcentaje inventado.</p>
-          <dl className="settings-details">
-            <div><dt>Entrada sagital</dt><dd>{uploads.sagittal.input?.inputId ?? "pendiente"}</dd></div>
-            <div><dt>Entrada axial</dt><dd>{uploads.axial.input?.inputId ?? "pendiente"}</dd></div>
-            <div><dt>Modo solicitado</dt><dd>real_baseline</dd></div>
-            <div><dt>Corrida</dt><dd>{run?.runId ?? "sin ejecutar"}</dd></div>
-          </dl>
-          {running && <div className="clinical-loading-state inline-loading"><span className="clinical-spinner" /><div><h2>Procesando</h2><p>Esperando respuesta del modelo.</p></div></div>}
-          {run && !realInferenceReady && <div className="panel-hidden-placeholder"><strong>El modelo aún no tiene inferencia real disponible.</strong><span>{fallbackReason(run, contract)}</span><span>No se habilita evaluación con mediciones de marcador.</span></div>}
-          <div className="analysis-actions">
-            <button className="ghost-button" onClick={() => setActiveStep(1)} type="button">Volver a carga</button>
-            <button className="primary-button" disabled={!uploadsComplete || running} onClick={() => void executeRun()} type="button">{running ? "Procesando..." : "Ejecutar análisis real"}</button>
-            <button className="ghost-button" disabled={!realInferenceReady} onClick={() => setActiveStep(3)} type="button">Continuar a evaluación</button>
-          </div>
+        <section className="view-stack">
+          <section className="panel-card compact-card analysis-panel">
+            <div className="section-title"><h2>2. Procesamiento</h2><StatusBadge tone={running ? "blue" : run ? realInferenceReady ? "green" : "amber" : "blue"}>{running ? "esperando modelo" : run ? realInferenceReady ? "real disponible" : "sin inferencia real" : "pendiente"}</StatusBadge></div>
+            <p className="muted compact-copy">El backend no expone una señal de progreso granular. Se muestra espera honesta sin barra ni porcentaje inventado.</p>
+            <dl className="settings-details">
+              <div><dt>Entrada sagital</dt><dd>{uploads.sagittal.input?.inputId ?? "pendiente"}</dd></div>
+              <div><dt>Entrada axial</dt><dd>{uploads.axial.input?.inputId ?? "pendiente"}</dd></div>
+              <div><dt>Modo solicitado</dt><dd>real_baseline</dd></div>
+              <div><dt>Corrida</dt><dd>{run?.runId ?? "sin ejecutar"}</dd></div>
+            </dl>
+            {running && <div className="clinical-loading-state inline-loading"><span className="clinical-spinner" /><div><h2>Procesando</h2><p>Esperando respuesta del modelo.</p></div></div>}
+            {run && !realInferenceReady && <div className="panel-hidden-placeholder"><strong>El modelo aún no tiene inferencia real disponible.</strong><span>{fallbackReason(run, contract)}</span><span>No se habilita evaluación con mediciones de marcador.</span></div>}
+            <div className="analysis-actions">
+              <button className="ghost-button" onClick={() => setActiveStep(1)} type="button">Volver a carga</button>
+              <button className="primary-button" disabled={!uploadsComplete || running} onClick={() => void executeRun()} type="button">{running ? "Procesando..." : "Ejecutar análisis real"}</button>
+              <button className="ghost-button" disabled={!realInferenceReady} onClick={() => setActiveStep(3)} type="button">Continuar a evaluación</button>
+            </div>
+          </section>
+          <TechnicalStatusPanel run={run} />
+          {run && <ProvenancePanel run={run} />}
+          {run && <AssetProvenancePanel run={run} />}
         </section>
       )}
 
       {activeStep === 3 && (
         <section className="analysis-evaluation-grid">
-          <MeasurementsPanel measurements={measurements} inferenceStatus={run?.effectiveInferenceMode} description="Mediciones devueltas por inferencia real. Editables como borrador del revisor." onChange={updateMeasurements} />
+          <MeasurementsPanel measurements={measurements} inferenceStatus={resolveWorkspaceInferenceMode(run)} description="Mediciones devueltas por inferencia real. Editables como borrador del revisor." onChange={updateMeasurements} />
           <section className="panel-card">
             <div className="section-title"><h2>Modelo 3D</h2><StatusBadge tone="blue">atlas genérico</StatusBadge></div>
             <SpineReconstructionPreview />
             <p className="preview-meta">Representación anatómica de referencia; no paciente-específica.</p>
           </section>
           <AgentSummary agentDecision={agentDecision} />
+          <ProvenancePanel run={run} />
           <section className="panel-card compact-card analysis-panel span-all">
             <div className="analysis-actions">
               <button className="ghost-button" onClick={() => setActiveStep(2)} type="button">Volver a procesamiento</button>
@@ -398,9 +496,11 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           </label>
           <div className="analysis-actions">
             <button className="ghost-button" onClick={() => setActiveStep(3)} type="button">Volver a evaluación</button>
-            <button className="primary-button" disabled={savingReview || !run || !reviewer.trim()} onClick={() => void saveReview()} type="button">{savingReview ? "Guardando..." : "Guardar revisión"}</button>
+            <button className="primary-button" disabled={savingReview || !reviewPayloadReady(run, reviewer)} onClick={() => void saveReview()} type="button">{savingReview ? "Guardando..." : "Guardar revisión"}</button>
           </div>
           <p className="settings-persistence-note">La revisión se persiste con `submitRunReview` sobre la corrida real generada. Las correcciones de mediciones editadas se envían como `corrections` con valores before/after.</p>
+          {!dualRunReady.ready && <div className="panel-hidden-placeholder">No se puede guardar revisión sin corrida dual real: {dualRunReady.reasons.join(" ")}</div>}
+          <div className="settings-persistence-note">Capacidades preparadas: sagital {sagittalRunReady.ready ? "listo" : "bloqueado"}, axial {axialRunReady.ready ? "listo" : "bloqueado"}, dual {dualRunReady.ready ? "listo" : "bloqueado"}.</div>
         </section>
       )}
     </div>

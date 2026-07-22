@@ -19,10 +19,31 @@ export class BackendApiError extends Error {
     public readonly status: number,
     public readonly path: string,
     public readonly traceId?: string,
+    public readonly code?: string,
   ) {
     super(message);
     this.name = "BackendApiError";
   }
+}
+
+function responseString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+async function backendErrorFrom(response: Response, path: string, traceId: string) {
+  let body: Record<string, unknown> | undefined;
+  try {
+    const parsed = await response.clone().json();
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) body = parsed as Record<string, unknown>;
+  } catch {
+    body = undefined;
+  }
+  const code = responseString(body?.code) ?? responseString(body?.errorCode) ?? responseString(body?.error);
+  const backendMessage = responseString(body?.message) ?? responseString(body?.detail);
+  const message = code === "AI_MULTIPLANAR_CONTRACT_VIOLATION" || code === "AI_CONTRACT_VIOLATION"
+    ? "El modelo sagital no devolvió el contrato real esperado."
+    : backendMessage ?? `Backend respondió ${response.status}`;
+  return new BackendApiError(message, response.status, path, traceId, code);
 }
 
 async function multiplanarRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -42,7 +63,7 @@ async function multiplanarRequest<T>(path: string, init?: RequestInit): Promise<
     await refreshDoctorSession();
     response = await fetch(`${API_BASE_URL}${path}`, requestInit());
   }
-  if (!response.ok) throw new BackendApiError(`Backend respondio ${response.status}`, response.status, path, traceId);
+  if (!response.ok) throw await backendErrorFrom(response, path, traceId);
   return await response.json() as T;
 }
 

@@ -6,7 +6,7 @@ Contrato general:
 
 - Las respuestas usan `camelCase`.
 - El frontend espera `runId`, `caseId`, `plane`, `modelKey`, `measurements`, `overlayPath`, `agentDecision`, `review` y `humanReviewRequired` cuando esten disponibles.
-- Si algun campo falta, la UI debe seguir operativa y completar valores de demo/placeholder.
+- Si algun campo falta, la UI debe seguir operativa, pero no puede presentar contrato/mock/fallback como inferencia real.
 - `GET /api/ai/models` puede responder un array de modelos o un objeto `{ "models": { ... } }`; el frontend normaliza ambos formatos.
 - Si el backend no responde, el frontend activa modo demo local con mock.
 - El backend es el unico punto de integracion con el modulo Python FastAPI.
@@ -183,6 +183,46 @@ Respuesta `MultiplanarRunResponse`:
 `assetName` servibles: `input.png`, `overlay.png`, `mask-preview.png`.
 
 El frontend consume assets solo via este proxy del backend. No llama directo al AI Module y no usa paths internos.
+
+## Resolucion defensiva de modo real
+
+Por cada plano, el frontend resuelve el modo efectivo con esta precedencia:
+
+1. `planeRun.effectiveInferenceMode`
+2. `planeRun.inferenceMode`
+3. `planeRun.aiOutput.inferenceMode`
+4. `planeRun.metadata.inferenceMode`
+
+El valor se normaliza con trim/lowercase. Solo `real` y `real_baseline` habilitan evaluacion. `contract`, `mock`, `fallback`, `mixed`, ausente o `degradedMode=true` bloquean el gate.
+
+El workspace dual no usa `requestedInferenceMode` como prueba suficiente. Si ambos planos son reales y coinciden, deriva ese modo; si no, queda `mixed` o no informado.
+
+## Gate de nuevo analisis
+
+La pantalla `Nuevo analisis` exige:
+
+- `VITE_USE_MOCK=false` para E2E real.
+- `inputId` opaco por plano.
+- `allowContractFallback=false`.
+- Sagital y axial en modo real.
+- Mediciones reales no placeholder.
+- Flags de seguridad `humanReviewRequired` y `notClinicalDiagnosis`.
+- Para `sagittal_spider`: `modelVersion=sagittal-spider-final-v1`, `artifactHash=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`, `allowContractFallback=false` y `aiOutput.realInferenceAvailable=true` cuando el campo existe.
+
+Si el axial no esta real, el workspace dual permanece bloqueado. Esto prepara una futura corrida sagital aislada sin simular axial.
+
+## Provenance tecnica
+
+El frontend puede mostrar, sin exponer rutas internas:
+
+- `modelKey`, `modelVersion`, `artifactHash` abreviado.
+- modo efectivo, `inputId`.
+- `selectedSlice`, `selectedAxis`, `sliceCount`.
+- `inputShapeNative`, `inputShapeCanonical`, `inputOrientationTransform`.
+- `inPlaneSpacing`, `inPlaneSpacingUnit`.
+- `humanReviewRequired`, `notClinicalDiagnosis`.
+
+Cuando el sagital informa `inputShapeNative=[17,512,512]`, se presenta como evidencia tecnica del runtime: canonicalizacion `[512,512,17]`, eje sagital `2`, `17` slices y transformacion `move_axis_0_to_last`. No se denomina validacion clinica.
 
 ## `PATCH /api/ai/review/{runId}`
 

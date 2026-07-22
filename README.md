@@ -18,16 +18,22 @@ Copiar `.env.example` a `.env` para desarrollo local:
 
 ```text
 VITE_API_BASE_URL=http://localhost:8080
-VITE_USE_MOCK=true
+VITE_USE_MOCK=false
 ```
 
-`VITE_USE_MOCK=true` activa el modo demo local. Si el backend falla, la UI tambien usa el mock local para poder demostrar el flujo.
+`VITE_API_BASE_URL` siempre debe apuntar al Backend Spring Boot. El frontend nunca llama directo al AI Module FastAPI ni consume rutas internas del modelo.
+
+`VITE_USE_MOCK=false` es obligatorio para E2E real. `VITE_USE_MOCK=true` queda reservado para demos locales y no habilita el gate de evaluación real.
 
 ## Comandos
 
 ```bash
 npm install
 npm run dev
+npm run typecheck
+npm run lint
+npm run test:contract
+npm run test:e2e:contract
 npm run build
 npm run preview
 ```
@@ -41,8 +47,18 @@ Endpoints consumidos:
 - `POST /api/ai/pipeline/run`
 - `GET /api/ai/agent/report/{runId}`
 - `PATCH /api/ai/review/{runId}`
+- `POST /api/ai/inputs`
+- `POST /api/ai/multiplanar/run`
+- `POST/PUT /api/ai/runs/{multiplanarRunId}/review`
+- `GET /api/ai/assets/{runId}/{plane}/{assetName}`
 
 La base local esperada es `http://localhost:8080`.
+
+## Inferencia real
+
+El flujo real usa `inputId` opaco devuelto por `POST /api/ai/inputs`, `metadata.inferenceMode=real_baseline` y `allowContractFallback=false`. La pantalla de nuevo análisis resuelve defensivamente el modo efectivo por plano desde `effectiveInferenceMode`, `inferenceMode`, `aiOutput.inferenceMode` o `metadata.inferenceMode`.
+
+Para el sagital final se valida `modelVersion=sagittal-spider-final-v1` y la huella `cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`. El workspace dual queda bloqueado si el axial no vuelve en modo real. Los assets permitidos son `input.png`, `overlay.png` y `mask-preview.png`, siempre servidos por el Backend.
 
 ## Deploy en Vercel
 

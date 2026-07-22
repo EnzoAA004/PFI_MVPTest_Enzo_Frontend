@@ -127,8 +127,8 @@ function confidenceToneClass(confidence?: number) {
 
 function coordinateSpaceFrom(series?: any, landmarks?: StudyLandmark[]) {
   const fromSeries = typeof series?.coordinateSpace === "string" ? series.coordinateSpace : undefined;
-  const fromLandmark = landmarks?.find((landmark: any) => typeof landmark.coordinateSpace === "string") as any;
-  return fromSeries ?? fromLandmark?.coordinateSpace;
+  const fromLandmark = landmarks?.find((landmark: StudyLandmark) => typeof (landmark as Record<string, unknown>).coordinateSpace === "string") as Record<string, unknown> | undefined;
+  return fromSeries ?? (typeof fromLandmark?.coordinateSpace === "string" ? fromLandmark.coordinateSpace : undefined);
 }
 
 function normalizeRow(item: any): MeasurementRow {
@@ -226,7 +226,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const review = useMemo(() => displayRun.review ?? { status: "pendiente" as ReviewStatus }, [displayRun.review]);
   const seriesList = hasPipelineVisualContract ? run.series ?? fallbackSeries : Array.isArray(studyReview?.series) && studyReview.series.length ? studyReview.series : fallbackSeries;
   const masks = hasPipelineVisualContract && Array.isArray(run.masks) ? run.masks : Array.isArray(studyReview?.masks) && studyReview.masks.length ? studyReview.masks : fallbackMasks;
-  const landmarks = hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [];
+  const landmarks: StudyLandmark[] = hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [];
   const displayLandmarks = useMemo(() => {
     const byId = new Map<string, StudyLandmark>();
     landmarks.forEach((landmark) => byId.set(landmark.id, landmark));
@@ -544,7 +544,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <PanelTitle panelId="series-nav" title="Navegador de series"><span className="muted">{seriesList.length} series</span></PanelTitle>
             {panelVisible("series-nav") ? (
               <div className="series-list compact-list">
-                {seriesList.map((item: any, index) => (
+                {seriesList.map((item: any, index: number) => (
                   <button className={`series-item ${currentSeries?.id === item.id ? "active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
                     <span className="thumbnail neutral-thumbnail" aria-hidden="true"><em>{String(index + 1).padStart(2, "0")}</em></span>
                     <span><strong>{item.name}</strong><small>single served asset</small></span>
@@ -598,7 +598,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 maskVisibility={maskVisibility}
                 selectedMask={selectedMask}
                 overlayEnabled={overlayEnabled}
-                overlayOpacidad={overlayOpacidad / 100}
+                overlayOpacity={overlayOpacidad / 100}
                 editMode={editMode}
                 selectedLandmark={selectedLandmark}
                 onSelectMask={setSelectedMask}

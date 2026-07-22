@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc -b",
+    "test:contract": "node scripts/contract-tests.mjs",
+    "test:e2e:contract": "node scripts/playwright-contract-e2e.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

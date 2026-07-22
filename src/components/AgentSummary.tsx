@@ -20,7 +20,7 @@ export function AgentSummary({ agentDecision }: { agentDecision?: AgentDecision 
         <>
           <dl className="agent-grid">
             <div><dt>Estado</dt><dd>{agentDecision?.status ?? agentDecision?.agentStatus ?? "requiere_revisión"}</dd></div>
-            <div><dt>Revisión humana</dt><dd>{agentDecision?.humanReviewRequerida === false ? "Opcional" : "Requerida"}</dd></div>
+            <div><dt>Revisión humana</dt><dd>{agentDecision?.humanReviewRequired === false ? "Opcional" : "Requerida"}</dd></div>
             <div><dt>Usá clínico</dt><dd>{agentDecision?.notClinicalDiagnosis === false ? "Restringido" : "No apto para diagnóstico clínico"}</dd></div>
           </dl>
           <div className="ai-honesty-row">

@@ -35,8 +35,9 @@ export function SpineReconstructionPreview({ threeD }: Props) {
   const requiredInputs = requiredInputsFrom(threeD);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
+    const canvas = canvasRef.current as HTMLCanvasElement | null;
     if (!canvas) return;
+    const canvasElement = canvas;
     let disposed = false;
     let cleanup = () => undefined as void;
 
@@ -47,7 +48,7 @@ export function SpineReconstructionPreview({ threeD }: Props) {
         if (disposed) return;
 
         const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+        const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, alpha: true, preserveDrawingBuffer: true });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
         const scene = new THREE.Scene();
@@ -141,7 +142,7 @@ export function SpineReconstructionPreview({ threeD }: Props) {
         }
 
         function resize() {
-          const parent = canvas.parentElement;
+          const parent = canvasElement.parentElement;
           const width = Math.max(parent?.clientWidth ?? 640, 280);
           const height = Math.max(parent?.clientHeight ?? 360, 280);
           renderer.setSize(width, height, false);
@@ -163,7 +164,7 @@ export function SpineReconstructionPreview({ threeD }: Props) {
           dragging = true;
           lastX = event.clientX;
           lastY = event.clientY;
-          canvas.setPointerCapture(event.pointerId);
+          canvasElement.setPointerCapture(event.pointerId);
         }
 
         function pointerMove(event: PointerEvent) {
@@ -180,7 +181,7 @@ export function SpineReconstructionPreview({ threeD }: Props) {
         function pointerUp(event: PointerEvent) {
           dragging = false;
           try {
-            canvas.releasePointerCapture(event.pointerId);
+            canvasElement.releasePointerCapture(event.pointerId);
           } catch {
             // Browser may release capture during tab changes.
           }
@@ -192,14 +193,14 @@ export function SpineReconstructionPreview({ threeD }: Props) {
           render();
         }
 
-        canvas.addEventListener("pointerdown", pointerDown);
-        canvas.addEventListener("pointermove", pointerMove);
-        canvas.addEventListener("pointerup", pointerUp);
-        canvas.addEventListener("pointercancel", pointerUp);
-        canvas.addEventListener("wheel", wheel, { passive: false });
+        canvasElement.addEventListener("pointerdown", pointerDown);
+        canvasElement.addEventListener("pointermove", pointerMove);
+        canvasElement.addEventListener("pointerup", pointerUp);
+        canvasElement.addEventListener("pointercancel", pointerUp);
+        canvasElement.addEventListener("wheel", wheel, { passive: false });
 
         const resizeObserver = new ResizeObserver(render);
-        if (canvas.parentElement) resizeObserver.observe(canvas.parentElement);
+        if (canvasElement.parentElement) resizeObserver.observe(canvasElement.parentElement);
 
         let animation = 0;
         function animateRotation() {
@@ -244,14 +245,14 @@ export function SpineReconstructionPreview({ threeD }: Props) {
         cleanup = () => {
           window.cancelAnimationFrame(animation);
           resizeObserver.disconnect();
-          canvas.removeEventListener("pointerdown", pointerDown);
-          canvas.removeEventListener("pointermove", pointerMove);
-          canvas.removeEventListener("pointerup", pointerUp);
-          canvas.removeEventListener("pointercancel", pointerUp);
-          canvas.removeEventListener("wheel", wheel);
+          canvasElement.removeEventListener("pointerdown", pointerDown);
+          canvasElement.removeEventListener("pointermove", pointerMove);
+          canvasElement.removeEventListener("pointerup", pointerUp);
+          canvasElement.removeEventListener("pointercancel", pointerUp);
+          canvasElement.removeEventListener("wheel", wheel);
           controlsRef.current = null;
           renderer.dispose();
-          scene.traverse((object) => {
+          scene.traverse((object: { geometry?: { dispose: () => void }; material?: { dispose?: () => void } | Array<{ dispose?: () => void }> }) => {
             const mesh = object as { geometry?: { dispose: () => void }; material?: { dispose?: () => void } | Array<{ dispose?: () => void }> };
             mesh.geometry?.dispose();
             if (Array.isArray(mesh.material)) mesh.material.forEach((material) => material.dispose?.());

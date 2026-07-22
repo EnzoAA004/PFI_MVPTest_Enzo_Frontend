@@ -64,6 +64,7 @@ export type MultiplanarMeasurements = Record<string, unknown> & {
 export type RuntimeStatus = {
   status?: string;
   effectiveInferenceMode?: string;
+  inferenceMode?: string;
   requestedInferenceMode?: string;
   aiModuleAvailable?: boolean;
   degradedMode?: boolean;
@@ -140,7 +141,26 @@ export type DiagnosticEndpointResult = {
 
 export type MultiplanarPlaneRun = Omit<AiRunResponse, "landmarks" | "measurements"> & RuntimeStatus & {
   runId: string;
-  effectiveInferenceMode: string;
+  effectiveInferenceMode?: string;
+  inferenceMode?: string;
+  requestedInferenceMode?: string;
+  modelVersion?: string;
+  artifactHash?: string;
+  allowContractFallback?: boolean;
+  inputId?: string;
+  aiOutput?: {
+    inferenceMode?: string;
+    requestedInferenceMode?: string;
+    artifactHash?: string;
+    realInferenceAvailable?: boolean;
+    humanReviewRequired?: boolean;
+    notClinicalDiagnosis?: boolean;
+  } & Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  quality?: Record<string, unknown>;
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+  degradedMode?: boolean;
   assets?: PlaneAssetRefs;
   landmarks?: MultiplanarLandmark[];
   measurements?: MultiplanarMeasurements | MultiplanarMeasurementValue[];
@@ -178,7 +198,7 @@ export type MultiplanarRunResponse = {
   caseId?: string;
   workspaceMode?: "dual_plane_with_3d_context" | string;
   requestedInferenceMode?: string;
-  effectiveInferenceMode: string;
+  effectiveInferenceMode?: string;
   planes?: {
     sagittal?: MultiplanarPlaneRun;
     axial?: MultiplanarPlaneRun;
@@ -200,4 +220,5 @@ export type MultiplanarRunResponse = {
   metadata?: Record<string, unknown>;
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
+  degradedMode?: boolean;
 };
