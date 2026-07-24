@@ -173,7 +173,7 @@ export type WorkspaceAssetRefs = Partial<Record<Plane | "workspace", PlaneAssetR
 export type MultiplanarRunRequest = {
   caseId: string;
   sagittalInputId: string;
-  axialInputId: string;
+  axialInputId?: string;
   sagittalModelKey?: string;
   axialModelKey?: string;
   allowContractFallback: boolean;

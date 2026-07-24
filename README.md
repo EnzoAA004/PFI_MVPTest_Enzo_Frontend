@@ -58,7 +58,7 @@ La base local esperada es `http://localhost:8080`.
 
 El flujo real usa `inputId` opaco devuelto por `POST /api/ai/inputs`, `metadata.inferenceMode=real_baseline` y `allowContractFallback=false`. La pantalla de nuevo análisis resuelve defensivamente el modo efectivo por plano desde `effectiveInferenceMode`, `inferenceMode`, `aiOutput.inferenceMode` o `metadata.inferenceMode`.
 
-Para el sagital final se valida `modelVersion=sagittal-spider-final-v1` y la huella `cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`. El workspace dual queda bloqueado si el axial no vuelve en modo real. Los assets permitidos son `input.png`, `overlay.png` y `mask-preview.png`, siempre servidos por el Backend.
+Para el sagital final se valida `modelVersion=sagittal-spider-final-v1` y la huella `cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`. Sagital es obligatorio y principal; axial es opcional/experimental y puede quedar como `candidate_below_quality_gate` sin bloquear la revisión sagital. El workspace dual se habilita sólo cuando axial también está disponible. Los assets permitidos son `input.png`, `overlay.png` y `mask-preview.png`, siempre servidos por el Backend.
 
 ## Deploy en Vercel
 

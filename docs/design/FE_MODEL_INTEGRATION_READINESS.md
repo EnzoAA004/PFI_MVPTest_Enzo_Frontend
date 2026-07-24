@@ -14,11 +14,13 @@ Cada bloque: **Feature futura → qué muestra hoy → qué campo/contrato esper
 - **Espera del backend/modelo:**
   - Por plano, modo real en `effectiveInferenceMode`, `inferenceMode`, `aiOutput.inferenceMode` o `metadata.inferenceMode`.
   - `requestedInferenceMode` se muestra como referencia, pero no habilita por sí solo.
-  - `sagittal` y `axial` deben resolver a `real` o `real_baseline`; `contract`, `fallback`, `mock`, `mixed`, ausente o degradado bloquean.
-  - Mediciones reales no placeholder.
+  - `sagittal` debe resolver a `real` o `real_baseline`; `contract`, `fallback`, `mock`, `mixed`, ausente o degradado bloquean la revisión.
+  - Mediciones sagitales reales no placeholder.
   - Flags `humanReviewRequired` y `notClinicalDiagnosis`.
   - Para `sagittal_spider` final: `modelVersion=sagittal-spider-final-v1`, `artifactHash=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`, `allowContractFallback=false` y `aiOutput.realInferenceAvailable=true` si el campo existe.
-- **Se enciende:** paso 2→3 del timeline, evaluación con mediciones reales y flujo de aprobación sobre datos reales.
+- **Axial:** opcional y experimental. Si falta o no supera el gate, se muestra `candidate_below_quality_gate`, "uso experimental", "revisión humana requerida" y "semántica raw_* pendiente". No bloquea la revisión sagital.
+- **Workspace dual:** se enciende sólo si `sagittal` y `axial` resuelven a modo real y tienen datos reales; si axial falta, dual queda bloqueado sin simular axial.
+- **Se enciende:** paso 2→3 del timeline, evaluación con mediciones sagitales reales y flujo de aprobación sobre datos reales.
 - **Provenance:** la UI muestra metadata técnica segura (`inputId`, modo efectivo, versión/hash, slice, axis, spacing, transformación) sin paths internos y sin denominarlo validación clínica.
 
 ## 2. Coordenadas (AI-011)

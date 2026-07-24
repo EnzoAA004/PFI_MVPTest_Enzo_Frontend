@@ -99,6 +99,10 @@ export function hasRealMeasurements(run?: MultiplanarRunResponse | null) {
   return rows.some((row) => !row.placeholder && row.value !== undefined && row.value !== null && row.value !== "");
 }
 
+export function hasRealPlaneMeasurements(run: MultiplanarRunResponse | null | undefined, plane: Plane) {
+  return extractMeasurementRows(run?.planes?.[plane]).some((row) => !row.placeholder && row.value !== undefined && row.value !== null && row.value !== "");
+}
+
 export function readSpiderRuntimeMetadata(planeRun?: MultiplanarPlaneRun | null): SpiderRuntimeMetadata {
   const metadata = planeRun?.metadata;
   const inputShapeNative = metadataNumberArray(metadata, "inputShapeNative");
@@ -152,6 +156,17 @@ export function evaluateAxialReadiness(run?: MultiplanarRunResponse | null): Rea
   return { ready: reasons.length === 0, reasons };
 }
 
+export function evaluateSagittalReviewReadiness(run?: MultiplanarRunResponse | null): ReadinessResult {
+  const reasons: string[] = [];
+  if (!run) reasons.push("No hay corrida sagital.");
+  if (run?.degradedMode === true) reasons.push("La corrida estÃ¡ en modo degradado.");
+  if (run?.humanReviewRequired === false) reasons.push("La revisiÃ³n humana requerida no estÃ¡ confirmada.");
+  if (run?.notClinicalDiagnosis === false) reasons.push("La restricciÃ³n de no diagnÃ³stico clÃ­nico no estÃ¡ confirmada.");
+  reasons.push(...evaluateSagittalReadiness(run).reasons);
+  if (!hasRealPlaneMeasurements(run, "sagittal")) reasons.push("La corrida sagital no devolviÃ³ mediciones reales.");
+  return { ready: reasons.length === 0, reasons };
+}
+
 export function evaluateDualReadiness(run?: MultiplanarRunResponse | null): ReadinessResult {
   const reasons: string[] = [];
   if (!run) reasons.push("No hay corrida multiplanar.");
@@ -166,7 +181,7 @@ export function evaluateDualReadiness(run?: MultiplanarRunResponse | null): Read
 }
 
 export function evaluateRealInferenceReadiness(run?: MultiplanarRunResponse | null): ReadinessResult {
-  return evaluateDualReadiness(run);
+  return evaluateSagittalReviewReadiness(run);
 }
 
 export function abbreviateArtifactHash(hash?: string) {

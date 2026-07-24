@@ -143,6 +143,8 @@ Payload `MultiplanarRunRequest`:
 }
 ```
 
+`sagittalInputId` es obligatorio para el flujo principal. `axialInputId` es opcional y experimental: si falta o si el backend devuelve axial por debajo del gate de calidad, no se bloquea la revision sagital.
+
 Respuesta `MultiplanarRunResponse`:
 
 ```json
@@ -199,17 +201,17 @@ El workspace dual no usa `requestedInferenceMode` como prueba suficiente. Si amb
 
 ## Gate de nuevo analisis
 
-La pantalla `Nuevo analisis` exige:
+La pantalla `Nuevo analisis` exige para revision:
 
 - `VITE_USE_MOCK=false` para E2E real.
-- `inputId` opaco por plano.
+- `inputId` opaco sagital.
 - `allowContractFallback=false`.
-- Sagital y axial en modo real.
-- Mediciones reales no placeholder.
+- Sagital en modo real.
+- Mediciones sagitales reales no placeholder.
 - Flags de seguridad `humanReviewRequired` y `notClinicalDiagnosis`.
 - Para `sagittal_spider`: `modelVersion=sagittal-spider-final-v1`, `artifactHash=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`, `allowContractFallback=false` y `aiOutput.realInferenceAvailable=true` cuando el campo existe.
 
-Si el axial no esta real, el workspace dual permanece bloqueado. Esto prepara una futura corrida sagital aislada sin simular axial.
+El axial es opcional y experimental. Cuando no esta disponible debe mostrarse como `candidate_below_quality_gate`, "uso experimental", "revision humana requerida" y "semantica raw_* pendiente". El workspace dual se habilita solamente si axial tambien esta disponible en modo real; si no, queda bloqueado sin bloquear la revision sagital.
 
 ## Provenance tecnica
 

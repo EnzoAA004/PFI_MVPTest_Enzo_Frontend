@@ -38,7 +38,7 @@ function serveDist() {
 }
 
 function contractResponse() {
-  return { status: "ready", readyForRealBaseline: true, planes: { sagittal: { readiness: "real_ready" }, axial: { readiness: "real_ready" } } };
+  return { status: "ready", readyForRealBaseline: true, planes: { sagittal: { readiness: "real_ready" }, axial: { readiness: "candidate_below_quality_gate" } } };
 }
 
 function planeRun(plane, mode = "real_baseline") {
@@ -48,8 +48,8 @@ function planeRun(plane, mode = "real_baseline") {
     plane,
     inputId: `input-${plane}`,
     modelKey: plane === "sagittal" ? "sagittal_spider" : "axial_t2_alkafri",
-    modelVersion: plane === "sagittal" ? "sagittal-spider-final-v1" : "axial-real-v1",
-    artifactHash: plane === "sagittal" ? finalHash : "axial-real-artifact",
+    modelVersion: plane === "sagittal" ? "sagittal-spider-final-v1" : "axial-experimental-v1",
+    artifactHash: plane === "sagittal" ? finalHash : "axial-experimental-artifact",
     effectiveInferenceMode: mode,
     inferenceMode: mode,
     requestedInferenceMode: "real_baseline",
@@ -57,7 +57,14 @@ function planeRun(plane, mode = "real_baseline") {
     humanReviewRequired: true,
     notClinicalDiagnosis: true,
     degradedMode: false,
-    aiOutput: { inferenceMode: mode, requestedInferenceMode: "real_baseline", realInferenceAvailable: mode === "real_baseline", humanReviewRequired: true, notClinicalDiagnosis: true },
+    status: mode === "real_baseline" ? "ok" : "candidate_below_quality_gate",
+    aiOutput: {
+      inferenceMode: mode,
+      requestedInferenceMode: "real_baseline",
+      realInferenceAvailable: mode === "real_baseline",
+      humanReviewRequired: true,
+      notClinicalDiagnosis: true,
+    },
     metadata: plane === "sagittal" ? {
       inferenceMode: mode,
       selectedSlice: 8,
@@ -68,7 +75,7 @@ function planeRun(plane, mode = "real_baseline") {
       inputOrientationTransform: "move_axis_0_to_last",
       inPlaneSpacing: [0.8, 0.8],
       inPlaneSpacingUnit: "mm",
-    } : { inferenceMode: mode },
+    } : { inferenceMode: mode, semanticStatus: "raw_semantics_pending" },
     measurements: { values: [{ id: `${plane}-canal`, label: `${plane} canal`, value: 12.4, unit: "mm" }] },
     assets: {
       "input.png": { runId, plane, assetName: "input.png", url: `/api/ai/assets/${runId}/${plane}/input.png` },
@@ -79,6 +86,8 @@ function planeRun(plane, mode = "real_baseline") {
 }
 
 function runResponse(axialMode = "real_baseline") {
+  const planes = { sagittal: planeRun("sagittal", "real_baseline") };
+  if (axialMode !== "absent") planes.axial = planeRun("axial", axialMode);
   return {
     runId: `multi-run-${axialMode}`,
     effectiveInferenceMode: axialMode === "real_baseline" ? "real_baseline" : "mixed",
@@ -86,10 +95,7 @@ function runResponse(axialMode = "real_baseline") {
     humanReviewRequired: true,
     notClinicalDiagnosis: true,
     degradedMode: false,
-    planes: {
-      sagittal: planeRun("sagittal", "real_baseline"),
-      axial: planeRun("axial", axialMode),
-    },
+    planes,
   };
 }
 
@@ -127,23 +133,23 @@ async function installBackendMocks(page, axialMode) {
   let reviewPayload;
   await page.route(`${backendUrl}/api/**`, async (route) => {
     const url = new URL(route.request().url());
-    const path = url.pathname;
-    if (path === "/api/ai/multiplanar/contract") return route.fulfill({ json: contractResponse() });
-    if (path === "/api/ai/inputs") {
+    const apiPath = url.pathname;
+    if (apiPath === "/api/ai/multiplanar/contract") return route.fulfill({ json: contractResponse() });
+    if (apiPath === "/api/ai/inputs") {
       const plane = route.request().postData()?.includes("axial") ? "axial" : "sagittal";
       return route.fulfill({ json: { inputId: `input-${plane}`, caseId: "CASE-E2E", plane, format: "png", size: 123 } });
     }
-    if (path === "/api/ai/multiplanar/run") return route.fulfill({ json: runResponse(axialMode) });
-    if (path.endsWith("/review")) {
+    if (apiPath === "/api/ai/multiplanar/run") return route.fulfill({ json: runResponse(axialMode) });
+    if (apiPath.endsWith("/review")) {
       reviewPayload = route.request().postDataJSON();
       return route.fulfill({ json: { reviewStatus: reviewPayload.reviewStatus, reviewer: reviewPayload.reviewer, comments: reviewPayload.comments, corrections: reviewPayload.corrections } });
     }
-    if (path.startsWith("/api/ai/assets/")) return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgo=", "base64") });
-    if (path === "/api/ai/health") return route.fulfill({ json: { status: "ok" } });
-    if (path === "/api/ai/models") return route.fulfill({ json: [] });
-    if (path === "/api/studies") return route.fulfill({ json: { status: "ok", items: [] } });
-    if (path === "/api/studies/demo-review") return route.fulfill({ json: null });
-    if (path === "/api/review/snapshot" || path.includes("review")) return route.fulfill({ json: {} });
+    if (apiPath.startsWith("/api/ai/assets/")) return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgo=", "base64") });
+    if (apiPath === "/api/ai/health") return route.fulfill({ json: { status: "ok" } });
+    if (apiPath === "/api/ai/models") return route.fulfill({ json: [] });
+    if (apiPath === "/api/studies") return route.fulfill({ json: { status: "ok", items: [] } });
+    if (apiPath === "/api/studies/demo-review") return route.fulfill({ json: null });
+    if (apiPath === "/api/review/snapshot" || apiPath.includes("review")) return route.fulfill({ json: {} });
     return route.fulfill({ json: {} });
   });
   return () => reviewPayload;
@@ -156,11 +162,11 @@ async function openTimeline(page) {
   await page.waitForSelector("text=Carga guiada de resonancia");
 }
 
-async function uploadBothPlanes(page) {
+async function uploadScenarioInputs(page, includeAxial) {
   await page.locator('input[placeholder="CASE-XXXX"]').fill("CASE-E2E");
   const inputs = await page.locator('input[type="file"]').all();
   await inputs[0].setInputFiles({ name: "sagittal.png", mimeType: "image/png", buffer: Buffer.from("fake") });
-  await inputs[1].setInputFiles({ name: "axial.png", mimeType: "image/png", buffer: Buffer.from("fake") });
+  if (includeAxial) await inputs[1].setInputFiles({ name: "axial.png", mimeType: "image/png", buffer: Buffer.from("fake") });
   await page.waitForSelector("text=entrada real cargada");
 }
 
@@ -170,28 +176,22 @@ async function runScenario(axialMode) {
   await seedSession(page);
   const getReviewPayload = await installBackendMocks(page, axialMode);
   await openTimeline(page);
-  await uploadBothPlanes(page);
+  await uploadScenarioInputs(page, axialMode !== "absent");
   await page.locator("button", { hasText: "Continuar a procesamiento" }).click();
   await page.locator("button", { hasText: "Ejecutar análisis real" }).click();
   await page.waitForSelector("text=Evaluación técnica del runtime");
-  const blocked = axialMode !== "real_baseline";
-  if (blocked) {
-    await page.waitForSelector("text=Plano axial no volvió en real_baseline");
-    const step3Disabled = await page.locator("button", { hasText: "Continuar a evaluación" }).isDisabled();
-    assertTruthy(step3Disabled, "step 3 stays disabled when axial is contract");
-  } else {
-    await page.waitForSelector("text=Provenance técnica de inferencia");
-    await page.waitForSelector("text=cf11dcc0ad77...e944");
-    const continueToEvaluation = page.locator("button", { hasText: "Continuar a evaluación" });
-    if (await continueToEvaluation.count()) await continueToEvaluation.click();
-    await page.waitForSelector("text=Mediciones devueltas por inferencia real");
-    await page.locator("button", { hasText: "Continuar a aprobar o editar" }).click();
-    await page.locator("button", { hasText: "Guardar revisión" }).click();
-    await page.waitForSelector("text=Revisión guardada");
-    const payload = getReviewPayload();
-    assertTruthy(payload?.corrections, "review uses corrections");
-    assertTruthy(!("measurementCorrections" in payload), "review does not use measurementCorrections");
-  }
+  if (axialMode !== "real_baseline") await page.waitForSelector("text=candidate_below_quality_gate");
+  await page.waitForSelector("text=Provenance técnica de inferencia");
+  await page.waitForSelector("text=cf11dcc0ad77...e944");
+  const continueToEvaluation = page.locator("button", { hasText: "Continuar a evaluación" });
+  if (await continueToEvaluation.count()) await continueToEvaluation.click();
+  await page.waitForSelector("text=Mediciones devueltas por inferencia sagital real");
+  await page.locator("button", { hasText: "Continuar a aprobar o editar" }).click();
+  await page.locator("button", { hasText: "Guardar revisión" }).click();
+  await page.waitForSelector("text=Revisión guardada");
+  const payload = getReviewPayload();
+  assertTruthy(payload?.corrections, "review uses corrections");
+  assertTruthy(!("measurementCorrections" in payload), "review does not use measurementCorrections");
   await browser.close();
 }
 
@@ -204,6 +204,7 @@ try {
   await once(server, "listening");
   await runScenario("real_baseline");
   await runScenario("contract");
+  await runScenario("absent");
   console.log("Playwright contract E2E passed.");
 } finally {
   server.close();

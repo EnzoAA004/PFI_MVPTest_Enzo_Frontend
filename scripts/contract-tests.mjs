@@ -17,6 +17,7 @@ const {
   evaluateDualReadiness,
   evaluateRealInferenceReadiness,
   evaluateSagittalReadiness,
+  evaluateSagittalReviewReadiness,
   isRealPlaneRun,
   readSpiderRuntimeMetadata,
   resolvePlaneAssetUrls,
@@ -96,9 +97,14 @@ test("selectedSlice fuera de rango se detecta", () => assert.equal(readSpiderRun
 test("inputShape SPIDER correcta", () => assert.equal(readSpiderRuntimeMetadata(sagittalFinal).spiderShapeDetected, true));
 test("transform incorrecto produce reason", () => assert.match(evaluateSagittalReadiness({ ...realRun, planes: { ...realRun.planes, sagittal: { ...sagittalFinal, metadata: { ...spiderMetadata, inputOrientationTransform: "wrong" } } } }).reasons.join(" "), /orientación/));
 test("ambos reales habilitan", () => assert.equal(evaluateDualReadiness(realRun).ready, true));
-test("sagital real y axial contract bloquea", () => assert.equal(evaluateDualReadiness({ ...realRun, planes: { ...realRun.planes, axial: { ...axialReal, effectiveInferenceMode: "contract" } } }).ready, false));
+test("sagital real y axial contract bloquea solo dual", () => {
+  const run = { ...realRun, planes: { ...realRun.planes, axial: { ...axialReal, effectiveInferenceMode: "contract" } } };
+  assert.equal(evaluateDualReadiness(run).ready, false);
+  assert.equal(evaluateRealInferenceReadiness(run).ready, true);
+});
 test("axial real y sagital contract bloquea", () => assert.equal(evaluateDualReadiness({ ...realRun, planes: { ...realRun.planes, sagittal: { ...sagittalFinal, effectiveInferenceMode: "contract" } } }).ready, false));
 test("plano ausente bloquea", () => assert.equal(evaluateAxialReadiness({ ...realRun, planes: { sagittal: sagittalFinal } }).ready, false));
+test("plano axial ausente no bloquea revision sagital", () => assert.equal(evaluateSagittalReviewReadiness({ ...realRun, planes: { sagittal: sagittalFinal } }).ready, true));
 test("mediciones placeholder bloquean", () => assert.equal(evaluateDualReadiness({ ...realRun, planes: { sagittal: { ...sagittalFinal, measurements: { values: [placeholderMeasurement] } }, axial: { ...axialReal, measurements: { values: [placeholderMeasurement] } } } }).ready, false));
 test("mediciones reales habilitan", () => assert.equal(evaluateRealInferenceReadiness(realRun).ready, true));
 test("usa URL backend devuelta", () => assert.equal(resolvePlaneAssetUrls(sagittalFinal, "sagittal", () => "fallback")["overlay.png"], "/api/ai/assets/sag-run/sagittal/overlay.png"));
@@ -112,7 +118,7 @@ test("sampleRun no habilita evaluación real", () => assert.equal(evaluateDualRe
 test("VITE_USE_MOCK=true no presenta mock como real", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "mock" }), false));
 test("corrections usa beforeValue y afterValue", () => assert.deepEqual({ corrections: [{ measurementId: "m1", beforeValue: { value: 1, unit: "mm" }, afterValue: { value: 2, unit: "mm" } }] }.corrections[0].afterValue.value, 2));
 test("reviewer obligatorio", () => assert.equal(Boolean("".trim()), false));
-test("no guarda review sin run real", () => assert.equal(evaluateDualReadiness(null).ready, false));
+test("no guarda review sin run real", () => assert.equal(evaluateRealInferenceReadiness(null).ready, false));
 test("workspace deriva mixed cuando solo requestedInferenceMode es real", () => assert.equal(resolveWorkspaceInferenceMode({ runId: "r", requestedInferenceMode: "real_baseline" }), "mixed"));
 
 console.log(`Contract helper tests passed: ${count}`);

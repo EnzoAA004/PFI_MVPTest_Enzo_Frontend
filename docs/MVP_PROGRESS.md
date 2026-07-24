@@ -25,7 +25,7 @@
 - La revisión persistida de corridas multiplanar envía `corrections` con snapshot `beforeValue`/`afterValue`, alineado con `/api/ai/runs/{multiplanarRunId}/review`.
 - El gate multiplanar resuelve defensivamente el modo por plano (`effectiveInferenceMode`, `inferenceMode`, `aiOutput.inferenceMode`, `metadata.inferenceMode`) y bloquea contrato/mock/fallback/degradado.
 - Nuevo análisis valida el sagital final `sagittal_spider` con `modelVersion=sagittal-spider-final-v1` y `artifactHash=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`.
-- La UI muestra provenance técnica de inferencia y separa capacidades `sagittalRunReady`, `axialRunReady` y `dualRunReady` sin simular axial.
+- La UI muestra provenance técnica de inferencia y separa capacidades `sagittalRunReady`, `axialRunReady` y `dualRunReady`; sagital habilita revisión, axial queda opcional/experimental y dual se habilita sólo si axial está disponible.
 
 ## Pendiente
 
