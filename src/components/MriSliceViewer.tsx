@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
 import type { Plane, StudyLandmark } from "../appTypes";
 import type { PlaneAssetRefs } from "../multiplanarRunTypes";
+import { API_BASE_URL } from "../api";
+import { normalizeAiAssetUrl } from "../inferenceReadiness";
 import { aiAssetUrl } from "../multiplanarApi";
 
 type ViewerMode = "pan" | "window";
@@ -56,9 +58,7 @@ function coordinateSpaceFrom(series?: any, landmarks?: StudyLandmark[]) {
 }
 
 function safeAssetUrl(value: unknown) {
-  if (typeof value !== "string") return undefined;
-  if (value.includes("mask.npy") || value.includes("confidence.npy")) return undefined;
-  return value;
+  return normalizeAiAssetUrl(value, API_BASE_URL);
 }
 
 function assetRefsFrom(series?: any): PlaneAssetRefs | undefined {
@@ -120,8 +120,8 @@ export function MriSliceViewer({
 }: Props) {
   const plane = variant as Plane;
   const assets = assetRefsFrom(series);
-  const inputUrl = safeAssetUrl(series?.imageUrl) ?? safeAssetUrl(assets?.["input.png"]?.url) ?? (runId ? aiAssetUrl(runId, plane, "input.png") : undefined);
-  const overlayUrl = safeAssetUrl(series?.overlayUrl) ?? safeAssetUrl(assets?.["overlay.png"]?.url) ?? (runId ? aiAssetUrl(runId, plane, "overlay.png") : undefined);
+  const inputUrl = safeAssetUrl(series?.imageUrl) ?? safeAssetUrl(assets?.["input.png"]) ?? (runId ? aiAssetUrl(runId, plane, "input.png") : undefined);
+  const overlayUrl = safeAssetUrl(series?.overlayUrl) ?? safeAssetUrl(assets?.["overlay.png"]) ?? (runId ? aiAssetUrl(runId, plane, "overlay.png") : undefined);
   const inputState = useAssetState(inputUrl);
   const overlayState = useAssetState(overlayUrl, inputState !== "loaded");
   const [mode, setMode] = useState<ViewerMode>("pan");

@@ -209,7 +209,7 @@ La pantalla `Nuevo analisis` exige para revision:
 - Sagital en modo real.
 - Mediciones sagitales reales no placeholder.
 - Flags de seguridad `humanReviewRequired` y `notClinicalDiagnosis`.
-- Para `sagittal_spider`: `modelVersion=sagittal-spider-final-v1`, `artifactHash=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`, `allowContractFallback=false` y `aiOutput.realInferenceAvailable=true` cuando el campo existe.
+- Para `sagittal_spider`: `modelVersion=sagittal-spider-final-v1`, `artifactHash=cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944`, `allowContractFallback=false`, `aiOutput.realInferenceAvailable=true`, `modelArtifact.baselineReady=true`, `modelArtifact.availableForRealInference=true`, `humanReviewRequired=true` y `notClinicalDiagnosis=true`.
 
 El axial es opcional y experimental. Cuando no esta disponible debe mostrarse como `candidate_below_quality_gate`, "uso experimental", "revision humana requerida" y "semantica raw_* pendiente". El workspace dual se habilita solamente si axial tambien esta disponible en modo real; si no, queda bloqueado sin bloquear la revision sagital.
 
@@ -224,7 +224,7 @@ El frontend puede mostrar, sin exponer rutas internas:
 - `inPlaneSpacing`, `inPlaneSpacingUnit`.
 - `humanReviewRequired`, `notClinicalDiagnosis`.
 
-Cuando el sagital informa `inputShapeNative=[17,512,512]`, se presenta como evidencia tecnica del runtime: canonicalizacion `[512,512,17]`, eje sagital `2`, `17` slices y transformacion `move_axis_0_to_last`. No se denomina validacion clinica.
+La forma nativa sagital no se valida contra una resolucion fija. El frontend acepta metadata sagital cuando `inputShapeCanonical` tiene 3 dimensiones, `selectedAxis` es un indice valido, `inputShapeCanonical[selectedAxis]` coincide con `sliceCount`, `sliceCount > 0`, `selectedSlice` esta dentro de rango y `inputOrientationTransform` es una transformacion soportada (`none` o `move_axis_0_to_last`). Ejemplos validos: nativo `[17,512,512]` canonical `[512,512,17]` con `move_axis_0_to_last`, y nativo/canonical `[352,384,17]` con `selectedAxis=2`, `sliceCount=17`, `selectedSlice=7` y `none`. Esto es evidencia tecnica del runtime; no se denomina validacion clinica.
 
 ## `PATCH /api/ai/review/{runId}`
 

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { API_BASE_URL } from "../api";
 import { BackendApiError, aiAssetUrl, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
-import type { Measurement, Plane } from "../appTypes";
+import type { Measurement, Plane, StudyLandmark } from "../appTypes";
 import type { AssetName, InputResponse, MultiplanarMeasurementValue, MultiplanarPlaneRun, MultiplanarRunPayload, MultiplanarRunResponse, RunReviewStatus } from "../multiplanarRunTypes";
 import type { MultiplanarContract } from "../multiplanarTypes";
-import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, evaluateSagittalReviewReadiness, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
+import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, evaluateSagittalReviewReadiness, extractMeasurementRows, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
 import { AgentSummary } from "./AgentSummary";
 import { MeasurementsPanel } from "./MeasurementsPanel";
+import { MriSliceViewer } from "./MriSliceViewer";
 import { SpineReconstructionPreview } from "./SpineReconstructionPreview";
 import { StatusBadge } from "./StatusBadge";
 
@@ -55,9 +57,7 @@ function apiErrorMessage(error: unknown, action: string) {
 }
 
 function measurementRows(planeRun?: MultiplanarPlaneRun): MultiplanarMeasurementValue[] {
-  if (!planeRun) return [];
-  if (Array.isArray(planeRun.measurements)) return planeRun.measurements;
-  return planeRun.measurements?.values ?? [];
+  return extractMeasurementRows(planeRun);
 }
 
 function toMeasurement(row: MultiplanarMeasurementValue, plane: Plane, index: number): Measurement {
@@ -125,7 +125,7 @@ function allowedAssetValue(url: string | undefined) {
 }
 
 function assetRows(planeRun: MultiplanarPlaneRun | undefined, plane: Plane) {
-  const urls = resolvePlaneAssetUrls(planeRun, plane, aiAssetUrl);
+  const urls = resolvePlaneAssetUrls(planeRun, plane, aiAssetUrl, API_BASE_URL);
   return (["input.png", "overlay.png", "mask-preview.png"] as AssetName[]).map((assetName) => ({
     assetName,
     url: allowedAssetValue(urls[assetName]),
@@ -138,6 +138,8 @@ function ProvenancePanel({ run }: { run: MultiplanarRunResponse | null }) {
   const sagittalReadiness = evaluateSagittalReadiness(run);
   const artifactHash = sagittal?.artifactHash ?? sagittal?.aiOutput?.artifactHash;
   const spacing = metadata.inPlaneSpacing?.length ? `${metadata.inPlaneSpacing.join(" x ")} ${metadata.inPlaneSpacingUnit ?? ""}`.trim() : "no informado";
+  const nativeShape = metadata.inputShapeNative?.length ? `[${metadata.inputShapeNative.join(",")}]` : "no informado";
+  const canonicalShape = metadata.inputShapeCanonical?.length ? `[${metadata.inputShapeCanonical.join(",")}]` : "no informado";
   return (
     <section className="panel-card compact-card analysis-panel">
       <div className="section-title">
@@ -159,7 +161,7 @@ function ProvenancePanel({ run }: { run: MultiplanarRunResponse | null }) {
         <div><dt>Revisión humana</dt><dd>{String(sagittal?.humanReviewRequired ?? sagittal?.aiOutput?.humanReviewRequired ?? run?.humanReviewRequired ?? "no informado")}</dd></div>
         <div><dt>No diagnóstico clínico</dt><dd>{String(sagittal?.notClinicalDiagnosis ?? sagittal?.aiOutput?.notClinicalDiagnosis ?? run?.notClinicalDiagnosis ?? "no informado")}</dd></div>
       </dl>
-      {metadata.spiderShapeDetected && <p className="settings-persistence-note">Runtime SPIDER: canonicalización [512,512,17], eje sagital 2, {metadata.sliceCount ?? 17} slices, transformación move_axis_0_to_last.</p>}
+      {metadata.spiderShapeDetected && <p className="settings-persistence-note">Runtime SPIDER: forma nativa {nativeShape}, forma canónica {canonicalShape}, eje {metadata.selectedAxis}, {metadata.sliceCount} cortes, transformación {metadata.inputOrientationTransform}.</p>}
       {sagittal?.modelVersion && sagittal.modelVersion !== SAGITTAL_FINAL_MODEL_VERSION && <p className="delta-alert">La versión o huella del modelo sagital no coincide.</p>}
       {artifactHash && artifactHash !== SAGITTAL_FINAL_ARTIFACT_HASH && <p className="delta-alert">La versión o huella del modelo sagital no coincide.</p>}
     </section>
@@ -218,9 +220,12 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const [savingReview, setSavingReview] = useState(false);
   const [reviewSaved, setReviewSaved] = useState(false);
   const [evaluationVisited, setEvaluationVisited] = useState(false);
+  const [selectedSagittalLandmark, setSelectedSagittalLandmark] = useState("");
+  const [sagittalOverlayAvailable, setSagittalOverlayAvailable] = useState(false);
   const runInFlightRef = useRef(false);
 
   const normalizedCaseId = caseId.trim();
+  const sagittalPlaneRun = run?.planes?.sagittal;
   const sagittalUploadReady = Boolean(normalizedCaseId && uploads.sagittal.input?.inputId);
   const axialUploadReady = Boolean(uploads.axial.input?.inputId);
   const sagittalRunReady = evaluateSagittalReadiness(run);
@@ -448,7 +453,8 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
               <div><dt>Entrada sagital</dt><dd>{uploads.sagittal.input?.inputId ?? "pendiente"}</dd></div>
               <div><dt>Entrada axial</dt><dd>{uploads.axial.input?.inputId ?? "opcional no cargada"}</dd></div>
               <div><dt>Modo solicitado</dt><dd>real_baseline</dd></div>
-              <div><dt>Corrida</dt><dd>{run?.runId ?? "sin ejecutar"}</dd></div>
+            <div><dt>Corrida</dt><dd>{run?.runId ?? "sin ejecutar"}</dd></div>
+              {run && <div><dt>Mediciones sagitales reales</dt><dd>{measurementRows(sagittalPlaneRun).length}</dd></div>}
             </dl>
             {running && <div className="clinical-loading-state inline-loading"><span className="clinical-spinner" /><div><h2>Procesando</h2><p>Esperando respuesta del modelo.</p></div></div>}
             {run && !realInferenceReady && <div className="panel-hidden-placeholder"><strong>El modelo sagital aún no tiene inferencia real disponible.</strong><span>{fallbackReason(run, contract)}</span><span>No se habilita evaluación con mediciones de marcador.</span></div>}
@@ -466,6 +472,27 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
 
       {activeStep === 3 && (
         <section className="analysis-evaluation-grid">
+          <section className="panel-card span-all">
+            <div className="section-title">
+              <h2>Visor sagital real</h2>
+              <StatusBadge tone={sagittalOverlayAvailable ? "green" : "amber"}>{sagittalOverlayAvailable ? "superposición real disponible" : "superposición no disponible"}</StatusBadge>
+            </div>
+            <MriSliceViewer
+              variant="sagittal"
+              runId={sagittalPlaneRun?.runId}
+              series={sagittalPlaneRun?.series?.[0]}
+              masks={sagittalPlaneRun?.masks}
+              landmarks={sagittalPlaneRun?.landmarks as unknown as StudyLandmark[]}
+              maskVisibility={{}}
+              overlayEnabled
+              overlayOpacity={0.74}
+              editMode={false}
+              selectedLandmark={selectedSagittalLandmark}
+              onSelectMask={() => undefined}
+              onSelectLandmark={setSelectedSagittalLandmark}
+              onOverlayAvailableChange={setSagittalOverlayAvailable}
+            />
+          </section>
           <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(run?.planes?.sagittal) ?? resolveWorkspaceInferenceMode(run)} description="Mediciones devueltas por inferencia sagital real. Editables como borrador del revisor." onChange={updateMeasurements} />
           <section className="panel-card">
             <div className="section-title"><h2>Modelo 3D</h2><StatusBadge tone="blue">atlas genérico</StatusBadge></div>

@@ -9,6 +9,7 @@ const appUrl = `http://127.0.0.1:${port}`;
 const backendUrl = "http://localhost:8080";
 const finalHash = "cf11dcc0ad77a7c787e64a796a2fd7398ef906add461cef4b3d61f1a5238e944";
 const authKey = "lumbar-mri-auth-session-v1";
+const png1x1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64");
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -57,31 +58,55 @@ function planeRun(plane, mode = "real_baseline") {
     humanReviewRequired: true,
     notClinicalDiagnosis: true,
     degradedMode: false,
-    status: mode === "real_baseline" ? "ok" : "candidate_below_quality_gate",
+    status: plane === "sagittal" && mode === "real_baseline" ? null : "candidate_below_quality_gate",
     aiOutput: {
+      status: mode === "real_baseline" ? "real_baseline_ready" : "candidate_below_quality_gate",
       inferenceMode: mode,
       requestedInferenceMode: "real_baseline",
       realInferenceAvailable: mode === "real_baseline",
       humanReviewRequired: true,
       notClinicalDiagnosis: true,
     },
+    modelArtifact: plane === "sagittal" ? { baselineReady: true, availableForRealInference: true } : undefined,
     metadata: plane === "sagittal" ? {
       inferenceMode: mode,
-      selectedSlice: 8,
+      inputShapeNative: [352, 384, 17],
+      inputShapeCanonical: [352, 384, 17],
       selectedAxis: 2,
       sliceCount: 17,
-      inputShapeNative: [17, 512, 512],
-      inputShapeCanonical: [512, 512, 17],
-      inputOrientationTransform: "move_axis_0_to_last",
-      inPlaneSpacing: [0.8, 0.8],
-      inPlaneSpacingUnit: "mm",
+      selectedSlice: 7,
+      inputOrientationTransform: "none",
+      processedShape: [256, 256],
     } : { inferenceMode: mode, semanticStatus: "raw_semantics_pending" },
-    measurements: { values: [{ id: `${plane}-canal`, label: `${plane} canal`, value: 12.4, unit: "mm" }] },
+    measurements: plane === "sagittal"
+      ? Object.fromEntries(Array.from({ length: 9 }, (_, index) => [`measurement${index + 1}Mm`, 12 + index]))
+      : { values: [{ id: `${plane}-canal`, label: `${plane} canal`, value: 12.4, unit: "mm" }] },
     assets: {
       "input.png": { runId, plane, assetName: "input.png", url: `/api/ai/assets/${runId}/${plane}/input.png` },
       "overlay.png": { runId, plane, assetName: "overlay.png", url: `/api/ai/assets/${runId}/${plane}/overlay.png` },
-      "mask-preview.png": { runId, plane, assetName: "mask-preview.png", url: `/api/ai/assets/${runId}/${plane}/mask-preview.png` },
     },
+    series: plane === "sagittal" ? [{
+      id: "sag-series",
+      name: "Sagital real E2E",
+      plane,
+      sliceCount: 17,
+      selectedSlice: 7,
+      assets: {
+        "input.png": { runId, plane, assetName: "input.png", url: `/api/ai/assets/${runId}/${plane}/input.png` },
+        "overlay.png": { runId, plane, assetName: "overlay.png", url: `/api/ai/assets/${runId}/${plane}/overlay.png` },
+      },
+      coordinateSpace: "model_256",
+    }] : undefined,
+    masks: plane === "sagittal" ? [
+      { id: "mask-1", label: "Cuerpo vertebral", className: "vertebral_body" },
+      { id: "mask-2", label: "Disco", className: "disc" },
+      { id: "mask-3", label: "Canal espinal", className: "spinal_canal" },
+    ] : undefined,
+    landmarks: plane === "sagittal" ? [
+      { id: "lm-1", label: "L3", seriesId: "sag-series", sliceIndex: 7, x: 90, y: 80, coordinateSpace: "model_256" },
+      { id: "lm-2", label: "L4", seriesId: "sag-series", sliceIndex: 7, x: 120, y: 140, coordinateSpace: "model_256" },
+      { id: "lm-3", label: "L5", seriesId: "sag-series", sliceIndex: 7, x: 130, y: 200, coordinateSpace: "model_256" },
+    ] : undefined,
   };
 }
 
@@ -96,6 +121,7 @@ function runResponse(axialMode = "real_baseline") {
     notClinicalDiagnosis: true,
     degradedMode: false,
     planes,
+    threeD: axialMode === "absent" ? { status: "blocked_missing_axial" } : undefined,
   };
 }
 
@@ -144,7 +170,7 @@ async function installBackendMocks(page, axialMode) {
       reviewPayload = route.request().postDataJSON();
       return route.fulfill({ json: { reviewStatus: reviewPayload.reviewStatus, reviewer: reviewPayload.reviewer, comments: reviewPayload.comments, corrections: reviewPayload.corrections } });
     }
-    if (apiPath.startsWith("/api/ai/assets/")) return route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from("iVBORw0KGgo=", "base64") });
+    if (apiPath.startsWith("/api/ai/assets/")) return route.fulfill({ status: 200, contentType: "image/png", body: png1x1 });
     if (apiPath === "/api/ai/health") return route.fulfill({ json: { status: "ok" } });
     if (apiPath === "/api/ai/models") return route.fulfill({ json: [] });
     if (apiPath === "/api/studies") return route.fulfill({ json: { status: "ok", items: [] } });
@@ -185,6 +211,8 @@ async function runScenario(axialMode) {
   await page.waitForSelector("text=cf11dcc0ad77...e944");
   const continueToEvaluation = page.locator("button", { hasText: "Continuar a evaluación" });
   if (await continueToEvaluation.count()) await continueToEvaluation.click();
+  await page.waitForSelector("text=Visor sagital real");
+  await page.waitForSelector("text=overlay.png disponible");
   await page.waitForSelector("text=Mediciones devueltas por inferencia sagital real");
   await page.locator("button", { hasText: "Continuar a aprobar o editar" }).click();
   await page.locator("button", { hasText: "Guardar revisión" }).click();

@@ -22,7 +22,7 @@ export type AssetRef = {
   checksum?: string;
 };
 
-export type PlaneAssetRefs = Partial<Record<AssetName, AssetRef>>;
+export type PlaneAssetRefs = Partial<Record<AssetName, AssetRef | string>>;
 
 export type ModelPoint = {
   x: number;
@@ -149,12 +149,17 @@ export type MultiplanarPlaneRun = Omit<AiRunResponse, "landmarks" | "measurement
   allowContractFallback?: boolean;
   inputId?: string;
   aiOutput?: {
+    status?: string;
     inferenceMode?: string;
     requestedInferenceMode?: string;
     artifactHash?: string;
     realInferenceAvailable?: boolean;
     humanReviewRequired?: boolean;
     notClinicalDiagnosis?: boolean;
+  } & Record<string, unknown>;
+  modelArtifact?: {
+    baselineReady?: boolean;
+    availableForRealInference?: boolean;
   } & Record<string, unknown>;
   metadata?: Record<string, unknown>;
   quality?: Record<string, unknown>;
