@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { BackendApiError, aiAssetUrl, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
 import type { Measurement, Plane } from "../appTypes";
 import type { AssetName, InputResponse, MultiplanarMeasurementValue, MultiplanarPlaneRun, MultiplanarRunPayload, MultiplanarRunResponse, RunReviewStatus } from "../multiplanarRunTypes";
@@ -218,6 +218,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const [savingReview, setSavingReview] = useState(false);
   const [reviewSaved, setReviewSaved] = useState(false);
   const [evaluationVisited, setEvaluationVisited] = useState(false);
+  const runInFlightRef = useRef(false);
 
   const normalizedCaseId = caseId.trim();
   const sagittalUploadReady = Boolean(normalizedCaseId && uploads.sagittal.input?.inputId);
@@ -299,7 +300,8 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   }
 
   async function executeRun() {
-    if (!sagittalUploadReady) return;
+    if (!sagittalUploadReady || runInFlightRef.current) return;
+    runInFlightRef.current = true;
     setRunning(true);
     setMessage("Procesando / esperando respuesta del modelo sagital. El backend no expone progreso granular; no se muestra porcentaje.");
     try {
@@ -333,6 +335,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
       setActiveStep(2);
       setMessage(apiErrorMessage(error, "ejecutar análisis real"));
     } finally {
+      runInFlightRef.current = false;
       setRunning(false);
     }
   }
