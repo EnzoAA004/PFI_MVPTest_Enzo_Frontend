@@ -155,8 +155,9 @@ async function seedSession(page) {
   }, { authKey });
 }
 
-async function installBackendMocks(page, axialMode) {
+async function installBackendMocks(page, axialMode, options = {}) {
   let reviewPayload;
+  const assetRequests = [];
   await page.route(`${backendUrl}/api/**`, async (route) => {
     const url = new URL(route.request().url());
     const apiPath = url.pathname;
@@ -170,7 +171,13 @@ async function installBackendMocks(page, axialMode) {
       reviewPayload = route.request().postDataJSON();
       return route.fulfill({ json: { reviewStatus: reviewPayload.reviewStatus, reviewer: reviewPayload.reviewer, comments: reviewPayload.comments, corrections: reviewPayload.corrections } });
     }
-    if (apiPath.startsWith("/api/ai/assets/")) return route.fulfill({ status: 200, contentType: "image/png", body: png1x1 });
+    if (apiPath.startsWith("/api/ai/assets/")) {
+      const authorization = route.request().headers().authorization;
+      assetRequests.push({ path: apiPath, authorization, url: route.request().url() });
+      if (!authorization?.startsWith("Bearer ")) return route.fulfill({ status: 401, contentType: "application/json", json: { message: "Unauthorized" } });
+      if (options.overlayFails && apiPath.endsWith("/overlay.png")) return route.fulfill({ status: 503, contentType: "application/json", json: { message: "overlay unavailable" } });
+      return route.fulfill({ status: 200, contentType: "image/png", body: png1x1 });
+    }
     if (apiPath === "/api/ai/health") return route.fulfill({ json: { status: "ok" } });
     if (apiPath === "/api/ai/models") return route.fulfill({ json: [] });
     if (apiPath === "/api/studies") return route.fulfill({ json: { status: "ok", items: [] } });
@@ -178,7 +185,7 @@ async function installBackendMocks(page, axialMode) {
     if (apiPath === "/api/review/snapshot" || apiPath.includes("review")) return route.fulfill({ json: {} });
     return route.fulfill({ json: {} });
   });
-  return () => reviewPayload;
+  return { getReviewPayload: () => reviewPayload, assetRequests };
 }
 
 async function openTimeline(page) {
@@ -196,11 +203,11 @@ async function uploadScenarioInputs(page, includeAxial) {
   await page.waitForSelector("text=entrada real cargada");
 }
 
-async function runScenario(axialMode) {
+async function runScenario(axialMode, options = {}) {
   const browser = await chromium.launch();
   const page = await browser.newPage();
   await seedSession(page);
-  const getReviewPayload = await installBackendMocks(page, axialMode);
+  const { getReviewPayload, assetRequests } = await installBackendMocks(page, axialMode, options);
   await openTimeline(page);
   await uploadScenarioInputs(page, axialMode !== "absent");
   await page.locator("button", { hasText: "Continuar a procesamiento" }).click();
@@ -212,7 +219,15 @@ async function runScenario(axialMode) {
   const continueToEvaluation = page.locator("button", { hasText: "Continuar a evaluación" });
   if (await continueToEvaluation.count()) await continueToEvaluation.click();
   await page.waitForSelector("text=Visor sagital real");
-  await page.waitForSelector("text=overlay.png disponible");
+  await page.waitForSelector("text=Recurso real del backend");
+  if (options.overlayFails) {
+    await page.waitForSelector("text=overlay.png no disponible");
+  } else {
+    await page.waitForSelector("text=overlay.png disponible");
+  }
+  assertTruthy(assetRequests.some((request) => request.path.endsWith("/input.png") && request.authorization?.startsWith("Bearer ")), "input asset uses Bearer");
+  assertTruthy(assetRequests.some((request) => request.path.endsWith("/overlay.png") && request.authorization?.startsWith("Bearer ")), "overlay asset uses Bearer");
+  assertTruthy(assetRequests.every((request) => !request.url.includes("e2e-token") && !request.url.includes("Bearer")), "asset URLs do not include JWT");
   await page.waitForSelector("text=Mediciones devueltas por inferencia sagital real");
   await page.locator("button", { hasText: "Continuar a aprobar o editar" }).click();
   await page.locator("button", { hasText: "Guardar revisión" }).click();
@@ -233,6 +248,7 @@ try {
   await runScenario("real_baseline");
   await runScenario("contract");
   await runScenario("absent");
+  await runScenario("absent", { overlayFails: true });
   console.log("Playwright contract E2E passed.");
 } finally {
   server.close();

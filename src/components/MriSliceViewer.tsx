@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEven
 import type { Plane, StudyLandmark } from "../appTypes";
 import type { PlaneAssetRefs } from "../multiplanarRunTypes";
 import { API_BASE_URL } from "../api";
+import { useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { normalizeAiAssetUrl } from "../inferenceReadiness";
 import { aiAssetUrl } from "../multiplanarApi";
 
 type ViewerMode = "pan" | "window";
-type AssetState = "idle" | "loading" | "loaded" | "failed";
 type WindowPreset = {
   id: string;
   label: string;
@@ -65,44 +65,6 @@ function assetRefsFrom(series?: any): PlaneAssetRefs | undefined {
   return series?.assets && typeof series.assets === "object" ? series.assets as PlaneAssetRefs : undefined;
 }
 
-function useAssetState(url: string | undefined, disabled = false) {
-  const [state, setState] = useState<AssetState>(disabled || !url ? "idle" : "loading");
-
-  useEffect(() => {
-    if (disabled || !url) {
-      setState("idle");
-      return;
-    }
-    let cancelled = false;
-    setState("loading");
-    const timeout = window.setTimeout(() => {
-      if (!cancelled) setState("failed");
-    }, 2500);
-    const image = new Image();
-    image.onload = () => {
-      if (!cancelled) {
-        window.clearTimeout(timeout);
-        setState("loaded");
-      }
-    };
-    image.onerror = () => {
-      if (!cancelled) {
-        window.clearTimeout(timeout);
-        setState("failed");
-      }
-    };
-    image.src = url;
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeout);
-      image.onload = null;
-      image.onerror = null;
-    };
-  }, [disabled, url]);
-
-  return state;
-}
-
 export function MriSliceViewer({
   variant,
   runId,
@@ -122,8 +84,10 @@ export function MriSliceViewer({
   const assets = assetRefsFrom(series);
   const inputUrl = safeAssetUrl(series?.imageUrl) ?? safeAssetUrl(assets?.["input.png"]) ?? (runId ? aiAssetUrl(runId, plane, "input.png") : undefined);
   const overlayUrl = safeAssetUrl(series?.overlayUrl) ?? safeAssetUrl(assets?.["overlay.png"]) ?? (runId ? aiAssetUrl(runId, plane, "overlay.png") : undefined);
-  const inputState = useAssetState(inputUrl);
-  const overlayState = useAssetState(overlayUrl, inputState !== "loaded");
+  const inputAsset = useAuthenticatedImageUrl(inputUrl);
+  const overlayAsset = useAuthenticatedImageUrl(overlayUrl);
+  const inputState = inputAsset.state;
+  const overlayState = overlayAsset.state;
   const [mode, setMode] = useState<ViewerMode>("pan");
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
@@ -280,11 +244,11 @@ export function MriSliceViewer({
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
       >
-        {inputState === "loaded" && inputUrl ? (
+        {inputState === "loaded" && inputAsset.url ? (
           <div className="asset-transform" style={{ transform }}>
-            <img ref={imageRef} alt={`${series?.name ?? variant} recurso de entrada`} className="mri-asset-img" draggable={false} src={inputUrl} style={{ filter }} />
-            {overlayEnabled && overlayLoaded && overlayUrl && (
-              <img alt={`${series?.name ?? variant} recurso de superposición IA`} className="mri-overlay-img" draggable={false} src={overlayUrl} style={{ opacity: overlayOpacity, transform: "translateZ(0)" }} />
+            <img ref={imageRef} alt={`${series?.name ?? variant} recurso de entrada`} className="mri-asset-img" draggable={false} src={inputAsset.url} style={{ filter }} />
+            {overlayEnabled && overlayLoaded && overlayAsset.url && (
+              <img alt={`${series?.name ?? variant} recurso de superposición IA`} className="mri-overlay-img" draggable={false} src={overlayAsset.url} style={{ opacity: overlayOpacity, transform: "translateZ(0)" }} />
             )}
             {realLandmarks.map((landmark) => (
               <button
