@@ -1,6 +1,6 @@
 import { authHeaders, refreshDoctorSession } from "./authClient";
 import { appDataMode, isDemoDataMode, isRealDataMode, markDataOrigin } from "./dataMode";
-import type { AgentDecision, AiModel, AiRunResponse, DataOrigin, Measurement, PipelineRunRequest, Plane, Priority, RawMeasurements, ReviewExportRequest, ReviewExportResponse, ReviewStatus, ReviewStatusResponse, ReviewUpdateRequest, StudiesResponse, StudyRow, SystemDiagnostics } from "./appTypes";
+import type { AgentDecision, AiModel, AiRunResponse, CanonicalReviewStatus, DataOrigin, Measurement, PipelineRunRequest, Plane, Priority, RawMeasurements, ReviewExportRequest, ReviewExportResponse, ReviewMeasurementCorrection, ReviewStatus, ReviewStatusResponse, ReviewUpdateRequest, StudiesResponse, StudyRow, SystemDiagnostics } from "./appTypes";
 
 declare global {
   interface Window {
@@ -54,8 +54,17 @@ function mapPriority(value?: string): Priority {
 }
 
 function mapReviewStatus(value?: string): ReviewStatus {
-  if (value === "aceptado" || value === "observado" || value === "descartado") return value;
+  if (value === "accepted" || value === "aceptado") return "aceptado";
+  if (value === "observed" || value === "edited" || value === "observado") return "observado";
+  if (value === "rejected" || value === "descartado") return "descartado";
   return "pendiente";
+}
+
+function toCanonicalReviewStatus(status: ReviewStatus): CanonicalReviewStatus {
+  if (status === "aceptado") return "accepted";
+  if (status === "observado") return "observed";
+  if (status === "descartado") return "rejected";
+  return "pending";
 }
 
 function normalizePlane(value: unknown): Plane | undefined {
@@ -124,12 +133,14 @@ function normalizeModels(response: unknown): AiModel[] {
   throw new ContractError("Formato invalido de modelos.", "/api/ai/models");
 }
 
-function normalizeReview(runId: string, review?: ReviewStatusResponse): ReviewStatusResponse {
+function normalizeReview(runId: string, review?: ReviewStatusResponse & { reviewStatus?: string; comments?: string; multiplanarRunId?: string }): ReviewStatusResponse {
+  const status = mapReviewStatus(review?.reviewStatus ?? review?.status);
+  const normalizedRunId = review?.runId ?? review?.multiplanarRunId ?? runId;
   return {
-    runId: review?.runId ?? runId,
-    status: review?.status ?? "pendiente",
-    notes: review?.notes ?? review?.observations ?? "",
-    observations: review?.observations ?? review?.notes ?? "",
+    runId: normalizedRunId,
+    status,
+    notes: review?.notes ?? review?.observations ?? review?.comments ?? "",
+    observations: review?.observations ?? review?.notes ?? review?.comments ?? "",
     reviewer: review?.reviewer ?? "",
     updatedAt: review?.updatedAt ?? review?.reviewedAt,
     reviewedAt: review?.reviewedAt ?? review?.updatedAt,
@@ -256,6 +267,34 @@ function validateReviewPayload(payload: ReviewUpdateRequest) {
   const status = payload.status;
   const notes = String(payload.notes ?? payload.observations ?? "").trim();
   if ((status === "observado" || status === "descartado") && notes.length < 5) throw new Error("Para observar o descartar un caso, agrega una nota profesional descriptiva.");
+}
+
+function valuesDiffer(beforeValue: unknown, afterValue: unknown) {
+  return String(beforeValue ?? "").trim() !== String(afterValue ?? "").trim();
+}
+
+export function buildReviewCorrections(measurements: Measurement[] = [], comment?: string): ReviewMeasurementCorrection[] {
+  return measurements.flatMap((measurement) => {
+    const aiValue = measurement.aiValue ?? measurement.value;
+    const reviewerValue = measurement.reviewerValue;
+    if (reviewerValue === undefined || reviewerValue === null || reviewerValue === "" || !valuesDiffer(aiValue, reviewerValue)) return [];
+    return [{
+      measurementId: measurement.id,
+      label: measurement.label,
+      beforeValue: {
+        value: aiValue ?? null,
+        unit: measurement.unit,
+        confidence: measurement.confidence,
+        plane: measurement.plane,
+      },
+      afterValue: {
+        value: reviewerValue,
+        unit: measurement.unit,
+        plane: measurement.plane,
+      },
+      ...(comment ? { comment } : {}),
+    }];
+  });
 }
 
 export function normalizeRealRun(run?: AiRunResponse): AiRunResponse {
@@ -465,16 +504,18 @@ export async function getAgentReport(runId: string): Promise<AiRunResponse> {
 
 export async function updateReview(runId: string, payload: ReviewUpdateRequest): Promise<ReviewStatusResponse> {
   validateReviewPayload(payload);
+  const comments = payload.notes ?? payload.observations ?? "";
+  const corrections = payload.corrections ?? buildReviewCorrections(payload.measurements ?? [], comments);
   const body = {
-    status: payload.status,
-    notes: payload.notes ?? payload.observations ?? "",
-    observations: payload.observations ?? payload.notes ?? "",
+    reviewStatus: toCanonicalReviewStatus(payload.status),
     reviewer: payload.reviewer ?? "Revisor",
+    comments,
+    corrections,
   };
   return request<ReviewStatusResponse>(
-    `/api/ai/review/${runId}`,
-    { method: "PATCH", body: JSON.stringify(body) },
-    isDemoDataMode ? () => normalizeReview(runId, { ...body, runId, updatedAt: new Date().toISOString() }) : undefined,
+    `/api/ai/runs/${encodeURIComponent(runId)}/review`,
+    { method: "PUT", body: JSON.stringify(body) },
+    isDemoDataMode ? () => normalizeReview(runId, { reviewStatus: body.reviewStatus, reviewer: body.reviewer, comments: body.comments, runId, updatedAt: new Date().toISOString() }) : undefined,
   ).then((review) => normalizeReview(runId, review));
 }
 

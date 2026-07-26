@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
+import { isRealDataMode } from "./dataMode";
 import type { AuditEvent, Measurement, ReviewStatusResponse } from "./appTypes";
 
 function requestInit(init?: RequestInit): RequestInit {
@@ -54,11 +55,13 @@ function normalizeSnapshot(snapshot: BackendReviewSnapshot): BackendReviewSnapsh
 }
 
 export async function getBackendReviewSnapshot() {
+  if (isRealDataMode) throw new Error("Endpoint legacy /api/ai/review/history deshabilitado en modo real.");
   const snapshot = await request<BackendReviewSnapshot>("/api/ai/review/history");
   return normalizeSnapshot(snapshot);
 }
 
 export function saveBackendMeasurements(runId: string, measurements: Measurement[], reviewer: string, detail: string) {
+  if (isRealDataMode) return Promise.reject(new Error("Endpoint legacy /api/ai/review/{runId}/measurements deshabilitado en modo real."));
   return request<Measurement[]>(`/api/ai/review/${runId}/measurements`, {
     method: "PUT",
     body: JSON.stringify({ measurements, reviewer, detail }),

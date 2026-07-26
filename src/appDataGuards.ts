@@ -142,3 +142,7 @@ export function deriveSummary(items: StudyRow[]): StudiesSummary {
     flagged: items.filter((item) => item.priority === "alta" || item.reviewStatus === "observado").length,
   };
 }
+
+export function isReviewQueueItem(study: StudyRow) {
+  return study.reviewStatus === "pendiente" || study.reviewStatus === "observado";
+}

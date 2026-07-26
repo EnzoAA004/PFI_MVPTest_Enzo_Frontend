@@ -9,6 +9,9 @@ function mapPriority(value?: string): Priority {
 }
 
 function mapStatus(value?: string): ReviewStatus {
+  if (value === "accepted") return "aceptado";
+  if (value === "observed" || value === "edited") return "observado";
+  if (value === "rejected") return "descartado";
   if (value === "aceptado" || value === "observado" || value === "descartado") return value;
   return "pendiente";
 }
@@ -45,7 +48,7 @@ function normalizePlanes(value: unknown): Plane[] {
   return value.map(mapPlane).filter((plane): plane is Plane => Boolean(plane));
 }
 
-function normalizeStudy(value: unknown, fallback?: StudyRow): StudyRow {
+function normalizeStudy(value: unknown, fallback?: Partial<StudyRow>): StudyRow {
   const row = asRecord(value);
   if (!row) throw new ContractError("Detalle de estudio invalido.", "/api/studies/{caseId}");
   const subjectRef = optionalString(row, "subjectRef") ?? optionalString(row, "patientId");
@@ -186,7 +189,7 @@ async function readJson(path: string) {
   return await response.json() as Record<string, unknown>;
 }
 
-export async function fetchStudyDetail(study: StudyRow): Promise<StudyDetailResponse> {
+export async function fetchStudyDetail(study: Pick<StudyRow, "caseId"> & Partial<StudyRow>): Promise<StudyDetailResponse> {
   const payload = await readJson(`/api/studies/${study.caseId}`);
   const normalizedStudy = normalizeStudy(payload.study ?? study, study);
   const runs = Array.isArray(payload.runs) ? payload.runs.map((run) => normalizeRun(run, normalizedStudy)) : [];
@@ -205,7 +208,8 @@ export async function fetchStudyDetail(study: StudyRow): Promise<StudyDetailResp
   };
 }
 
-export async function fetchStudyRuns(study: StudyRow): Promise<StudyRun[]> {
+export async function fetchStudyRuns(study: Pick<StudyRow, "caseId"> & Partial<StudyRow>): Promise<StudyRun[]> {
   const payload = await readJson(`/api/studies/${study.caseId}/runs`);
-  return Array.isArray(payload.runs) ? payload.runs.map((run) => normalizeRun(run, study)) : [];
+  const normalizedStudy = normalizeStudy(study, study);
+  return Array.isArray(payload.runs) ? payload.runs.map((run) => normalizeRun(run, normalizedStudy)) : [];
 }

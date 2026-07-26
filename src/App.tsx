@@ -14,9 +14,9 @@ import { PendingApprovalView } from "./components/PendingApprovalView";
 import { ProfessionalSettingsView } from "./components/ProfessionalSettingsView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { StudiesView } from "./components/StudiesView";
-import { deriveSummary, mergeStudyRowsWithSelectedRun, normalizeSelectedRunForReview, selectReviewableRunFromDetail, shouldFetchSubjectHistory, toSelectedStudyReference } from "./appDataGuards";
+import { deriveSummary, isReviewQueueItem, mergeStudyRowsWithSelectedRun, normalizeSelectedRunForReview, selectReviewableRunFromDetail, shouldFetchSubjectHistory, toSelectedStudyReference } from "./appDataGuards";
 import { isDemoDataMode, validateVisibleDataOrigin } from "./dataMode";
-import { appendBackendAudit, getBackendReviewSnapshot, saveBackendMeasurements } from "./reviewPersistenceApi";
+import { appendBackendAudit, getBackendReviewSnapshot } from "./reviewPersistenceApi";
 import { saveSelectedStudyDetail } from "./selectedStudyStorage";
 import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessionalReview } from "./storage";
 import { fetchStudyDetail } from "./studyApi";
@@ -63,6 +63,15 @@ function approvalWasCancelled(status: ReviewStatus) {
 
 function isBackendValidationError(error: unknown) {
   return error instanceof Error && (error.message.includes("400") || error.message.toLowerCase().includes("nota profesional"));
+}
+
+function apiErrorDetail(error: unknown) {
+  if (!error || typeof error !== "object") return error instanceof Error ? error.message : "Error desconocido";
+  const record = error as Record<string, unknown>;
+  const message = error instanceof Error ? error.message : typeof record.message === "string" ? record.message : "Error desconocido";
+  const code = typeof record.code === "string" ? record.code : undefined;
+  const traceId = typeof record.traceId === "string" ? record.traceId : undefined;
+  return [code ? `code=${code}` : undefined, message, traceId ? `traceId=${traceId}` : undefined].filter(Boolean).join(" · ");
 }
 
 function App() {
@@ -117,7 +126,7 @@ function App() {
   const shouldShowDataLoading = databaseDataStatus === "loading" && backendStudies.length === 0;
   const historySubjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? null;
   const realStudyRows = studiesBackendAvailable ? studies : [];
-  const reviewQueueCount = realStudyRows.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
+  const reviewQueueCount = realStudyRows.filter(isReviewQueueItem).length;
   const pendingApproval = Boolean(session && (session.user.approved === false || session.user.roles.includes("PENDING_APPROVAL")));
   const needsOnboarding = Boolean(session && session.user.approved !== false && !session.user.roles.includes("PENDING_APPROVAL") && session.user.onboardingCompleted === false);
 
@@ -155,7 +164,7 @@ function App() {
         getHealth(),
         getModels(),
         getStudies(),
-        getBackendReviewSnapshot(),
+        isDemoDataMode ? getBackendReviewSnapshot() : Promise.resolve(null),
       ]);
       if (cancelled) return;
 
@@ -192,7 +201,9 @@ function App() {
       }
 
       setStudyReview(null);
-      if (snapshotResult.status === "fulfilled") {
+      if (!isDemoDataMode) {
+        setReviewSnapshotStatus("idle");
+      } else if (snapshotResult.status === "fulfilled") {
         setReviewSnapshotStatus("ready");
         if (snapshotResult.value?.auditTrail?.length) setAuditTrail(snapshotResult.value.auditTrail);
       } else {
@@ -311,12 +322,30 @@ function App() {
       return;
     }
     setMeasurements(nextMeasurements);
-    saveMeasurementEdits(runId, nextMeasurements);
-    void saveBackendMeasurements(runId, nextMeasurements, session?.user.fullName ?? "Revisor", detail).catch(() => undefined);
+    if (isDemoDataMode) saveMeasurementEdits(runId, nextMeasurements);
     recordAudit("medicion editada", detail);
   }
 
-  async function handleSaveReview(status: ReviewStatus, notes: string) {
+  async function refreshStudiesFromPostgres() {
+    const studyResponse = await getStudies();
+    setStudiesBackendAvailable(studyResponse.status !== "demo");
+    setBackendStudies(studyResponse.items);
+    setStudiesSummary(studyResponse.summary ?? deriveSummary(studyResponse.items));
+    setDatabaseDataStatus(studyResponse.items.length ? "ready" : "empty");
+    setStudiesError("");
+    return studyResponse;
+  }
+
+  async function refreshSelectedStudyFromPostgres() {
+    if (!selectedStudy) return;
+    const detail = await fetchStudyDetail({ caseId: selectedStudy.caseId });
+    saveSelectedStudyDetail(detail);
+    setMeasurements(detail.measurements ?? []);
+    const reviewableRun = selectReviewableRunFromDetail(detail);
+    if (reviewableRun) setSelectedRun(reviewableRun);
+  }
+
+  async function handleSaveReview(status: ReviewStatus, notes: string, reviewMeasurements: Measurement[]) {
     setSaving(true); setError(""); setInfo("");
     const trimmedNotes = notes.trim();
     if (reviewRequiresNotes(status, trimmedNotes)) {
@@ -336,10 +365,12 @@ function App() {
       return undefined;
     }
     try {
-      const review = await updateReview(runId, { status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Revisor" });
+      const review = await updateReview(runId, { status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Revisor", measurements: reviewMeasurements });
       setSelectedRun((current) => current ? { ...current, review } : current);
-      setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: review.status ?? status } : row));
-      saveProfessionalReview(runId, review);
+      setBackendStudies((current) => current.map((row) => (row.latestRunId ?? row.runId) === runId ? { ...row, reviewStatus: review.status ?? status } : row));
+      if (isDemoDataMode) saveProfessionalReview(runId, review);
+      await refreshStudiesFromPostgres();
+      await refreshSelectedStudyFromPostgres();
       recordAudit(status === "aceptado" ? "estado aprobado" : status === "observado" ? "estado observado" : "revision guardada", `Revision ${status} guardada para ${runId}.`);
       setInfo(isDemoMode() ? "Revision guardada en modo demo local porque el backend no confirmo la operacion." : "Revision guardada correctamente en el backend.");
       return review;
@@ -354,10 +385,10 @@ function App() {
         setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: status } : row));
         saveProfessionalReview(runId, fallbackReview);
         recordAudit("revision guardada", `Fallback local aplicado para ${runId}.`);
-        setInfo("No se pudo confirmar el PATCH en backend; revision guardada localmente en modo demo.");
+        setInfo("No se pudo confirmar el PUT canonico en backend; revision guardada localmente en modo demo.");
         return fallbackReview;
       }
-      const detail = reviewError instanceof Error ? reviewError.message : "Error desconocido";
+      const detail = apiErrorDetail(reviewError);
       setError(`No se pudo guardar la revision en backend. Detalle: ${detail}`);
       return undefined;
     } finally { setSaving(false); }

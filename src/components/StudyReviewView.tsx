@@ -49,7 +49,7 @@ interface StudyReviewViewProps {
   saving: boolean;
   onBackToStudies: () => void;
   onMeasurementsChange: (measurements: Measurement[], detail: string) => void;
-  onSaveReview: (status: ReviewStatus, notes: string) => Promise<ReviewStatusResponse | undefined>;
+  onSaveReview: (status: ReviewStatus, notes: string, measurements: Measurement[]) => Promise<ReviewStatusResponse | undefined>;
 }
 
 function inferenceModeLabel(value?: string) {
@@ -345,8 +345,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     };
   }
 
-  function commitReviewerMeasurements() {
-    if (!hasMeasurementDrafts) return;
+  function currentReviewerMeasurements() {
     const existingIds = new Set(sourceMeasurements.map((item) => item.id));
     const updated = sourceMeasurements.map((item) => {
       const reviewerValue = reviewerValues[item.id];
@@ -355,8 +354,15 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     const appended = studyMeasurements
       .filter((item) => reviewerValues[item.id] !== undefined && reviewerValues[item.id] !== "" && !existingIds.has(item.id))
       .map(toMeasurement);
-    onMeasurementsChange([...updated, ...appended], `${reviewerDraftCount} medición/es guardadas por revisor desde resultados IA`);
+    return [...updated, ...appended];
+  }
+
+  function commitReviewerMeasurements() {
+    if (!hasMeasurementDrafts) return sourceMeasurements;
+    const nextMeasurements = currentReviewerMeasurements();
+    onMeasurementsChange(nextMeasurements, `${reviewerDraftCount} medición/es guardadas por revisor desde resultados IA`);
     setReviewerValues({});
+    return nextMeasurements;
   }
 
   function exportPayload() {
@@ -454,9 +460,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   }
 
   async function save(status: ReviewStatus) {
-    setReviewStatus(status);
-    if (hasMeasurementDrafts) commitReviewerMeasurements();
-    await onSaveReview(status, notes);
+    const canonicalDraftStatus = status === "pendiente" ? "pendiente" : status;
+    setReviewStatus(canonicalDraftStatus);
+    const nextMeasurements = hasMeasurementDrafts ? commitReviewerMeasurements() : currentReviewerMeasurements();
+    await onSaveReview(canonicalDraftStatus, notes, nextMeasurements);
   }
 
   function panelVisible(panelId: string) {
@@ -679,7 +686,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     <option value="observado">observado</option>
                     <option value="descartado">descartado</option>
                   </select>
-                  <button className="ghost-button" disabled={saving} onClick={() => void save(reviewStatus)} type="button">Guardar borrador</button>
+                  <button className="ghost-button" disabled={saving} onClick={() => void save("pendiente")} type="button">Guardar borrador</button>
                   <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Aprobar y completar</button>
                 </div>
               </>

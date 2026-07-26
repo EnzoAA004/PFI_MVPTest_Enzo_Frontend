@@ -18,6 +18,25 @@ export type ReviewUpdateRequest = {
   notes?: string;
   observations?: string;
   reviewer?: string;
+  measurements?: Measurement[];
+  corrections?: ReviewMeasurementCorrection[];
+};
+
+export type CanonicalReviewStatus = "pending" | "accepted" | "observed" | "rejected" | "edited";
+
+export type ReviewCorrectionValue = {
+  value: number | string | null;
+  unit?: string;
+  confidence?: number;
+  plane?: Plane;
+};
+
+export type ReviewMeasurementCorrection = {
+  measurementId: string;
+  label: string;
+  beforeValue: ReviewCorrectionValue;
+  afterValue: ReviewCorrectionValue;
+  comment?: string;
 };
 
 export type ReviewStatusResponse = {

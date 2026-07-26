@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { StudyRow } from "../appTypes";
+import { isReviewQueueItem } from "../appDataGuards";
 import { displayLatestRunId, displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { WorklistTable } from "./WorklistTable";
 
@@ -28,13 +29,9 @@ function matchesQuery(study: StudyRow, query: string) {
   ].some((value) => String(value ?? "").toLowerCase().includes(normalized));
 }
 
-function isQueueItem(study: StudyRow) {
-  return study.reviewStatus === "pendiente" || study.reviewStatus === "observado";
-}
-
 export function StudiesView({ studies, mode, loading = false, onOpenReview }: StudiesViewProps) {
   const [query, setQuery] = useState("");
-  const baseStudies = useMemo(() => mode === "queue" ? studies.filter(isQueueItem) : studies, [mode, studies]);
+  const baseStudies = useMemo(() => mode === "queue" ? studies.filter(isReviewQueueItem) : studies, [mode, studies]);
   const visibleStudies = useMemo(() => baseStudies.filter((study) => matchesQuery(study, query)), [baseStudies, query]);
   const isQueue = mode === "queue";
 
