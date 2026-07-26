@@ -1,10 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { PatientHistorySummary, PatientStudy } from "../appTypes";
+import type { HistoryTarget, PatientHistorySummary, PatientStudy } from "../appTypes";
 import { PriorityBadge, ReviewBadge, StatusBadge } from "./StatusBadge";
 import { VisibilityIcon } from "./VisibilityIcon";
 
 interface PatientHistoryViewProps {
   studies: PatientStudy[];
+  target?: HistoryTarget | null;
   subjectRef?: string | null;
   source?: string;
   summary?: PatientHistorySummary;
@@ -121,7 +122,7 @@ function measurementRows(studies: PatientStudy[]) {
   }));
 }
 
-export function PatientHistoryView({ studies, subjectRef, source, summary }: PatientHistoryViewProps) {
+export function PatientHistoryView({ studies, target, subjectRef, source, summary }: PatientHistoryViewProps) {
   const [activeTab, setActiveTab] = useState<HistoryTab>("overview");
   const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
   const visible = (id: string) => !hiddenPanels[id];
@@ -134,8 +135,10 @@ export function PatientHistoryView({ studies, subjectRef, source, summary }: Pat
   const hasAiInitialColumn = rows.some((row) => typeof row.ai === "number" && Number.isFinite(row.ai));
   const hasReviewerFinalColumn = rows.some((row) => typeof row.reviewer === "number" && Number.isFinite(row.reviewer));
   const hasLongitudinalModel = Boolean(source && !source.includes("no-longitudinal") && rows.length > 0);
+  const studyTraceabilityMode = target?.kind === "study";
+  const displayReference = studyTraceabilityMode ? "Referencia de paciente no informada" : subjectRef;
 
-  if (!subjectRef) {
+  if (!displayReference) {
     return (
       <section className="panel-card clinical-empty-state">
         <h2>Sin paciente seleccionado</h2>
@@ -151,7 +154,7 @@ export function PatientHistoryView({ studies, subjectRef, source, summary }: Pat
 
   function exportSummary() {
     const payload = {
-      subjectRef,
+      subjectRef: displayReference,
       deidentified: true,
       source: source ?? "unknown",
       totalStudies,
@@ -172,7 +175,7 @@ export function PatientHistoryView({ studies, subjectRef, source, summary }: Pat
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${subjectRef}-derived-summary.json`;
+    anchor.download = `${studyTraceabilityMode ? target.caseId : displayReference}-derived-summary.json`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -182,11 +185,12 @@ export function PatientHistoryView({ studies, subjectRef, source, summary }: Pat
   return (
     <div className="view-stack clinical-quiet patient-longitudinal-view">
       <section className="history-hero compact-heading patient-history-header">
-        <div className="patient-avatar" aria-hidden="true">{subjectRef.slice(0, 1)}</div>
+        <div className="patient-avatar" aria-hidden="true">{displayReference.slice(0, 1)}</div>
         <div>
-          <p>Pacientes / <strong>{subjectRef}</strong></p>
-          <h1>{subjectRef}</h1>
-          <div className="patient-header-badges"><StatusBadge tone="teal">Deidentificado</StatusBadge>{source && <StatusBadge tone={hasLongitudinalModel ? "green" : "amber"}>{source}</StatusBadge>}</div>
+          <p>{studyTraceabilityMode ? "Trazabilidad de estudio" : "Pacientes"} / <strong>{displayReference}</strong></p>
+          <h1>{displayReference}</h1>
+          <div className="patient-header-badges"><StatusBadge tone={studyTraceabilityMode ? "amber" : "teal"}>{studyTraceabilityMode ? "Sin referencia estable" : "Deidentificado"}</StatusBadge>{source && <StatusBadge tone={hasLongitudinalModel ? "green" : "amber"}>{source}</StatusBadge>}</div>
+          {studyTraceabilityMode && <p className="viewer-limit-note">No existe una referencia de paciente estable. Esta vista representa la trazabilidad del estudio y no un historial longitudinal.</p>}
         </div>
         <dl className="patient-header-grid">
           <div><dt>Sexo</dt><dd>Desconocido</dd></div>

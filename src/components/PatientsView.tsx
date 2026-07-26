@@ -1,17 +1,21 @@
 import { useMemo, useState } from "react";
-import type { StudyRow } from "../appTypes";
+import type { HistoryTarget, StudyRow } from "../appTypes";
+import { displayReviewStatus } from "../clinicalDisplay";
 import { displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { PriorityBadge, ReviewBadge } from "./StatusBadge";
 
 interface PatientsViewProps {
   studies: StudyRow[];
   loading?: boolean;
-  onOpenHistory: (patientId: string) => void;
+  onOpenHistory: (target: HistoryTarget) => void;
 }
 
 type PatientRow = {
-  patientId: string;
-  clickable: boolean;
+  id: string;
+  label: string;
+  detail: string;
+  target: HistoryTarget;
+  kind: HistoryTarget["kind"];
   totalStudies: number;
   firstStudy: string;
   mostRecent: string;
@@ -21,22 +25,25 @@ type PatientRow = {
 };
 
 const priorityRank: Record<StudyRow["priority"], number> = { alta: 0, media: 1, baja: 2 };
-const NO_REF_KEY = "__sin_ref__";
-
-function buildPatients(studies: StudyRow[]): PatientRow[] {
+export function buildPatients(studies: StudyRow[]): PatientRow[] {
   const grouped = new Map<string, StudyRow[]>();
   studies.forEach((study) => {
-    const key = study.subjectRef ?? NO_REF_KEY;
+    const key = study.subjectRef && study.subjectRef.trim() ? `subject:${study.subjectRef}` : `study:${study.caseId}`;
     grouped.set(key, [...(grouped.get(key) ?? []), study]);
   });
-  return Array.from(grouped.entries()).map(([patientId, patientStudies]) => {
+  return Array.from(grouped.entries()).map(([key, patientStudies]) => {
     const sortedByDate = [...patientStudies].sort((a, b) => Date.parse(a.studyDate ?? "") - Date.parse(b.studyDate ?? ""));
     const latest = sortedByDate[sortedByDate.length - 1] ?? patientStudies[0];
     const highestPriority = [...patientStudies].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0]?.priority ?? "baja";
-    const clickable = patientId !== NO_REF_KEY;
+    const subjectRef = latest?.subjectRef?.trim();
+    const isSubject = key.startsWith("subject:") && Boolean(subjectRef);
+    const target: HistoryTarget = isSubject ? { kind: "subject", subjectRef: subjectRef as string } : { kind: "study", caseId: latest?.caseId ?? "" };
     return {
-      patientId: clickable ? patientId : displaySubjectRef(null),
-      clickable,
+      id: key,
+      label: isSubject ? subjectRef as string : "Referencia de paciente no informada",
+      detail: isSubject ? "Paciente de-identificado" : `Referencia técnica: ${latest?.caseId ?? "sin caso"}`,
+      target,
+      kind: target.kind,
       totalStudies: patientStudies.length,
       firstStudy: displayStudyDate(sortedByDate[0]?.studyDate),
       mostRecent: displayStudyDate(latest?.studyDate),
@@ -50,7 +57,7 @@ function buildPatients(studies: StudyRow[]): PatientRow[] {
 function matchesQuery(patient: PatientRow, query: string) {
   if (!query.trim()) return true;
   const normalized = query.trim().toLowerCase();
-  return [patient.patientId, patient.firstStudy, patient.mostRecent, patient.highestPriority, patient.latestReviewStatus]
+  return [patient.label, patient.detail, patient.firstStudy, patient.mostRecent, patient.highestPriority, patient.latestReviewStatus, displayReviewStatus(patient.latestReviewStatus)]
     .some((value) => String(value).toLowerCase().includes(normalized));
 }
 
@@ -68,7 +75,7 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
         </div>
         <div className="screen-summary">
           <strong>{visiblePatients.length}</strong>
-          <span>grupos de referencias deidentificadas</span>
+          <span>referencias o trazabilidades reales</span>
         </div>
       </section>
 
@@ -108,15 +115,15 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
               </thead>
               <tbody>
                 {visiblePatients.map((patient) => (
-                  <tr key={patient.patientId}>
-                    <td><strong>{patient.patientId}</strong><small>{patient.clickable ? "Deidentificado" : "Agrupacion visual"}</small></td>
+                  <tr key={patient.id}>
+                    <td><strong>{patient.label}</strong><small>{patient.detail}</small></td>
                     <td>{patient.totalStudies}</td>
                     <td>{patient.firstStudy}</td>
                     <td>{patient.mostRecent}</td>
                     <td>{patient.pending}</td>
                     <td><PriorityBadge priority={patient.highestPriority} /></td>
                     <td><ReviewBadge status={patient.latestReviewStatus} /></td>
-                    <td><button className="ghost-button" disabled={!patient.clickable} onClick={() => patient.clickable && onOpenHistory(patient.patientId)} type="button">Abrir historial</button></td>
+                    <td><button className="ghost-button" onClick={() => onOpenHistory(patient.target)} type="button">{patient.kind === "subject" ? "Abrir historial" : "Abrir trazabilidad del estudio"}</button></td>
                   </tr>
                 ))}
               </tbody>

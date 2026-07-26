@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { StudyRow } from "../appTypes";
 import { isReviewQueueItem } from "../appDataGuards";
+import { displayReviewStatus } from "../clinicalDisplay";
 import { displayLatestRunId, displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { WorklistTable } from "./WorklistTable";
 
@@ -25,6 +26,7 @@ function matchesQuery(study: StudyRow, query: string) {
     displayModelKey(study.modelKey),
     study.modelStatus,
     study.reviewStatus,
+    displayReviewStatus(study.reviewStatus),
     study.priority,
   ].some((value) => String(value ?? "").toLowerCase().includes(normalized));
 }
@@ -39,8 +41,8 @@ export function StudiesView({ studies, mode, loading = false, onOpenReview }: St
     <div className="view-stack">
       <section className="page-heading compact-heading">
         <div>
-          <p>{isQueue ? "Cola de revision" : "Estudios"}</p>
-          <h1>{isQueue ? "Estudios pendientes de revision" : "Repositorio de estudios"}</h1>
+          <p>{isQueue ? "Cola de revisión" : "Estudios"}</p>
+          <h1>{isQueue ? "Estudios pendientes de revisión" : "Repositorio de estudios"}</h1>
         </div>
         <div className="screen-summary">
           <strong>{visibleStudies.length}</strong>

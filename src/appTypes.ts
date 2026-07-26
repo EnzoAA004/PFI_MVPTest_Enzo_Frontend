@@ -6,6 +6,10 @@ export type MultiplanarRunId = string;
 export type PlaneRunId = string;
 export type ViewKey = "dashboard" | "studies" | "queue" | "review" | "patients" | "history" | "settings" | "help" | "analysis";
 
+export type HistoryTarget =
+  | { kind: "subject"; subjectRef: string }
+  | { kind: "study"; caseId: string };
+
 export type PipelineRunRequest = {
   caseId: string;
   plane: Plane;

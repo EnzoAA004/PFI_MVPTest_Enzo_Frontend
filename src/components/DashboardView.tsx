@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Brain, CheckCircle2, ClipboardCheck, Flag } from "lucide-react";
 import type { AuditEvent, Plane, Priority, ReviewStatus, StudiesSummary, StudyRow } from "../appTypes";
+import { displayReviewStatus } from "../clinicalDisplay";
 import { displayLatestRunId, displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef, studyHasReviewableRun } from "../studyDisplay";
 import { AuditTrail } from "./AuditTrail";
 import { MetricCard } from "./MetricCard";
@@ -27,7 +28,7 @@ const quickFilters: { id: QuickFilter; label: string }[] = [
   { id: "todos", label: "Todos" },
   { id: "pendientes", label: "Pendientes" },
   { id: "observados", label: "Observados" },
-  { id: "aprobados", label: "Aprobados" },
+  { id: "aprobados", label: "Finalizados" },
   { id: "prioridad", label: "Prioridad alta" },
 ];
 
@@ -47,6 +48,7 @@ function matchesSearch(study: StudyRow, query: string) {
     displayModelKey(study.modelKey),
     study.modelStatus,
     study.reviewStatus,
+    displayReviewStatus(study.reviewStatus),
     study.priority,
   ].some((value) => String(value ?? "").toLowerCase().includes(normalized));
 }
@@ -206,7 +208,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
                     <option value="todos">Todos</option>
                     <option value="pendiente">Pendiente</option>
                     <option value="observado">Observado</option>
-                    <option value="aceptado">Aceptado</option>
+                    <option value="aceptado">Finalizado</option>
                     <option value="descartado">Descartado</option>
                   </select>
                 </label>

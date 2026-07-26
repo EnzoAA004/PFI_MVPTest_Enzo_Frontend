@@ -1,5 +1,6 @@
 import type * as React from "react";
 import type { Priority, ReviewStatus } from "../appTypes";
+import { displayReviewStatus } from "../clinicalDisplay";
 import { StatusBadge as BaseStatusBadge } from "../design/primitives";
 
 interface StatusBadgeProps {
@@ -18,5 +19,5 @@ export function PriorityBadge({ priority }: { priority: Priority }) {
 
 export function ReviewBadge({ status }: { status: ReviewStatus }) {
   const tone = status === "aceptado" ? "green" : status === "observado" ? "amber" : status === "descartado" ? "red" : "blue";
-  return <StatusBadge tone={tone}>{status}</StatusBadge>;
+  return <StatusBadge tone={tone}>{displayReviewStatus(status)}</StatusBadge>;
 }

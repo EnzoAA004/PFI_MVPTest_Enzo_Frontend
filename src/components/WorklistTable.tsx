@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { CircleDot, MoreHorizontal, Rows3 } from "lucide-react";
 import type { Priority, ReviewStatus, StudyRow } from "../appTypes";
 import { fetchStudyDetail } from "../studyApi";
-import { displayLatestRunId, displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef, studyHasReviewableRun } from "../studyDisplay";
+import { displayLatestRunId, displayModelKey, displayModelStatus, displayPrimaryPlane, displayStudyDate, displaySubjectRef, studyHasReviewableRun } from "../studyDisplay";
 import { loadSelectedStudyDetail, saveSelectedStudyDetail, saveSelectedStudyFallback } from "../selectedStudyStorage";
 import { PriorityBadge, ReviewBadge } from "./StatusBadge";
 
@@ -124,7 +124,7 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
             <SortHeader column="plane">Plano</SortHeader>
             <SortHeader column="studyDate">Fecha</SortHeader>
             <SortHeader column="modelStatus">Modelo</SortHeader>
-            <SortHeader column="reviewStatus">Revision</SortHeader>
+            <SortHeader column="reviewStatus">Revisión</SortHeader>
             <SortHeader column="priority">Prioridad</SortHeader>
             <th aria-label="Acciones"><span className="sr-only">Acciones</span></th>
           </tr>
@@ -138,10 +138,10 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
                 <td><button className="case-link" onClick={(event) => { event.stopPropagation(); void openStudy(study); }} type="button">{study.caseId}</button><small>{displaySubjectRef(study.subjectRef)}</small></td>
                 <td><span className="plane-cell">{study.primaryPlane ? planeIcon(study.primaryPlane) : null}{displayPrimaryPlane(study.primaryPlane)}</span></td>
                 <td>{displayStudyDate(study.studyDate)}</td>
-                <td><span className="model-state">{canReview ? study.modelStatus : "Sin corrida"}</span><small>{displayModelKey(study.modelKey)}</small><small>{displayLatestRunId(study.latestRunId)}</small></td>
+                <td><span className="model-state">{canReview ? displayModelStatus(study.modelStatus) : "Sin corrida"}</span><small>{displayModelKey(study.modelKey)}</small><small>{displayLatestRunId(study.latestRunId)}</small></td>
                 <td><ReviewBadge status={study.reviewStatus} /></td>
                 <td><PriorityBadge priority={study.priority} /></td>
-                <td><button className="ghost-button" disabled={!canReview} onClick={(event) => { event.stopPropagation(); void openStudy(study); }} type="button" aria-label={canReview ? "Abrir revision" : "Sin corrida"}><MoreHorizontal aria-hidden size={18} /></button></td>
+                <td><button className="ghost-button" disabled={!canReview} onClick={(event) => { event.stopPropagation(); void openStudy(study); }} type="button" aria-label={canReview ? "Abrir revisión" : "Sin corrida"}><MoreHorizontal aria-hidden size={18} /></button></td>
               </tr>
             );
           })}

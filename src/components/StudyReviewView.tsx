@@ -2,6 +2,7 @@
 import { exportReviewReport } from "../api";
 import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudySeries } from "../appTypes";
+import { displayInferenceMode, displayMeasurementLabel, displayMeasurementLevel, displayReviewStatus, displayTechnicalReadiness, displayUnit } from "../clinicalDisplay";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { AgentSummary } from "./AgentSummary";
@@ -54,11 +55,7 @@ interface StudyReviewViewProps {
 }
 
 function inferenceModeLabel(value?: string) {
-  if (value === "contract") return "modo contrato";
-  if (value === "real") return "modo real";
-  if (value === "real_baseline") return "real_baseline";
-  if (value === "mock") return "modo simulado";
-  return value ?? "sin datos";
+  return displayInferenceMode(value);
 }
 
 function traceabilityTone(inferenceMode?: string, artifact?: AiModelArtifact) {
@@ -132,9 +129,7 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
 }
 
 function readinessLabel(value?: string) {
-  if (value === "real_artifact_available") return "artifact real disponible";
-  if (value === "contract_only_missing_artifact") return "modo contrato: falta artifact";
-  return value ?? "sin datos";
+  return displayTechnicalReadiness(value);
 }
 
 function deltaSeverity(delta: number | null, outlier?: boolean): DeltaSeverity {
@@ -158,10 +153,6 @@ function formatDelta(delta: number | null, unit: string) {
   if (delta === null) return "—";
   const sign = delta > 0 ? "+" : "";
   return `${sign}${delta.toFixed(2)} ${displayUnit(unit)}`;
-}
-
-function displayUnit(unit: string) {
-  return unit === "mm2" ? "mm²" : unit;
 }
 
 function confidenceToneClass(confidence?: number) {
@@ -243,7 +234,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [reviewerValues, setReviewerValues] = useState<Record<string, string>>({});
   const [landmarkDrafts, setLandmarkDrafts] = useState<Record<string, StudyLandmark>>({});
   const [landmarkAddMode, setLandmarkAddMode] = useState(false);
-  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? "pendiente");
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? run.reviewStatus ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
   const [saveMessage, setSaveMessage] = useState("");
   const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
@@ -256,13 +247,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   }, []);
 
   useEffect(() => {
-    setReviewStatus(run.review?.status ?? "pendiente");
+    setReviewStatus(run.review?.status ?? run.reviewStatus ?? "pendiente");
     setNotes(run.review?.notes ?? run.review?.observations ?? "");
     setReviewerValues({});
     setLandmarkDrafts({});
     setLandmarkAddMode(false);
     setSaveMessage("");
-  }, [run.runId]);
+  }, [run.runId, run.review?.status, run.review?.notes, run.review?.observations, run.reviewStatus]);
 
   const demoMode = isDemoRun(run);
   const displayRun: AiRunResponse = {
@@ -270,7 +261,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     caseId: selectedDetail?.study?.caseId ?? run.caseId,
     plane: run.plane ?? selectedDetail?.study?.plane ?? selectedDetail?.study?.primaryPlane ?? undefined,
     modelKey: run.modelKey ?? selectedDetail?.study?.modelKey ?? undefined,
-    review: selectedDetail?.review ?? run.review,
+    review: run.review ?? selectedDetail?.review,
   };
 
   const sagittalWorkspace = useMemo(() => resolvePersistedPlaneWorkspace(displayRun, "sagittal"), [displayRun]);
@@ -280,7 +271,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const pipelineMeasurements = hasPipelineVisualContract && Array.isArray(run.normalizedMeasurements) ? run.normalizedMeasurements : [];
   const persistedMeasurements = sagittalWorkspace.measurements.length ? sagittalWorkspace.measurements : axialWorkspace.measurements;
   const sourceMeasurements = persistedMeasurements.length ? persistedMeasurements : selectedDetail?.measurements?.length ? selectedDetail.measurements : pipelineMeasurements.length ? pipelineMeasurements : measurements;
-  const review = useMemo(() => displayRun.review ?? { status: "pendiente" as ReviewStatus }, [displayRun.review]);
+  const review = useMemo(() => displayRun.review ?? { status: run.reviewStatus ?? "pendiente" as ReviewStatus }, [displayRun.review, run.reviewStatus]);
   const seriesList = persistedSeries.length ? persistedSeries : demoMode ? hasPipelineVisualContract ? run.series ?? fallbackSeries : Array.isArray(studyReview?.series) && studyReview.series.length ? studyReview.series : fallbackSeries : [];
   const masks = demoMode ? hasPipelineVisualContract && Array.isArray(run.masks) ? run.masks : Array.isArray(studyReview?.masks) && studyReview.masks.length ? studyReview.masks : fallbackMasks : Array.isArray(run.masks) ? run.masks : [];
   const landmarks: StudyLandmark[] = demoMode ? hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [] : Array.isArray(run.landmarks) ? run.landmarks : [];
@@ -449,10 +440,11 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       modelArtifact: artifact,
       quality,
       reviewStatus,
+      reviewStatusLabel: displayReviewStatus(reviewStatus),
       notes,
       summary: { measurementsTotal: resultRows.length, measurementsReviewed: reviewed, outliers: outlierCount, relevantChanges, reviewerDrafts: reviewerDraftCount },
       governance: { scope: "academic/research only", deidentified: true, rawImagesIncluded: false, humanReviewRequired: true, notClinicalDiagnosis: true },
-      measurements: resultRows.map((row) => ({ id: row.id, label: row.label, level: row.level, aiValue: row.aiValue, reviewerValue: row.reviewerValue || null, delta: row.delta, deltaFormatted: formatDelta(row.delta, row.unit), unit: row.unit, severity: row.severity, status: row.status, outlier: Boolean(row.outlier), confidence: row.confidence })),
+      measurements: resultRows.map((row) => ({ id: row.id, label: displayMeasurementLabel(row.label), technicalLabel: row.label, level: displayMeasurementLevel(row.level), aiValue: row.aiValue, reviewerValue: row.reviewerValue || null, delta: row.delta, deltaFormatted: formatDelta(row.delta, row.unit), unit: row.unit, unitLabel: displayUnit(row.unit), severity: row.severity, status: row.status, outlier: Boolean(row.outlier), confidence: row.confidence })),
       auditTrail: auditTrail.slice(0, 25),
     };
   }
@@ -521,7 +513,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     try { await tryBackendExport("html"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
     const measurementRows = payload.measurements.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong><br><span>${escapeHtml(row.level)}</span></td><td>${escapeHtml(row.aiValue)} ${escapeHtml(row.unit)}</td><td>${escapeHtml(row.reviewerValue ?? "sin cambios")}</td><td>${escapeHtml(row.deltaFormatted)}</td><td>${escapeHtml(row.status)}</td><td>${row.outlier ? "Si" : "No"}</td></tr>`).join("");
-    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Corrida ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatus)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
+    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Corrida ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatusLabel)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-informe.html`, html, "text/html;charset=utf-8");
   }
 
@@ -530,7 +522,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     const review = await onSaveReview(status, notes, nextMeasurements);
     if (!review) return;
     if (hasMeasurementDrafts) commitReviewerMeasurements();
-    setSaveMessage(status === "pendiente" ? "Borrador guardado" : status === "observado" ? "Estado observado confirmado" : status === "aceptado" ? "Estudio aceptado" : "Estudio descartado");
+    setSaveMessage(status === "pendiente" ? "Borrador guardado correctamente" : status === "observado" ? "Estudio marcado como observado." : status === "aceptado" ? "Estudio finalizado y aprobado por el revisor." : "Estudio descartado por el revisor.");
   }
 
   function panelVisible(panelId: string) {
@@ -592,7 +584,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <div><dt>Modalidad</dt><dd>RM</dd></div>
                 <div><dt>Plano</dt><dd>{displayPrimaryPlane(currentSeries?.plane ?? displayRun.plane ?? null)}</dd></div>
                 <div><dt>Versión del modelo</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}</dd></div>
-                <div><dt>Estado de revisión</dt><dd><ReviewBadge status={review.status ?? "pendiente"} /></dd></div>
+                <div><dt>Estado de revisión</dt><dd><ReviewBadge status={review.status ?? "pendiente"} />{(review.status ?? "pendiente") === "aceptado" && <small>Finalizado · aprobado por revisor</small>}</dd></div>
                 <div><dt>Revisor</dt><dd>{reviewerName}</dd></div>
               </dl>
             ) : hiddenPlaceholder}
@@ -714,7 +706,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     <select aria-label="Estado de revisión" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
                       <option value="pendiente">Pendiente</option>
                       <option value="observado">Observado</option>
-                      <option value="aceptado">Aceptado</option>
+                      <option value="aceptado">Finalizado</option>
                       <option value="descartado">Descartado</option>
                     </select>
                   </label>
@@ -755,8 +747,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               {resultRows.map((item) => (
                 <tr className={`measurement-review-row ${item.draftValue !== undefined && item.draftValue !== "" ? "is-draft" : ""}`} key={item.id}>
                   <td className="measurement-metric-cell" data-label="Métrica">
-                    <strong>{item.label}</strong>
-                    <small>{item.level}</small>
+                    <strong title={item.label}>{displayMeasurementLabel(item.label)}</strong>
+                    <small>{displayMeasurementLevel(item.level)}</small>
                     <span className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `Confianza IA ${Math.round(item.confidence * 100)}%` : "Confianza IA N/D"}</span>
                     {item.outlier && <StatusBadge tone="amber">Atípico IA</StatusBadge>}
                   </td>

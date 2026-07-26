@@ -1,7 +1,7 @@
 import { API_BASE_URL } from "./api";
 import { normalizeAiAssetUrl } from "./inferenceReadiness";
 import type { AssetName } from "./multiplanarRunTypes";
-import type { AiRunResponse, Measurement, PersistedArtifact, PersistedStudyRun, Plane, PlaneRunId, ReviewableRun, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow } from "./appTypes";
+import type { AiRunResponse, Measurement, PersistedArtifact, PersistedStudyRun, Plane, PlaneRunId, ReviewStatus, ReviewableRun, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow } from "./appTypes";
 
 export type ContractIssue = {
   message: string;
@@ -204,6 +204,17 @@ export function selectReviewableRunFromDetail(detail: StudyDetailResponse): Revi
   const primaryPlane = firstRun.primaryPlane ?? firstRun.plane ?? firstRun.planes?.[0] ?? detail.study.primaryPlane ?? detail.study.plane ?? undefined;
   const modelKey = firstRun.modelKey ?? firstRun.sagittalModelKey ?? firstRun.axialModelKey ?? detail.study.modelKey ?? undefined;
   const measurements = firstRun.measurementsByPlane?.sagittal ?? firstRun.measurementsByPlane?.axial ?? detail.measurements ?? [];
+  const reviewStatus = firstRun.reviewStatus ?? detail.study.reviewStatus ?? detail.review?.status ?? "pendiente";
+  const review = {
+    ...(detail.review ?? {}),
+    runId: firstRun.runId,
+    status: reviewStatus as ReviewStatus,
+    reviewer: firstRun.reviewer ?? detail.review?.reviewer ?? undefined,
+    reviewedAt: firstRun.reviewedAt ?? detail.review?.reviewedAt ?? undefined,
+    updatedAt: firstRun.updatedAt ?? detail.review?.updatedAt,
+    notes: firstRun.comments ?? detail.review?.notes ?? "",
+    observations: firstRun.comments ?? detail.review?.observations ?? "",
+  };
   const persistedPlanes = {
     sagittal: firstRun.sagittalRunId ? {
       runId: firstRun.sagittalRunId,
@@ -248,8 +259,8 @@ export function selectReviewableRunFromDetail(detail: StudyDetailResponse): Revi
     planes: persistedPlanes,
     measurementValues: measurements,
     normalizedMeasurements: measurements,
-    review: detail.review,
-    reviewStatus: firstRun.reviewStatus,
+    review,
+    reviewStatus: reviewStatus as ReviewStatus,
     humanReviewRequired: detail.humanReviewRequired ?? true,
     notClinicalDiagnosis: detail.notClinicalDiagnosis ?? true,
     dataOrigin: firstRun.dataOrigin ?? detail.dataOrigin ?? "database",
