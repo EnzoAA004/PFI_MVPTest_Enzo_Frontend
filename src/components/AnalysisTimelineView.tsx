@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { API_BASE_URL } from "../api";
 import { BackendApiError, aiAssetUrl, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
 import type { Measurement, Plane, StudyLandmark } from "../appTypes";
 import type { AssetName, InputResponse, MultiplanarMeasurementValue, MultiplanarPlaneRun, MultiplanarRunPayload, MultiplanarRunResponse, RunReviewStatus } from "../multiplanarRunTypes";
 import type { MultiplanarContract } from "../multiplanarTypes";
-import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, evaluateSagittalReviewReadiness, extractMeasurementRows, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
+import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, evaluateSagittalReviewReadiness, extractMeasurementRows, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveReviewWorkspaceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
 import { AgentSummary } from "./AgentSummary";
 import { MeasurementsPanel } from "./MeasurementsPanel";
 import { MriSliceViewer } from "./MriSliceViewer";
@@ -81,6 +81,15 @@ function toMeasurement(row: MultiplanarMeasurementValue, plane: Plane, index: nu
 function measurementsFromRun(run: MultiplanarRunResponse | null): Measurement[] {
   if (!run?.planes) return [];
   return uploadPlanes.flatMap((plane) => measurementRows(run.planes?.[plane]).map((row, index) => toMeasurement(row, plane, index)));
+}
+
+function percentLabel(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(2).replace(".", ",")} %` : "no informado";
+}
+
+function sagittalForegroundConfidence(run: MultiplanarRunResponse | null) {
+  const quality = (run?.planes?.sagittal?.quality ?? run?.quality) as Record<string, unknown> | undefined;
+  return quality?.meanForegroundConfidence ?? quality?.foregroundMeanConfidence ?? quality?.foregroundConfidence ?? quality?.meanMaskConfidence;
 }
 
 function reviewCorrectionsFrom(measurements: Measurement[]) {
@@ -233,6 +242,12 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const axialRunReady = evaluateAxialReadiness(run);
   const dualRunReady = evaluateDualReadiness(run);
   const realInferenceReady = sagittalReviewReady.ready;
+  const workspaceMode = resolveReviewWorkspaceMode(run);
+  const sagittalRows = measurementRows(sagittalPlaneRun);
+  const sagittalMasks = sagittalPlaneRun?.masks ?? [];
+  const sagittalMetadata = readSpiderRuntimeMetadata(sagittalPlaneRun);
+  const sagittalArtifactHash = sagittalPlaneRun?.artifactHash ?? sagittalPlaneRun?.aiOutput?.artifactHash;
+  const foregroundConfidence = percentLabel(sagittalForegroundConfidence(run));
   const canOpenStep: Record<Step, boolean> = {
     1: true,
     2: sagittalUploadReady,
@@ -244,10 +259,17 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
     priority: "media" as const,
     humanReviewRequired: true,
     notClinicalDiagnosis: true,
-    recommendedAction: realInferenceReady ? "Revisar mediciones, resumen del agente y confirmar o editar el reporte." : "Esperar inferencia real sagital del backend antes de evaluar mediciones.",
-    flags: realInferenceReady ? ["preinforme generado", "revisión humana requerida"] : ["sin inferencia real sagital"],
-    reasons: realInferenceReady ? [`Corrida ${run?.runId}`, `Modo efectivo ${resolvePlaneInferenceMode(run?.planes?.sagittal) ?? resolveWorkspaceInferenceMode(run)}`] : [fallbackReason(run, contract) || "Sin corrida sagital real disponible."],
-  }), [contract, realInferenceReady, run]);
+    recommendedAction: realInferenceReady ? "Revisar metricas tecnicas, resumen del agente y confirmar o editar el reporte." : "Esperar inferencia real sagital del backend antes de evaluar mediciones.",
+    flags: realInferenceReady ? ["Inferencia sagital real completada", "Revision profesional obligatoria", "No apto para diagnostico clinico"] : ["sin inferencia real sagital"],
+    reasons: realInferenceReady
+      ? [
+        `${sagittalMasks.length} clases presentes.`,
+        `${sagittalRows.length} metricas tecnicas generadas.`,
+        `Confianza media de foreground: ${foregroundConfidence}.`,
+        "Axial no cargado; no bloquea la revision sagital.",
+      ]
+      : [fallbackReason(run, contract) || "Sin corrida sagital real disponible."],
+  }), [contract, foregroundConfidence, realInferenceReady, run, sagittalMasks.length, sagittalRows.length]);
 
   useEffect(() => {
     setReviewer(reviewerName ?? "");
@@ -472,6 +494,28 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
 
       {activeStep === 3 && (
         <section className="analysis-evaluation-grid">
+          <section className="panel-card span-all sagittal-result-header">
+            <div className="section-title">
+              <div>
+                <h2>Resultado sagital real_baseline</h2>
+                <p className="compact-copy">Inferencia sagital real disponible. Axial no cargado o no habilitado. La revisión sagital puede continuar.</p>
+              </div>
+              <StatusBadge tone="green">sagital_only</StatusBadge>
+            </div>
+            <dl className="settings-details result-summary-strip">
+              <div><dt>Modelo</dt><dd>{sagittalPlaneRun?.modelKey ?? "no informado"}</dd></div>
+              <div><dt>Versión</dt><dd>{sagittalPlaneRun?.modelVersion ?? "no informado"}</dd></div>
+              <div><dt>Hash</dt><dd title={sagittalArtifactHash}>{abbreviateArtifactHash(sagittalArtifactHash)}</dd></div>
+              <div><dt>Modo</dt><dd>{resolvePlaneInferenceMode(sagittalPlaneRun) ?? "no informado"}</dd></div>
+              <div><dt>Corte</dt><dd>{sagittalMetadata.selectedSlice ?? "?"}/{sagittalMetadata.sliceCount ?? "?"}</dd></div>
+              <div><dt>Revisión</dt><dd>requerida</dd></div>
+            </dl>
+            <div className="ai-honesty-row">
+              <StatusBadge tone="amber">Revisión profesional obligatoria</StatusBadge>
+              <StatusBadge tone="purple">No apto para diagnóstico clínico</StatusBadge>
+              <StatusBadge tone={workspaceMode === "sagittal_only" ? "blue" : "amber"}>{workspaceMode}</StatusBadge>
+            </div>
+          </section>
           <section className="panel-card span-all">
             <div className="section-title">
               <h2>Visor sagital real</h2>
@@ -485,7 +529,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
               landmarks={sagittalPlaneRun?.landmarks as unknown as StudyLandmark[]}
               maskVisibility={{}}
               overlayEnabled
-              overlayOpacity={0.74}
+              overlayOpacity={0.65}
               editMode={false}
               selectedLandmark={selectedSagittalLandmark}
               onSelectMask={() => undefined}
@@ -493,15 +537,24 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
               onOverlayAvailableChange={setSagittalOverlayAvailable}
             />
           </section>
-          <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(run?.planes?.sagittal) ?? resolveWorkspaceInferenceMode(run)} description="Mediciones devueltas por inferencia sagital real. Editables como borrador del revisor." onChange={updateMeasurements} />
-          <section className="panel-card">
-            <div className="section-title"><h2>Modelo 3D</h2><StatusBadge tone="blue">atlas genérico</StatusBadge></div>
+          <div className="span-all">
+            <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(run?.planes?.sagittal) ?? resolveWorkspaceInferenceMode(run)} description="Mediciones devueltas por inferencia sagital real. Editables como borrador del revisor." onChange={updateMeasurements} />
+          </div>
+
+          <div className="span-all">
+            <AgentSummary agentDecision={agentDecision} />
+          </div>
+          <details className="panel-card compact-card analysis-panel review-accordion span-all">
+            <summary>Detalles técnicos y provenance</summary>
+            <ProvenancePanel run={run} />
+            <TechnicalStatusPanel run={run} />
+          </details>
+          <details className="panel-card compact-card analysis-panel review-accordion span-all">
+            <summary>Funcionalidad 3D futura</summary>
+            <div className="section-title"><h2>Referencia anatómica genérica — no paciente-específica</h2><StatusBadge tone="blue">atlas genérico</StatusBadge></div>
             <SpineReconstructionPreview />
-            <p className="preview-meta">Representación anatómica de referencia; no paciente-específica.</p>
-          </section>
-          <AgentSummary agentDecision={agentDecision} />
-          <ProvenancePanel run={run} />
-          <TechnicalStatusPanel run={run} />
+            <p className="preview-meta">La reconstrucción 3D paciente-específica permanece bloqueada porque falta axial real, spacing, mapping de cortes y threeD.enabled=true.</p>
+          </details>
           <section className="panel-card compact-card analysis-panel span-all">
             <div className="analysis-actions">
               <button className="ghost-button" onClick={() => setActiveStep(2)} type="button">Volver a procesamiento</button>

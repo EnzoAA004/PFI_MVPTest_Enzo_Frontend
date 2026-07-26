@@ -3833,6 +3833,208 @@ body,
 .real-viewer-footer {
   border-top: 1px solid var(--border);
 }
+
+.sagittal-result-header {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.result-summary-strip {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.result-summary-strip div {
+  grid-template-columns: 1fr;
+}
+
+.result-summary-strip dd {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.professional-viewer-controls {
+  align-items: end;
+}
+
+.professional-viewer-controls .control-field,
+.plane-controls-panel .opacity-control {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.professional-viewer-controls .control-field span,
+.plane-controls-panel label span {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+
+.viewer-controls button:disabled,
+.viewer-controls select:disabled {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: .72;
+}
+
+.plane-controls-panel,
+.segmentation-legend-panel {
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+
+.toggle-row {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--sp-2);
+}
+
+.opacity-control input {
+  min-width: 180px;
+}
+
+.segmentation-legend-panel {
+  align-items: flex-start;
+  display: grid;
+}
+
+.segmentation-legend-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.segmentation-class-control {
+  align-items: center;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  display: inline-flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.segmentation-class-control:has(input:disabled) {
+  opacity: .78;
+}
+
+.mask-swatch {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  display: inline-block;
+  height: 12px;
+  width: 12px;
+}
+
+.real-slice-frame {
+  height: clamp(520px, 62vh, 620px);
+  min-height: 520px;
+}
+
+.asset-transform {
+  flex: 0 0 auto;
+  max-height: none;
+  max-width: none;
+}
+
+.mri-asset-img,
+.mri-overlay-img {
+  height: 100%;
+  max-height: none;
+  max-width: none;
+  object-fit: contain;
+  width: 100%;
+}
+
+.asset-landmark {
+  font-size: 0;
+  height: 12px;
+  min-width: 12px;
+  padding: 0;
+  width: 12px;
+}
+
+.asset-landmark.selected {
+  height: 16px;
+  min-width: 16px;
+  width: 16px;
+}
+
+.asset-landmark.selected span {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  color: var(--text);
+  font-size: var(--fs-small);
+  left: 14px;
+  line-height: 1;
+  padding: var(--sp-1) var(--sp-2);
+  position: absolute;
+  top: -2px;
+  white-space: nowrap;
+}
+
+.professional-measurement-table {
+  --measurement-grid: minmax(180px, 1.3fr) minmax(92px, .6fr) minmax(112px, .72fr) minmax(52px, .38fr) minmax(108px, .72fr) minmax(72px, .44fr) minmax(72px, .44fr);
+}
+
+.measurement-honesty-note {
+  background: var(--surface-warm);
+  border: 1px solid var(--border-warning);
+  border-radius: var(--radius-btn);
+  color: var(--text-warning-strong);
+  padding: var(--sp-3);
+}
+
+.tabular-value,
+.ai-measurement-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.ai-measurement-value {
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+}
+
+.review-accordion summary {
+  cursor: pointer;
+  font-weight: var(--fw-semibold);
+}
+
+.review-accordion[open] summary {
+  margin-bottom: var(--sp-3);
+}
+
+@media (max-width: 760px) {
+  .result-summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .real-slice-frame {
+    height: clamp(360px, 58vh, 520px);
+    min-height: 360px;
+  }
+
+  .professional-viewer-controls,
+  .plane-controls-panel {
+    align-items: stretch;
+  }
+
+  .professional-viewer-controls > *,
+  .plane-controls-panel > * {
+    flex: 1 1 42%;
+  }
+
+  .professional-measurement-table .measurement-head,
+  .professional-measurement-table .measurement-row {
+    min-width: 760px;
+  }
+}
 .layer-legend-grid button {
   align-items: center;
   background: var(--surface-subtle);

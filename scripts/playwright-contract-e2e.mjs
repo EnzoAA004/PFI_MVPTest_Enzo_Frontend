@@ -1,4 +1,4 @@
-import { once } from "node:events";
+﻿import { once } from "node:events";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -212,10 +212,9 @@ async function runScenario(axialMode, options = {}) {
   await uploadScenarioInputs(page, axialMode !== "absent");
   await page.locator("button", { hasText: "Continuar a procesamiento" }).click();
   await page.locator("button", { hasText: "Ejecutar análisis real" }).click();
-  await page.waitForSelector("text=Evaluación técnica del runtime");
-  if (axialMode !== "real_baseline") await page.waitForSelector("text=candidate_below_quality_gate");
-  await page.waitForSelector("text=Provenance técnica de inferencia");
-  await page.waitForSelector("text=cf11dcc0ad77...e944");
+  await page.waitForSelector("text=Resultado sagital real_baseline");
+  await page.waitForSelector("text=sagital_only");
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("dd")).some((element) => element.textContent?.includes("cf11dcc0ad77...e944") && element.getClientRects().length > 0));
   const continueToEvaluation = page.locator("button", { hasText: "Continuar a evaluación" });
   if (await continueToEvaluation.count()) await continueToEvaluation.click();
   await page.waitForSelector("text=Visor sagital real");

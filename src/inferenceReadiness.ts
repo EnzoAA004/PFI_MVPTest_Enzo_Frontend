@@ -11,6 +11,7 @@ export type ReadinessResult = {
 };
 
 export type WorkspaceInferenceMode = "real" | "real_baseline" | "mixed" | undefined;
+export type ReviewWorkspaceMode = "sagittal_only" | "axial_only" | "dual_plane" | "unavailable";
 
 export type SpiderRuntimeMetadata = {
   selectedSlice?: number;
@@ -214,6 +215,15 @@ export function evaluateDualReadiness(run?: MultiplanarRunResponse | null): Read
 
 export function evaluateRealInferenceReadiness(run?: MultiplanarRunResponse | null): ReadinessResult {
   return evaluateSagittalReviewReadiness(run);
+}
+
+export function resolveReviewWorkspaceMode(run?: MultiplanarRunResponse | null): ReviewWorkspaceMode {
+  const sagittalReady = evaluateSagittalReviewReadiness(run).ready;
+  const axialReady = evaluateAxialReadiness(run).ready && hasRealPlaneMeasurements(run, "axial");
+  if (sagittalReady && axialReady) return "dual_plane";
+  if (sagittalReady) return "sagittal_only";
+  if (axialReady) return "axial_only";
+  return "unavailable";
 }
 
 export function abbreviateArtifactHash(hash?: string) {

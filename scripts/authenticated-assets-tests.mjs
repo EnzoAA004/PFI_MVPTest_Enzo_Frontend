@@ -117,7 +117,7 @@ await test("G cleanup ejecuta URL.revokeObjectURL", async () => {
   fetchQueue = [response(200)];
   const states = [];
   const cleanup = startAuthenticatedImageLoad("https://backend.example/api/ai/assets/run/sagittal/input.png", (state) => states.push(state));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  while (!states.at(-1)?.url) await new Promise((resolve) => setTimeout(resolve, 1));
   cleanup();
   assert.equal(states.at(-1).url, "blob:asset-1");
   assert.deepEqual(revokedUrls, ["blob:asset-1"]);

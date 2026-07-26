@@ -1,4 +1,4 @@
-﻿import type { Measurement } from "../appTypes";
+import type { Measurement } from "../appTypes";
 
 interface MeasurementsPanelProps {
   measurements: Measurement[];
@@ -7,20 +7,81 @@ interface MeasurementsPanelProps {
   onChange: (measurements: Measurement[], detail: string) => void;
 }
 
+const measurementLabelMap: Record<string, string> = {
+  "vertebra_group area": "Área total segmentada — grupo vertebral",
+  "vertebra_group width": "Extensión horizontal — grupo vertebral",
+  "vertebra_group height": "Extensión vertical — grupo vertebral",
+  "canal area": "Área total segmentada — canal",
+  "canal width": "Extensión horizontal — canal",
+  "canal height": "Extensión vertical — canal",
+  "disc_group area": "Área total segmentada — grupo discal",
+  "disc_group width": "Extensión horizontal — grupo discal",
+  "disc_group height": "Extensión vertical — grupo discal",
+};
+
+function normalizedMeasurementKey(measurement: Measurement) {
+  return `${measurement.label ?? measurement.id}`.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase().trim();
+}
+
+export function displayMeasurementLabel(measurement: Measurement) {
+  const key = normalizedMeasurementKey(measurement);
+  if (measurementLabelMap[key]) return measurementLabelMap[key];
+  if (key.includes("vertebra group") && key.includes("area")) return measurementLabelMap["vertebra_group area"];
+  if (key.includes("vertebra group") && key.includes("width")) return measurementLabelMap["vertebra_group width"];
+  if (key.includes("vertebra group") && key.includes("height")) return measurementLabelMap["vertebra_group height"];
+  if (key.includes("canal") && key.includes("area")) return measurementLabelMap["canal area"];
+  if (key.includes("canal") && key.includes("width")) return measurementLabelMap["canal width"];
+  if (key.includes("canal") && key.includes("height")) return measurementLabelMap["canal height"];
+  if (key.includes("disc group") && key.includes("area")) return measurementLabelMap["disc_group area"];
+  if (key.includes("disc group") && key.includes("width")) return measurementLabelMap["disc_group width"];
+  if (key.includes("disc group") && key.includes("height")) return measurementLabelMap["disc_group height"];
+  return measurement.label;
+}
+
+export function displayMeasurementUnit(unit: string) {
+  return unit === "mm2" ? "mm²" : unit;
+}
+
+function numericValue(value: number | string | null | undefined) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+export function formatTechnicalConfidence(value?: number) {
+  return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1).replace(".", ",")} %` : "N/D";
+}
+
+export function measurementDelta(measurement: Measurement) {
+  const ai = numericValue(measurement.aiValue ?? measurement.value);
+  const reviewer = numericValue(measurement.reviewerValue);
+  if (ai === undefined || reviewer === undefined) return "N/D";
+  const delta = reviewer - ai;
+  const prefix = delta > 0 ? "+" : "";
+  return `${prefix}${delta.toFixed(2).replace(".", ",")}`;
+}
+
+export function applyReviewerMeasurementEdit(measurements: Measurement[], id: string, reviewerValue: string) {
+  return measurements.map((measurement) =>
+    measurement.id === id
+      ? {
+        ...measurement,
+        aiValue: measurement.aiValue ?? measurement.value,
+        reviewerValue,
+        source: "Reviewer" as const,
+        status: "editado" as const,
+        placeholder: false,
+      }
+      : measurement,
+  );
+}
+
 export function MeasurementsPanel({ measurements, inferenceStatus, description, onChange }: MeasurementsPanelProps) {
   function updateValue(id: string, value: string) {
-    const updated = measurements.map((measurement) =>
-      measurement.id === id
-        ? { ...measurement, value, source: "Reviewer" as const, status: "editado" as const, placeholder: false }
-        : measurement,
-    );
-    onChange(updated, `${id} actualizado por revisor`);
-  }
-
-  function sourceLabel(source?: Measurement["source"]) {
-    if (source === "Reviewer") return "Revisor";
-    if (source === "Placeholder") return "Marcador";
-    return "IA";
+    onChange(applyReviewerMeasurementEdit(measurements, id, value), `${id} actualizado por revisor`);
   }
 
   return (
@@ -30,27 +91,32 @@ export function MeasurementsPanel({ measurements, inferenceStatus, description, 
         <span className="technical-state">{inferenceStatus === "pending_real_inference" ? "Inferencia real pendiente" : "Revisable"}</span>
       </div>
       {description && <p className="technical-note">{description}</p>}
-      <div className="measurement-table">
+      <p className="technical-note measurement-honesty-note">Estas son metricas geometricas tecnicas calculadas sobre mascaras agrupadas. No corresponden todavia a mediciones clinicas por nivel vertebral y requieren revision profesional.</p>
+      <div className="measurement-table professional-measurement-table" role="region" aria-label="Mediciones tecnicas sagitales">
         <div className="measurement-head">
-          <span>Medición</span>
-          <span>Valor</span>
+          <span>Metrica</span>
+          <span>Valor IA original</span>
+          <span>Valor revisado</span>
           <span>Unidad</span>
-          <span>Conf.</span>
-          <span>Origen</span>
+          <span title="Promedio de probabilidades del modelo sobre los pixeles de la clase predicha. No representa certeza clinica.">Confianza tecnica</span>
           <span>Estado</span>
-          <span>Atípico</span>
+          <span>Diferencia</span>
         </div>
-        {measurements.map((measurement) => (
-          <div className="measurement-row" key={measurement.id}>
-            <span>{measurement.label}</span>
-            <input value={String(measurement.value)} onChange={(event) => updateValue(measurement.id, event.target.value)} />
-            <span>{measurement.unit}</span>
-            <span>{measurement.confidence ? `${Math.round(measurement.confidence * 100)}%` : "N/D"}</span>
-            <span>{sourceLabel(measurement.source)}</span>
-            <span>{measurement.status}</span>
-            <span>{measurement.outlier ? "Sí" : "No"}</span>
-          </div>
-        ))}
+        {measurements.map((measurement) => {
+          const aiValue = measurement.aiValue ?? measurement.value;
+          const reviewerValue = measurement.reviewerValue ?? "";
+          return (
+            <div className="measurement-row" key={measurement.id}>
+              <span title={`Tecnico original: ${measurement.label}`}>{displayMeasurementLabel(measurement)}</span>
+              <span className="tabular-value ai-measurement-value">{String(aiValue)}</span>
+              <input aria-label={`Valor revisado para ${displayMeasurementLabel(measurement)}`} value={String(reviewerValue)} onChange={(event) => updateValue(measurement.id, event.target.value)} placeholder={String(aiValue)} />
+              <span>{displayMeasurementUnit(measurement.unit)}</span>
+              <span>{formatTechnicalConfidence(measurement.confidence)}</span>
+              <span>{measurement.status}</span>
+              <span className="tabular-value">{measurementDelta(measurement)}</span>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
