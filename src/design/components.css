@@ -2613,6 +2613,44 @@ body {
   margin-bottom: var(--sp-3);
 }
 
+.metadata-form-section {
+  border-top: 1px solid var(--border);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+}
+
+.form-span-all {
+  grid-column: 1 / -1;
+}
+
+.metadata-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+  background: color-mix(in srgb, var(--surface-dark) 72%, transparent);
+}
+
+.metadata-dialog {
+  width: min(720px, 100%);
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  box-shadow: var(--shadow-modal);
+}
+
+.longitudinal-measurement-cell {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 9rem;
+}
+
+.longitudinal-measurement-cell strong,
+.longitudinal-measurement-cell small {
+  font-variant-numeric: tabular-nums;
+}
+
 .settings-form-grid label {
   display: grid;
   gap: var(--sp-1);

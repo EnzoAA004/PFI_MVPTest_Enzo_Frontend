@@ -10,6 +10,14 @@ export type HistoryTarget =
   | { kind: "subject"; subjectRef: string }
   | { kind: "study"; caseId: string };
 
+export type StudyMetadataInput = {
+  subjectRef: string | null;
+  studyDate: string | null;
+  modality: string | null;
+  description: string | null;
+  reviewPriority: "low" | "medium" | "high";
+};
+
 export type PipelineRunRequest = {
   caseId: string;
   plane: Plane;
@@ -315,6 +323,8 @@ export type StudyRow = {
   caseId: string;
   subjectRef: string | null;
   studyDate: string | null;
+  modality?: string | null;
+  description?: string | null;
   status: string;
   planes: Plane[];
   primaryPlane: Plane | null;
@@ -345,6 +355,7 @@ export type StudyRun = {
   reviewer?: string | null;
   reviewedAt?: string | null;
   comments?: string | null;
+  auditTrail?: AuditEvent[];
   sagittalRunId?: string | null;
   axialRunId?: string | null;
   sagittalModelKey?: string | null;
@@ -429,11 +440,22 @@ export type AuditEvent = {
 
 export type PatientStudy = {
   caseId: string;
-  studyDate: string;
+  subjectRef?: string | null;
+  studyDate: string | null;
+  modality?: string | null;
+  description?: string | null;
   planes: string;
   modelVersion: string;
+  modelKey?: string | null;
+  latestRunId?: string | null;
   reviewStatus: ReviewStatus;
   priority: Priority;
+  reviewer?: string | null;
+  reviewedAt?: string | null;
+  measurementsByPlane?: Partial<Record<Plane, Measurement[]>>;
+  corrections?: PersistedReviewCorrection[];
+  createdAt?: string;
+  updatedAt?: string;
   metrics?: {
     lordosisAngle?: number;
     canalDiameter?: number;
@@ -446,6 +468,10 @@ export type PatientStudy = {
 
 export type PatientHistorySummary = {
   totalStudies: number;
+  pending?: number;
+  completed?: number;
+  observed?: number;
+  withStudyDate?: number;
   mostRecent?: string;
   firstStudy?: string;
 };
@@ -460,7 +486,7 @@ export type PatientHistoryGovernance = {
 
 export type PatientHistoryResponse = {
   status: string;
-  source?: string;
+  source?: "postgres-domain" | string;
   subjectRef: string;
   deidentified?: boolean;
   studies: PatientStudy[];

@@ -1,4 +1,4 @@
-import type { AiRunResponse, Plane, ReviewStatus } from "./appTypes";
+import type { AiRunResponse, Plane, ReviewStatus, StudyMetadataInput } from "./appTypes";
 
 export type InputResponse = {
   inputId: string;
@@ -177,6 +177,7 @@ export type WorkspaceAssetRefs = Partial<Record<Plane | "workspace", PlaneAssetR
 
 export type MultiplanarRunRequest = {
   caseId: string;
+  studyMetadata?: StudyMetadataInput;
   sagittalInputId: string;
   axialInputId?: string;
   sagittalModelKey?: string;
@@ -187,6 +188,7 @@ export type MultiplanarRunRequest = {
 
 export type LegacyMultiplanarRunRequest = {
   caseId: string;
+  studyMetadata?: StudyMetadataInput;
   sagittalInputPath?: string;
   axialInputPath?: string;
   sagittalModelKey?: string;

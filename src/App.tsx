@@ -22,10 +22,40 @@ import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessi
 import { fetchStudyDetail } from "./studyApi";
 import { fetchSubjectHistory } from "./subjectHistoryApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, studyHasReviewableRun } from "./studyDisplay";
-import type { AiModel, AiRunResponse, AuditEvent, AuthSession, HistoryTarget, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, SelectedStudyReference, StudiesSummary, StudyRow, ViewKey } from "./appTypes";
+import type { AiModel, AiRunResponse, AuditEvent, AuthSession, HistoryTarget, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow, ViewKey } from "./appTypes";
 
 function toPatientStudy(study: StudyRow): PatientStudy {
-  return { caseId: study.caseId, studyDate: displayStudyDate(study.studyDate), planes: displayPrimaryPlane(study.primaryPlane ?? study.plane), modelVersion: displayModelKey(study.modelKey), reviewStatus: study.reviewStatus, priority: study.priority };
+  return {
+    caseId: study.caseId,
+    subjectRef: study.subjectRef,
+    studyDate: study.studyDate,
+    modality: study.modality,
+    description: study.description,
+    planes: study.planes.length ? study.planes.map(displayPrimaryPlane).join(", ") : displayPrimaryPlane(study.primaryPlane ?? study.plane),
+    modelVersion: displayModelKey(study.modelKey),
+    modelKey: study.modelKey,
+    latestRunId: study.latestRunId,
+    reviewStatus: study.reviewStatus,
+    priority: study.priority,
+    createdAt: study.createdAt,
+    updatedAt: study.updatedAt,
+  };
+}
+
+function toTraceabilityStudy(detail: StudyDetailResponse): PatientStudy {
+  const study = detail.study;
+  const latestRun = detail.runs?.[0];
+  return {
+    ...toPatientStudy(study),
+    modelVersion: latestRun?.modelKey ?? toPatientStudy(study).modelVersion,
+    modelKey: latestRun?.modelKey ?? study.modelKey,
+    latestRunId: latestRun?.runId ?? study.latestRunId,
+    reviewStatus: latestRun?.reviewStatus ?? study.reviewStatus,
+    reviewer: latestRun?.reviewer ?? null,
+    reviewedAt: latestRun?.reviewedAt ?? null,
+    measurementsByPlane: latestRun?.measurementsByPlane,
+    corrections: latestRun?.corrections,
+  };
 }
 
 function LoadingState({ title, detail }: { title: string; detail: string }) {
@@ -92,6 +122,9 @@ function App() {
   const [selectedStudy, setSelectedStudy] = useState<SelectedStudyReference | null>(null);
   const [studiesSummary, setStudiesSummary] = useState<StudiesSummary | undefined>();
   const [patientHistoryResponse, setPatientHistoryResponse] = useState<PatientHistoryResponse | null>(null);
+  const [studyTraceabilityStudies, setStudyTraceabilityStudies] = useState<PatientStudy[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
   const [selectedRun, setSelectedRun] = useState<AiRunResponse | null>(null);
   const [studyReview, setStudyReview] = useState<any | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
@@ -113,17 +146,15 @@ function App() {
   }, [backendStudies, safeRun]);
   const backendPatientStudies = useMemo(() => {
     if (!backendStudies.length) return [];
-    if (historyTarget?.kind === "study") return studies.filter((study) => study.caseId === historyTarget.caseId).map(toPatientStudy);
+    if (historyTarget?.kind === "study") return studyTraceabilityStudies;
     const subjectRef = historyTarget?.kind === "subject" ? historyTarget.subjectRef : patientHistoryResponse?.subjectRef ?? null;
     return studies.filter((study) => !subjectRef || study.subjectRef === subjectRef).map(toPatientStudy);
-  }, [historyTarget, patientHistoryResponse?.subjectRef, studies]);
-  const visiblePatientStudies = patientHistoryResponse?.studies?.length
-    ? patientHistoryResponse.studies
-    : backendPatientStudies.length
-      ? backendPatientStudies
-      : bootstrapLoading
-        ? []
-        : [];
+  }, [backendStudies.length, historyTarget, patientHistoryResponse?.subjectRef, studies, studyTraceabilityStudies]);
+  const visiblePatientStudies = historyTarget?.kind === "subject"
+    ? patientHistoryResponse?.studies ?? []
+    : historyTarget?.kind === "study"
+      ? studyTraceabilityStudies
+      : [];
   const shouldShowDataLoading = databaseDataStatus === "loading" && backendStudies.length === 0;
   const historySubjectRef = historyTarget?.kind === "subject" ? historyTarget.subjectRef : patientHistoryResponse?.subjectRef ?? null;
   const realStudyRows = studiesBackendAvailable ? studies : [];
@@ -229,21 +260,45 @@ function App() {
   }, [contractIssue]);
 
   useEffect(() => {
-    if (historyTarget?.kind === "study") {
+    if (!historyTarget) {
       setPatientHistoryResponse(null);
-      return;
-    }
-    const subjectRef = historySubjectRef;
-    if (!shouldFetchSubjectHistory(subjectRef) || typeof subjectRef !== "string") {
-      setPatientHistoryResponse(null);
+      setStudyTraceabilityStudies([]);
       return;
     }
     let cancelled = false;
-    void fetchSubjectHistory(subjectRef).then((historyResponse) => {
-      if (!cancelled && historyResponse?.studies?.length) setPatientHistoryResponse(historyResponse);
-    }).catch(() => undefined);
+    setHistoryLoading(true);
+    setHistoryError("");
+    if (historyTarget.kind === "study") {
+      setPatientHistoryResponse(null);
+      void fetchStudyDetail({ caseId: historyTarget.caseId }).then((detail) => {
+        if (!cancelled) setStudyTraceabilityStudies([toTraceabilityStudy(detail)]);
+      }).catch((historyFetchError) => {
+        if (!cancelled) {
+          setStudyTraceabilityStudies([]);
+          setHistoryError(historyFetchError instanceof Error ? historyFetchError.message : "No se pudo consultar la trazabilidad del estudio.");
+        }
+      }).finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+      return () => { cancelled = true; };
+    }
+    setStudyTraceabilityStudies([]);
+    if (!shouldFetchSubjectHistory(historyTarget.subjectRef)) {
+      setHistoryLoading(false);
+      return;
+    }
+    void fetchSubjectHistory(historyTarget.subjectRef).then((historyResponse) => {
+      if (!cancelled) setPatientHistoryResponse(historyResponse);
+    }).catch((historyFetchError) => {
+      if (!cancelled) {
+        setPatientHistoryResponse(null);
+        setHistoryError(historyFetchError instanceof Error ? historyFetchError.message : "No se pudo consultar el historial.");
+      }
+    }).finally(() => {
+      if (!cancelled) setHistoryLoading(false);
+    });
     return () => { cancelled = true; };
-  }, [historySubjectRef, historyTarget]);
+  }, [historyTarget]);
 
   function recordAudit(action: string, detail: string, actor = "Revisor") {
     setAuditTrail(appendAuditEvent({ action, detail, actor }));
@@ -313,12 +368,9 @@ function App() {
   function handleOpenPatientHistory(target: HistoryTarget) {
     setHistoryTarget(target);
     setPatientHistoryResponse(null);
+    setStudyTraceabilityStudies([]);
+    setHistoryError("");
     setActiveView("history");
-    if (target.kind === "study") return;
-    if (!shouldFetchSubjectHistory(target.subjectRef)) return;
-    void fetchSubjectHistory(target.subjectRef).then((historyResponse) => {
-      if (historyResponse?.studies?.length) setPatientHistoryResponse(historyResponse);
-    }).catch(() => undefined);
   }
 
   function handleMeasurementsChange(nextMeasurements: Measurement[], detail: string) {
@@ -406,6 +458,15 @@ function App() {
     } finally { setSaving(false); }
   }
 
+  async function handleStudyMetadataUpdated() {
+    await refreshStudiesFromPostgres();
+    await refreshSelectedStudyFromPostgres();
+    if (historyTarget?.kind === "subject") {
+      const historyResponse = await fetchSubjectHistory(historyTarget.subjectRef);
+      setPatientHistoryResponse(historyResponse);
+    }
+  }
+
   if (authBootstrapping) return <LoadingState title="Restaurando sesión" detail="Validando credenciales guardadas." />;
   if (!session) return <AuthView onAuthenticated={setSession} />;
   if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
@@ -433,9 +494,12 @@ function App() {
       {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} />}
       {activeView === "studies" && <StudiesView studies={realStudyRows} mode="all" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
       {activeView === "queue" && <StudiesView studies={realStudyRows} mode="queue" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
-      {activeView === "review" && (reviewLoading ? <LoadingState title="Cargando corrida" detail={`Consultando corridas persistidas para ${selectedStudy?.caseId ?? "el estudio seleccionado"}.`} /> : contractIssue ? <ContractErrorState detail={`${contractIssue.message}${contractIssue.path ? ` (${contractIssue.path})` : ""}${contractIssue.traceId ? ` · trace ${contractIssue.traceId}` : ""}`} onBackToStudies={() => changeView(lastStudyNavView)} /> : reviewError ? <ContractErrorState detail={reviewError} onBackToStudies={() => changeView(lastStudyNavView)} /> : safeRun ? <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} /> : <EmptyReviewState onBackToStudies={() => changeView(lastStudyNavView)} />)}
+      {activeView === "review" && (reviewLoading ? <LoadingState title="Cargando corrida" detail={`Consultando corridas persistidas para ${selectedStudy?.caseId ?? "el estudio seleccionado"}.`} /> : contractIssue ? <ContractErrorState detail={`${contractIssue.message}${contractIssue.path ? ` (${contractIssue.path})` : ""}${contractIssue.traceId ? ` · trace ${contractIssue.traceId}` : ""}`} onBackToStudies={() => changeView(lastStudyNavView)} /> : reviewError ? <ContractErrorState detail={reviewError} onBackToStudies={() => changeView(lastStudyNavView)} /> : safeRun ? <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} onStudyMetadataUpdated={handleStudyMetadataUpdated} /> : <EmptyReviewState onBackToStudies={() => changeView(lastStudyNavView)} />)}
       {activeView === "patients" && <PatientsView studies={realStudyRows} loading={shouldShowDataLoading} onOpenHistory={handleOpenPatientHistory} />}
-      {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} target={historyTarget} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (backendPatientStudies.length ? "studies-index-no-longitudinal-model" : "no-longitudinal-backend-data")} summary={patientHistoryResponse?.summary} />)}
+      {activeView === "history" && (historyLoading ? <LoadingState title="Cargando historial" detail={historyTarget?.kind === "study" ? "Consultando trazabilidad real del estudio." : "Consultando historial longitudinal de-identificado."} /> : <PatientHistoryView studies={visiblePatientStudies} target={historyTarget} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (historyTarget?.kind === "study" ? "study-traceability" : "postgres-domain")} summary={patientHistoryResponse?.summary} error={historyError} onOpenStudyReview={(caseId) => {
+        const study = studies.find((row) => row.caseId === caseId);
+        if (study) handleOpenReview(study);
+      }} />)}
       {activeView === "settings" && <ProfessionalSettingsView user={session.user} onUserUpdated={(user) => setSession((current) => current ? { ...current, user } : current)} onLogout={logout} />}
       {activeView === "help" && <HelpSupportView />}
     </AppShell>

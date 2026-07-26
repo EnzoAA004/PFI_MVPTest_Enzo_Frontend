@@ -10,6 +10,7 @@ import { MeasurementsPanel } from "./MeasurementsPanel";
 import { MriSliceViewer } from "./MriSliceViewer";
 import { SpineReconstructionPreview } from "./SpineReconstructionPreview";
 import { StatusBadge } from "./StatusBadge";
+import { emptyStudyMetadataDraft, normalizeStudyMetadataInput, subjectRefErrorMessage, validateSubjectRef, type StudyMetadataDraft } from "../studyMetadata";
 
 const uploadPlanes: Plane[] = ["sagittal", "axial"];
 const allowedInputExtensions = [".npy", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".mha", ".mhd", ".dcm"];
@@ -216,6 +217,8 @@ function AssetProvenancePanel({ run }: { run: MultiplanarRunResponse | null }) {
 export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }) {
   const [activeStep, setActiveStep] = useState<Step>(1);
   const [caseId, setCaseId] = useState("");
+  const [studyMetadata, setStudyMetadata] = useState<StudyMetadataDraft>(() => emptyStudyMetadataDraft());
+  const [studyMetadataError, setStudyMetadataError] = useState("");
   const [contract, setContract] = useState<MultiplanarContract | null>(null);
   const [uploads, setUploads] = useState<Record<Plane, UploadState>>(emptyUploads);
   const [run, setRun] = useState<MultiplanarRunResponse | null>(null);
@@ -328,12 +331,20 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
 
   async function executeRun() {
     if (!sagittalUploadReady || runInFlightRef.current) return;
+    const subjectError = validateSubjectRef(studyMetadata.subjectRef);
+    if (subjectError) {
+      setStudyMetadataError(subjectError);
+      setMessage(subjectRefErrorMessage);
+      return;
+    }
+    const normalizedStudyMetadata = normalizeStudyMetadataInput(studyMetadata);
     runInFlightRef.current = true;
     setRunning(true);
     setMessage("Procesando / esperando respuesta del modelo sagital. El backend no expone progreso granular; no se muestra porcentaje.");
     try {
       const payload: MultiplanarRunPayload = {
         caseId: normalizedCaseId,
+        studyMetadata: normalizedStudyMetadata,
         sagittalInputId: uploads.sagittal.input?.inputId ?? "",
         sagittalModelKey: "sagittal_spider",
         allowContractFallback: false,
@@ -444,6 +455,55 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
               <input readOnly value={loadingContract ? "consultando" : String(contract?.status ?? "sin contrato")} />
             </label>
           </div>
+          <section className="metadata-form-section" aria-labelledby="study-metadata-heading">
+            <div className="section-title">
+              <div>
+                <h2 id="study-metadata-heading">Datos académicos de-identificados</h2>
+                <p className="muted compact-copy">Uso académico con datos de-identificados. No ingreses nombre, DNI, correo, teléfono, domicilio ni historia clínica real.</p>
+              </div>
+            </div>
+            <div className="settings-form-grid">
+              <label>
+                <span>Referencia de paciente de-identificada</span>
+                <input
+                  value={studyMetadata.subjectRef}
+                  onBlur={() => setStudyMetadataError(validateSubjectRef(studyMetadata.subjectRef) ?? "")}
+                  onChange={(event) => {
+                    setStudyMetadata((current) => ({ ...current, subjectRef: event.target.value }));
+                    setStudyMetadataError("");
+                  }}
+                  placeholder="SPIDER-101"
+                  aria-invalid={Boolean(studyMetadataError)}
+                  aria-describedby="subject-ref-help"
+                />
+                <small id="subject-ref-help">Usá un código académico estable para agrupar estudios de la misma persona sin identificarla.</small>
+                {studyMetadataError && <span className="delta-alert">{studyMetadataError}</span>}
+              </label>
+              <label>
+                <span>Fecha del estudio</span>
+                <input type="date" value={studyMetadata.studyDate} onChange={(event) => setStudyMetadata((current) => ({ ...current, studyDate: event.target.value }))} />
+              </label>
+              <label>
+                <span>Modalidad</span>
+                <select value={studyMetadata.modality} onChange={(event) => setStudyMetadata((current) => ({ ...current, modality: event.target.value }))}>
+                  <option value="">No informada</option>
+                  <option value="MRI">RM / MRI</option>
+                </select>
+              </label>
+              <label>
+                <span>Prioridad</span>
+                <select value={studyMetadata.reviewPriority} onChange={(event) => setStudyMetadata((current) => ({ ...current, reviewPriority: event.target.value as StudyMetadataDraft["reviewPriority"] }))}>
+                  <option value="low">baja</option>
+                  <option value="medium">media</option>
+                  <option value="high">alta</option>
+                </select>
+              </label>
+              <label className="form-span-all">
+                <span>Descripción</span>
+                <input maxLength={160} value={studyMetadata.description} onChange={(event) => setStudyMetadata((current) => ({ ...current, description: event.target.value }))} placeholder="RM lumbar sagital T2" />
+              </label>
+            </div>
+          </section>
           <div className="analysis-upload-grid">
             {uploadPlanes.map((plane) => {
               const upload = uploads[plane];

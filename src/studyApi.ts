@@ -1,6 +1,7 @@
 import { API_BASE_URL, ApiError, ContractError } from "./api";
 import { authHeaders } from "./authClient";
-import type { DataOrigin, Measurement, PersistedArtifact, PersistedReviewCorrection, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyRow, StudyRun } from "./appTypes";
+import type { DataOrigin, Measurement, PersistedArtifact, PersistedReviewCorrection, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyMetadataInput, StudyRow, StudyRun } from "./appTypes";
+import { priorityFromBackend } from "./studyMetadata";
 
 function mapPriority(value?: string): Priority {
   if (value === "alta" || value === "high") return "alta";
@@ -28,6 +29,14 @@ function protectedHeaders() {
   return { "Content-Type": "application/json", ...authHeaders() };
 }
 
+const metadataErrorMessages: Record<string, string> = {
+  INVALID_SUBJECT_REFERENCE: "La referencia de-identificada no es válida.",
+  INVALID_REVIEW_PRIORITY: "La prioridad seleccionada no es válida.",
+  SUBJECT_REFERENCE_CONFLICT: "El estudio ya está asociado a otra referencia de paciente.",
+  STUDY_NOT_FOUND: "El estudio no existe.",
+  DATABASE_UNAVAILABLE: "La base de datos no está disponible.",
+};
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
 }
@@ -52,6 +61,7 @@ function normalizeStudy(value: unknown, fallback?: Partial<StudyRow>): StudyRow 
   const row = asRecord(value);
   if (!row) throw new ContractError("Detalle de estudio invalido.", "/api/studies/{caseId}");
   const subjectRef = optionalString(row, "subjectRef") ?? optionalString(row, "patientId");
+  const reviewPriority = typeof row.reviewPriority === "string" ? priorityFromBackend(row.reviewPriority as StudyMetadataInput["reviewPriority"]) : undefined;
   const primaryPlane = mapPlane(row.primaryPlane) ?? mapPlane(row.plane) ?? null;
   const planes = normalizePlanes(row.planes);
   const latestRunId = optionalString(row, "latestRunId") ?? optionalString(row, "runId");
@@ -60,6 +70,8 @@ function normalizeStudy(value: unknown, fallback?: Partial<StudyRow>): StudyRow 
     subjectRef,
     patientId: subjectRef,
     studyDate: optionalString(row, "studyDate"),
+    modality: optionalString(row, "modality"),
+    description: optionalString(row, "description"),
     status: typeof row.status === "string" ? row.status : fallback?.status ?? "created",
     planes,
     primaryPlane,
@@ -69,7 +81,7 @@ function normalizeStudy(value: unknown, fallback?: Partial<StudyRow>): StudyRow 
     modelKey: optionalString(row, "modelKey"),
     modelStatus: typeof row.modelStatus === "string" ? row.modelStatus : fallback?.modelStatus ?? "sin_estado",
     reviewStatus: mapStatus(typeof row.reviewStatus === "string" ? row.reviewStatus : fallback?.reviewStatus),
-    priority: mapPriority(typeof row.priority === "string" ? row.priority : fallback?.priority),
+    priority: mapPriority(typeof row.priority === "string" ? row.priority : reviewPriority ?? fallback?.priority),
     createdAt: typeof row.createdAt === "string" ? row.createdAt : fallback?.createdAt,
     updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : fallback?.updatedAt,
     dataOrigin: mapDataOrigin(row.dataOrigin, fallback?.dataOrigin ?? "database"),
@@ -287,6 +299,49 @@ async function readJson(path: string) {
   const response = await fetch(`${API_BASE_URL}${path}`, { headers: protectedHeaders() });
   if (!response.ok) throw new ApiError(`Backend respondio ${response.status}`, { status: response.status, path });
   return await response.json() as Record<string, unknown>;
+}
+
+async function readError(response: Response): Promise<Record<string, unknown> | undefined> {
+  try {
+    const payload = await response.clone().json();
+    return payload && typeof payload === "object" ? payload as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function metadataApiError(path: string, response: Response, body?: Record<string, unknown>) {
+  const code = typeof body?.code === "string" ? body.code : typeof body?.errorCode === "string" ? body.errorCode : undefined;
+  const traceId = typeof body?.traceId === "string" ? body.traceId : response.headers.get("X-Trace-Id") ?? undefined;
+  const message = code ? metadataErrorMessages[code] ?? `Backend respondió ${response.status}` : `Backend respondió ${response.status}`;
+  return new ApiError(message, { status: response.status, code, path, traceId, body });
+}
+
+export async function updateStudyMetadata(caseId: string, metadata: StudyMetadataInput): Promise<StudyDetailResponse> {
+  const path = `/api/studies/${encodeURIComponent(caseId)}/metadata`;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "PUT",
+    headers: protectedHeaders(),
+    body: JSON.stringify(metadata),
+  });
+  if (!response.ok) throw metadataApiError(path, response, await readError(response));
+  const payload = await response.json() as Record<string, unknown>;
+  if (payload.study || payload.runs) {
+    const normalizedStudy = normalizeStudy(payload.study ?? { caseId }, { caseId } as StudyRow);
+    const runs = Array.isArray(payload.runs) ? payload.runs.map((run) => normalizeRun(run, normalizedStudy)) : [];
+    return {
+      status: typeof payload.status === "string" ? payload.status : "ok",
+      study: normalizedStudy,
+      runs,
+      review: payload.review && typeof payload.review === "object" ? payload.review as ReviewStatusResponse : undefined,
+      measurements: runs[0]?.measurementsByPlane?.sagittal ?? [],
+      auditTrail: Array.isArray(payload.auditTrail) ? payload.auditTrail as any[] : [],
+      humanReviewRequired: payload.humanReviewRequired === undefined ? true : Boolean(payload.humanReviewRequired),
+      notClinicalDiagnosis: payload.notClinicalDiagnosis === undefined ? true : Boolean(payload.notClinicalDiagnosis),
+      dataOrigin: mapDataOrigin(payload.dataOrigin, "database"),
+    };
+  }
+  return fetchStudyDetail({ caseId });
 }
 
 export async function fetchStudyDetail(study: Pick<StudyRow, "caseId"> & Partial<StudyRow>): Promise<StudyDetailResponse> {

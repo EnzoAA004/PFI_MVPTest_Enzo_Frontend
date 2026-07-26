@@ -1,10 +1,12 @@
 ﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { exportReviewReport } from "../api";
 import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
-import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudySeries } from "../appTypes";
+import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudyMetadataInput, StudySeries } from "../appTypes";
 import { displayInferenceMode, displayMeasurementLabel, displayMeasurementLevel, displayReviewStatus, displayTechnicalReadiness, displayUnit } from "../clinicalDisplay";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
+import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
+import { emptyStudyMetadataDraft, normalizeStudyMetadataInput, priorityToBackend, subjectRefErrorMessage, validateSubjectRef, type StudyMetadataDraft } from "../studyMetadata";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
 import { MriSliceViewer } from "./MriSliceViewer";
@@ -52,6 +54,7 @@ interface StudyReviewViewProps {
   onBackToStudies: () => void;
   onMeasurementsChange: (measurements: Measurement[], detail: string) => void;
   onSaveReview: (status: ReviewStatus, notes: string, measurements: Measurement[]) => Promise<ReviewStatusResponse | undefined>;
+  onStudyMetadataUpdated?: (caseId: string) => Promise<void>;
 }
 
 function inferenceModeLabel(value?: string) {
@@ -223,7 +226,26 @@ function artifactFrom(run: AiRunResponse): AiModelArtifact | undefined {
   return run.modelArtifact?.artifact ?? asRecord(metadata?.modelArtifact) as AiModelArtifact | undefined;
 }
 
-export function StudyReviewView({ run, studyReview, measurements, auditTrail, saving, onBackToStudies, onMeasurementsChange, onSaveReview }: StudyReviewViewProps) {
+function metadataDraftFromDetail(detail: StudyDetailResponse | null, run: AiRunResponse): StudyMetadataDraft {
+  const study = detail?.study;
+  return {
+    subjectRef: study?.subjectRef ?? run.patientId ?? "",
+    studyDate: study?.studyDate ?? run.studyDate ?? "",
+    modality: study?.modality ?? run.modality ?? "",
+    description: study?.description ?? "",
+    reviewPriority: priorityToBackend(study?.priority),
+  };
+}
+
+function metadataPayloadEqual(next: StudyMetadataInput, current: StudyMetadataDraft) {
+  return next.subjectRef === (current.subjectRef.trim() || null)
+    && next.studyDate === (current.studyDate || null)
+    && next.modality === (current.modality || null)
+    && next.description === (current.description.trim() || null)
+    && next.reviewPriority === current.reviewPriority;
+}
+
+export function StudyReviewView({ run, studyReview, measurements, auditTrail, saving, onBackToStudies, onMeasurementsChange, onSaveReview, onStudyMetadataUpdated }: StudyReviewViewProps) {
   const [tab, setTab] = useState<"Sagittal" | "Axial" | "3D Reconstruction">("Sagittal");
   const [selectedSeriesId, setSelectedSeriesId] = useState("");
   const [maskVisibility, setMaskVisibility] = useState<Record<string, boolean>>({});
@@ -239,6 +261,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [saveMessage, setSaveMessage] = useState("");
   const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
   const [selectedDetail, setSelectedDetail] = useState<StudyDetailResponse | null>(() => loadSelectedStudyDetail());
+  const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
+  const [metadataDraft, setMetadataDraft] = useState<StudyMetadataDraft>(() => metadataDraftFromDetail(loadSelectedStudyDetail(), run));
+  const [metadataSaving, setMetadataSaving] = useState(false);
+  const [metadataError, setMetadataError] = useState("");
 
   useEffect(() => {
     const update = () => setSelectedDetail(loadSelectedStudyDetail());
@@ -247,12 +273,18 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   }, []);
 
   useEffect(() => {
+    if (!metadataDialogOpen) setMetadataDraft(metadataDraftFromDetail(selectedDetail, run));
+  }, [metadataDialogOpen, run.caseId, run.patientId, run.studyDate, run.modality, selectedDetail]);
+
+  useEffect(() => {
     setReviewStatus(run.review?.status ?? run.reviewStatus ?? "pendiente");
     setNotes(run.review?.notes ?? run.review?.observations ?? "");
     setReviewerValues({});
     setLandmarkDrafts({});
     setLandmarkAddMode(false);
     setSaveMessage("");
+    setMetadataError("");
+    setMetadataDialogOpen(false);
   }, [run.runId, run.review?.status, run.review?.notes, run.review?.observations, run.reviewStatus]);
 
   const demoMode = isDemoRun(run);
@@ -310,6 +342,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const patientSafe = asRecord(selectedStudyRecord?.metadata) ?? asRecord(studyReview?.patientSafeMetadata) ?? asRecord(metadata?.patientSafeMetadata) ?? {};
   const reviewerName = displayRun.review?.reviewer ?? run.review?.reviewer ?? "Revisor";
   const futureFeatureTitle = "Disponible en una fase futura";
+  const currentMetadataDraft = metadataDraftFromDetail(selectedDetail, run);
 
   function getPersistedReviewerValue(measurementId: string) {
     const persisted = sourceMeasurements.find((item) => item.id === measurementId && item.source === "Reviewer");
@@ -525,6 +558,43 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     setSaveMessage(status === "pendiente" ? "Borrador guardado correctamente" : status === "observado" ? "Estudio marcado como observado." : status === "aceptado" ? "Estudio finalizado y aprobado por el revisor." : "Estudio descartado por el revisor.");
   }
 
+  async function saveStudyMetadata() {
+    const caseId = displayRun.caseId ?? selectedDetail?.study?.caseId;
+    if (!caseId) {
+      setMetadataError("No hay ID de caso para actualizar metadata.");
+      return;
+    }
+    const subjectError = validateSubjectRef(metadataDraft.subjectRef);
+    if (subjectError) {
+      setMetadataError(subjectRefErrorMessage);
+      return;
+    }
+    const payload = normalizeStudyMetadataInput(metadataDraft);
+    if (currentMetadataDraft.subjectRef.trim() && payload.subjectRef && payload.subjectRef !== currentMetadataDraft.subjectRef.trim()) {
+      const confirmed = window.confirm("La referencia de-identificada actual será reemplazada. Confirmá que no estás mezclando identidades clínicas reales.");
+      if (!confirmed) return;
+    }
+    if (metadataPayloadEqual(payload, currentMetadataDraft)) {
+      setMetadataError("No hay cambios para guardar.");
+      return;
+    }
+    setMetadataSaving(true);
+    setMetadataError("");
+    try {
+      const detail = await updateStudyMetadata(caseId, payload);
+      setSelectedDetail(detail);
+      await onStudyMetadataUpdated?.(caseId);
+      setMetadataDialogOpen(false);
+      setSaveMessage("Metadata del estudio actualizada.");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "No se pudo actualizar la metadata.";
+      const traceId = typeof error === "object" && error && "traceId" in error ? String((error as Record<string, unknown>).traceId ?? "") : "";
+      setMetadataError(traceId ? `${detail} Trace ${traceId}` : detail);
+    } finally {
+      setMetadataSaving(false);
+    }
+  }
+
   function panelVisible(panelId: string) {
     return !hiddenPanels[panelId];
   }
@@ -559,7 +629,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           <div className="case-title-row">
             <h1>{displayRun.caseId ?? studyReview?.caseId ?? "Caso sin identificador"}</h1>
             <ReviewBadge status={review.status ?? "pendiente"} />
-            <button className="icon-button" aria-label="More case actions" title="More case actions" type="button">⋯</button>
+            <button className="icon-button" aria-label="Más acciones del caso" title="Más acciones del caso" type="button">⋯</button>
           </div>
           <div className="review-mode-row">
             <StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceModeLabel(inferenceMode)}</StatusBadge>
@@ -573,15 +643,75 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         </div>
       </section>
 
+      {metadataDialogOpen && (
+        <div className="metadata-dialog-backdrop" role="presentation">
+          <section className="metadata-dialog panel-card compact-card" role="dialog" aria-modal="true" aria-labelledby="metadata-dialog-title">
+            <div className="section-title">
+              <div>
+                <h2 id="metadata-dialog-title">Editar metadata del estudio</h2>
+                <p className="muted compact-copy">Uso académico con datos de-identificados. La persistencia se confirma con PostgreSQL antes de actualizar la vista.</p>
+              </div>
+              <button className="icon-button" onClick={() => setMetadataDialogOpen(false)} disabled={metadataSaving} type="button" aria-label="Cerrar edición de metadata">×</button>
+            </div>
+            <div className="settings-form-grid">
+              <label>
+                <span>Referencia de paciente de-identificada</span>
+                <input
+                  value={metadataDraft.subjectRef}
+                  onBlur={() => setMetadataError(validateSubjectRef(metadataDraft.subjectRef) ?? "")}
+                  onChange={(event) => {
+                    setMetadataDraft((current) => ({ ...current, subjectRef: event.target.value }));
+                    setMetadataError("");
+                  }}
+                  placeholder="SPIDER-101"
+                  aria-invalid={Boolean(metadataError)}
+                />
+              </label>
+              <label>
+                <span>Fecha del estudio</span>
+                <input type="date" value={metadataDraft.studyDate} onChange={(event) => setMetadataDraft((current) => ({ ...current, studyDate: event.target.value }))} />
+              </label>
+              <label>
+                <span>Modalidad</span>
+                <select value={metadataDraft.modality} onChange={(event) => setMetadataDraft((current) => ({ ...current, modality: event.target.value }))}>
+                  <option value="">No informada</option>
+                  <option value="MRI">RM / MRI</option>
+                </select>
+              </label>
+              <label>
+                <span>Prioridad</span>
+                <select value={metadataDraft.reviewPriority} onChange={(event) => setMetadataDraft((current) => ({ ...current, reviewPriority: event.target.value as StudyMetadataDraft["reviewPriority"] }))}>
+                  <option value="low">baja</option>
+                  <option value="medium">media</option>
+                  <option value="high">alta</option>
+                </select>
+              </label>
+              <label className="form-span-all">
+                <span>Descripción</span>
+                <input maxLength={160} value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} placeholder="RM lumbar sagital T2" />
+              </label>
+            </div>
+            <p className="settings-persistence-note">No ingreses nombre, DNI, correo, teléfono, domicilio ni historia clínica real.</p>
+            {metadataError && <div className="toast error" role="alert">{metadataError}</div>}
+            <div className="analysis-actions">
+              <button className="ghost-button" onClick={() => setMetadataDialogOpen(false)} disabled={metadataSaving} type="button">Cancelar</button>
+              <button className="primary-button" onClick={() => void saveStudyMetadata()} disabled={metadataSaving} type="button">{metadataSaving ? "Guardando..." : "Guardar metadata"}</button>
+            </div>
+          </section>
+        </div>
+      )}
+
       <section className="review-grid">
         <aside className="left-column case-review-left">
           <article className="panel-card compact-card">
-            <PanelTitle panelId="case-summary" title="Información del caso"><button className="inline-edit-button" type="button">Editar</button></PanelTitle>
+            <PanelTitle panelId="case-summary" title="Información del caso"><button className="inline-edit-button" onClick={() => setMetadataDialogOpen(true)} type="button">Editar</button></PanelTitle>
             {panelVisible("case-summary") ? (
               <dl className="info-list compact-info">
                 <div><dt>ID de caso</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
                 <div><dt>Fecha de estudio</dt><dd>{displayStudyDate(selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? null)}</dd></div>
-                <div><dt>Modalidad</dt><dd>RM</dd></div>
+                <div><dt>Modalidad</dt><dd>{selectedDetail?.study?.modality ?? run.modality ?? "No informada"}</dd></div>
+                <div><dt>Referencia de paciente de-identificada</dt><dd>{displaySubjectRef(selectedDetail?.study?.subjectRef ?? run.patientId ?? null)}</dd></div>
+                <div><dt>Descripción</dt><dd>{selectedDetail?.study?.description ?? "No informada"}</dd></div>
                 <div><dt>Plano</dt><dd>{displayPrimaryPlane(currentSeries?.plane ?? displayRun.plane ?? null)}</dd></div>
                 <div><dt>Versión del modelo</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}</dd></div>
                 <div><dt>Estado de revisión</dt><dd><ReviewBadge status={review.status ?? "pendiente"} />{(review.status ?? "pendiente") === "aceptado" && <small>Finalizado · aprobado por revisor</small>}</dd></div>
@@ -628,7 +758,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <div><dt>Solicitado</dt><dd>{inferenceModeLabel(requestedInferenceMode)}</dd></div>
                 <div><dt>Preparación</dt><dd>{readinessLabel(modelReadiness)}</dd></div>
                 <div><dt>Revisión humana</dt><dd>Requerida</dd></div>
-                <div><dt>Usá clínico</dt><dd>No apto para diagnóstico</dd></div>
+                <div><dt>Uso clínico</dt><dd>No apto para diagnóstico</dd></div>
               </dl>
             ) : hiddenPlaceholder}
           </article>
