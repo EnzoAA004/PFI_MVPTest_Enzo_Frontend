@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { getDemoStudyReview, getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
+import { getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
 import { logoutDoctor, updateDoctorSettings } from "./authClient";
 import { hydrateAuthSession, loadAuthSession } from "./authStorage";
 import { AnalysisTimelineView } from "./components/AnalysisTimelineView";
@@ -14,32 +14,26 @@ import { PendingApprovalView } from "./components/PendingApprovalView";
 import { ProfessionalSettingsView } from "./components/ProfessionalSettingsView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { StudiesView } from "./components/StudiesView";
-import { initialAuditTrail, worklistStudies } from "./data/mockStudies";
-import { sampleRun } from "./mock/sampleRun";
+import { isDemoDataMode, validateVisibleDataOrigin } from "./dataMode";
 import { appendBackendAudit, getBackendReviewSnapshot, saveBackendMeasurements } from "./reviewPersistenceApi";
-import { loadSelectedStudyDetail, saveSelectedStudyDetail, saveSelectedStudyFallback } from "./selectedStudyStorage";
+import { saveSelectedStudyDetail, saveSelectedStudyFallback } from "./selectedStudyStorage";
 import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessionalReview } from "./storage";
 import { fetchStudyDetail } from "./studyApi";
 import { fetchSubjectHistory } from "./subjectHistoryApi";
 import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, StudiesSummary, StudyRow, ViewKey } from "./appTypes";
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
-}
 
 function toPatientStudy(study: StudyRow): PatientStudy {
   return { caseId: study.caseId, studyDate: study.studyDate, planes: study.plane, modelVersion: study.modelKey, reviewStatus: study.reviewStatus, priority: study.priority };
 }
 
 function runFromStudy(study: StudyRow): AiRunResponse {
-  return normalizeRun({
+  return {
     runId: study.runId,
     caseId: study.caseId,
     patientId: study.patientId,
     studyDate: study.studyDate,
     plane: study.plane,
     modelKey: study.modelKey,
-    inputPath: `demo/${study.caseId}`,
     measurements: [],
     measurementValues: [],
     review: { runId: study.runId, status: study.reviewStatus },
@@ -51,11 +45,24 @@ function runFromStudy(study: StudyRow): AiRunResponse {
     landmarks: undefined,
     modelArtifact: undefined,
     quality: undefined,
-  });
+    humanReviewRequired: true,
+    notClinicalDiagnosis: true,
+    dataOrigin: "backend",
+  };
 }
 
 function LoadingState({ title, detail }: { title: string; detail: string }) {
   return <section className="panel-card clinical-loading-state" aria-live="polite"><span className="clinical-spinner" /><div><h2>{title}</h2><p>{detail}</p></div></section>;
+}
+
+function EmptyReviewState({ onBackToStudies }: { onBackToStudies: () => void }) {
+  return (
+    <section className="panel-card clinical-empty-state">
+      <h2>No hay corrida seleccionada</h2>
+      <p>Selecciona un estudio real desde Estudios o Cola de revision, o inicia un Nuevo analisis con carga sagital real.</p>
+      <button className="button secondary" type="button" onClick={onBackToStudies}>Volver a estudios</button>
+    </section>
+  );
 }
 
 function reviewRequiresNotes(status: ReviewStatus, notes: string) {
@@ -83,10 +90,10 @@ function App() {
   const [selectedSubjectRef, setSelectedSubjectRef] = useState<string | null>(null);
   const [studiesSummary, setStudiesSummary] = useState<StudiesSummary | undefined>();
   const [patientHistoryResponse, setPatientHistoryResponse] = useState<PatientHistoryResponse | null>(null);
-  const [selectedRun, setSelectedRun] = useState<AiRunResponse>(() => normalizeRun(sampleRun));
+  const [selectedRun, setSelectedRun] = useState<AiRunResponse | null>(null);
   const [studyReview, setStudyReview] = useState<any | null>(null);
-  const [measurements, setMeasurements] = useState<Measurement[]>(() => normalizeRun(sampleRun).normalizedMeasurements ?? []);
-  const [auditTrail, setAuditTrail] = useState<AuditEvent[]>(initialAuditTrail);
+  const [measurements, setMeasurements] = useState<Measurement[]>([]);
+  const [auditTrail, setAuditTrail] = useState<AuditEvent[]>([]);
   const [bootstrapLoading, setBootstrapLoading] = useState(Boolean(loadAuthSession()));
   const [saving, setSaving] = useState(false);
   const [onboardingSaving, setOnboardingSaving] = useState(false);
@@ -94,25 +101,31 @@ function App() {
   const [info, setInfo] = useState("");
   const [bootstrapRetryNonce, setBootstrapRetryNonce] = useState(0);
 
-  const safeRun = useMemo(() => normalizeRun(selectedRun), [selectedRun]);
-  const history = useMemo(() => loadReviewHistory(), [auditTrail, selectedRun]);
+  const safeRun = useMemo(() => {
+    if (!selectedRun) return null;
+    try {
+      return isDemoDataMode ? selectedRun : normalizeRun(selectedRun);
+    } catch {
+      return selectedRun;
+    }
+  }, [selectedRun]);
   const studies = useMemo(() => {
-    const baseRows = backendStudies.length ? backendStudies : bootstrapLoading ? [] : worklistStudies;
-    const currentRunId = safeRun.runId;
+    const baseRows = backendStudies;
+    const currentRunId = safeRun?.runId;
     return baseRows.map((row, index) => {
       if (index !== 0 && row.runId !== currentRunId) return row;
       return {
         ...row,
-        caseId: safeRun.caseId ?? row.caseId,
-        plane: safeRun.plane ?? row.plane,
-        modelKey: safeRun.modelKey ?? row.modelKey,
-        modelStatus: safeRun.measurementsStatus === "pending_real_inference" ? "Pipeline técnico / inferencia pendiente" : safeRun.degradedMode ? "Modo degradado" : row.modelStatus,
-        reviewStatus: safeRun.review?.status ?? row.reviewStatus,
-        priority: safeRun.agentDecision?.priority ?? row.priority,
-        runId: safeRun.runId ?? row.runId,
+        caseId: safeRun?.caseId ?? row.caseId,
+        plane: safeRun?.plane ?? row.plane,
+        modelKey: safeRun?.modelKey ?? row.modelKey,
+        modelStatus: safeRun?.measurementsStatus === "pending_real_inference" ? "Pipeline tecnico / inferencia pendiente" : safeRun?.degradedMode ? "Modo degradado" : row.modelStatus,
+        reviewStatus: safeRun?.review?.status ?? row.reviewStatus,
+        priority: safeRun?.agentDecision?.priority ?? row.priority,
+        runId: safeRun?.runId ?? row.runId,
       };
     });
-  }, [backendStudies, bootstrapLoading, safeRun]);
+  }, [backendStudies, safeRun]);
   const backendPatientStudies = useMemo(() => {
     if (!backendStudies.length) return [];
     const subjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId;
@@ -126,7 +139,7 @@ function App() {
         ? []
         : [];
   const shouldShowDataLoading = bootstrapLoading && backendStudies.length === 0;
-  const historySubjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? "PAT-0087";
+  const historySubjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? "Sin paciente seleccionado";
   const realStudyRows = studiesBackendAvailable ? studies : [];
   const reviewQueueCount = realStudyRows.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
   const pendingApproval = Boolean(session && (session.user.approved === false || session.user.roles.includes("PENDING_APPROVAL")));
@@ -149,54 +162,41 @@ function App() {
   useEffect(() => {
     if (!session || pendingApproval) return;
     let cancelled = false;
-    const stored = loadReviewHistory();
-    setAuditTrail(stored.auditTrail.length > 0 ? stored.auditTrail : initialAuditTrail);
+    const stored = isDemoDataMode ? loadReviewHistory() : { runs: [], measurementsByRunId: {}, reviewsByRunId: {}, auditTrail: [], patientStudies: [] };
+    setAuditTrail(isDemoDataMode ? stored.auditTrail : []);
     setBootstrapLoading(true);
     setError("");
-
-    const normalized = normalizeRun(stored.runs[0] ?? sampleRun);
-    const runId = normalized.runId ?? "demo-run-2026-001";
-    const storedMeasurements = stored.measurementsByRunId[runId];
-    const storedReview = stored.reviewsByRunId[runId];
-    setSelectedRun(storedReview ? { ...normalized, review: storedReview } : normalized);
-    setMeasurements(storedMeasurements ?? normalized.normalizedMeasurements ?? []);
+    setSelectedRun(isDemoDataMode && stored.runs[0] ? stored.runs[0] : null);
+    setMeasurements([]);
 
     async function bootstrap() {
       try {
-        const [healthResponse, modelResponse, studyResponse, demoStudyReview, backendSnapshot] = await Promise.all([
+        const [healthResponse, modelResponse, studyResponse, backendSnapshot] = await Promise.all([
           getHealth(),
           getModels(),
-          getStudies().catch(() => null),
-          getDemoStudyReview().catch(() => null),
+          getStudies(),
           getBackendReviewSnapshot().catch(() => null),
         ]);
         if (cancelled) return;
         setHealth(healthResponse.status ?? "sin_estado");
         setModels(modelResponse);
-        const subjectRef = studyResponse?.items?.[0]?.patientId ?? "PAT-0087";
-        setStudiesBackendAvailable(studyResponse?.status !== "demo");
-        if (studyResponse?.items?.length) {
-          setBackendStudies(studyResponse.items);
-          setStudiesSummary(studyResponse.summary);
+        const subjectRef = studyResponse.items[0]?.patientId;
+        setStudiesBackendAvailable(studyResponse.status !== "demo");
+        setBackendStudies(studyResponse.items);
+        setStudiesSummary(studyResponse.summary);
+        studyResponse.items.forEach((study) => validateVisibleDataOrigin(`estudio ${study.caseId}`, study.dataOrigin));
+        if (subjectRef) {
+          const subjectHistory = await fetchSubjectHistory(subjectRef).catch(() => null);
+          if (!cancelled && subjectHistory?.studies?.length) setPatientHistoryResponse(subjectHistory);
         }
-        const subjectHistory = await fetchSubjectHistory(subjectRef).catch(() => null);
-        if (!cancelled && subjectHistory?.studies?.length) setPatientHistoryResponse(subjectHistory);
-        setStudyReview(demoStudyReview);
+        setStudyReview(null);
         if (backendSnapshot?.auditTrail?.length) setAuditTrail(backendSnapshot.auditTrail);
-        const backendMeasurements = backendSnapshot?.measurementsByRunId?.[runId];
-        if (backendMeasurements?.length) {
-          setMeasurements(backendMeasurements);
-          saveMeasurementEdits(runId, backendMeasurements);
-        }
-        const backendReview = backendSnapshot?.reviews?.find((item) => item.runId === runId);
-        if (backendReview) {
-          setSelectedRun((current) => ({ ...current, review: backendReview }));
-          saveProfessionalReview(runId, backendReview);
-        }
       } catch (bootstrapError) {
         if (!cancelled) {
           const detail = bootstrapError instanceof Error ? bootstrapError.message : "Error desconocido";
-          setError(`No se pudo consultar el backend. Podés seguir viendo datos locales disponibles y reintentar la conexión. Detalle: ${detail}`);
+          setBackendStudies([]);
+          setStudiesBackendAvailable(false);
+          setError(`No se pudo consultar el backend. Reintenta cuando el servicio este disponible. Detalle: ${detail}`);
         }
       } finally {
         if (!cancelled) setBootstrapLoading(false);
@@ -250,18 +250,24 @@ function App() {
       if (detail.measurements?.length) setMeasurements(detail.measurements);
       const firstRun = detail.runs?.[0];
       if (firstRun) {
-        setSelectedRun((current) => normalizeRun({
-          ...current,
+        setSelectedRun((current) => ({
+          ...(current ?? {}),
           runId: firstRun.runId,
           caseId: detail.study.caseId,
           patientId: detail.study.patientId,
           studyDate: detail.study.studyDate,
           plane: firstRun.plane ?? detail.study.plane,
           modelKey: firstRun.modelKey ?? detail.study.modelKey,
-          review: detail.review ?? current.review,
+          review: detail.review ?? current?.review,
+          humanReviewRequired: true,
+          notClinicalDiagnosis: true,
+          dataOrigin: "backend",
         }));
       }
-    }).catch(() => undefined);
+    }).catch((detailError) => {
+      const detail = detailError instanceof Error ? detailError.message : "Error desconocido";
+      setError(`No se pudo cargar el detalle del estudio. Detalle: ${detail}`);
+    });
   }
 
   function handleOpenPatientHistory(patientId: string) {
@@ -274,7 +280,11 @@ function App() {
   }
 
   function handleMeasurementsChange(nextMeasurements: Measurement[], detail: string) {
-    const runId = safeRun.runId ?? "local-run";
+    const runId = safeRun?.runId;
+    if (!runId) {
+      setError("No hay una corrida real seleccionada para guardar mediciones.");
+      return;
+    }
     setMeasurements(nextMeasurements);
     saveMeasurementEdits(runId, nextMeasurements);
     void saveBackendMeasurements(runId, nextMeasurements, session?.user.fullName ?? "Revisor", detail).catch(() => undefined);
@@ -294,10 +304,15 @@ function App() {
       setSaving(false);
       return undefined;
     }
-    const runId = safeRun.runId ?? "local-run";
+    const runId = safeRun?.runId;
+    if (!runId) {
+      setError("No hay una corrida real seleccionada para guardar la revision.");
+      setSaving(false);
+      return undefined;
+    }
     try {
       const review = await updateReview(runId, { status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Revisor" });
-      setSelectedRun((current) => ({ ...current, review }));
+      setSelectedRun((current) => current ? { ...current, review } : current);
       setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: review.status ?? status } : row));
       saveProfessionalReview(runId, review);
       recordAudit(status === "aceptado" ? "estado aprobado" : status === "observado" ? "estado observado" : "revision guardada", `Revision ${status} guardada para ${runId}.`);
@@ -308,13 +323,18 @@ function App() {
         setError(reviewError instanceof Error ? reviewError.message : "La revisión no cumple las reglas profesionales requeridas.");
         return undefined;
       }
-      const fallbackReview = { runId, status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Revisor", updatedAt: new Date().toISOString() };
-      setSelectedRun((current) => ({ ...current, review: fallbackReview }));
-      setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: status } : row));
-      saveProfessionalReview(runId, fallbackReview);
-      recordAudit("revision guardada", `Fallback local aplicado para ${runId}.`);
-      setInfo("No se pudo confirmar el PATCH en backend; revisión guardada localmente.");
-      return fallbackReview;
+      if (isDemoMode()) {
+        const fallbackReview = { runId, status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Revisor", updatedAt: new Date().toISOString() };
+        setSelectedRun((current) => current ? { ...current, review: fallbackReview } : current);
+        setBackendStudies((current) => current.map((row) => row.runId === runId ? { ...row, reviewStatus: status } : row));
+        saveProfessionalReview(runId, fallbackReview);
+        recordAudit("revision guardada", `Fallback local aplicado para ${runId}.`);
+        setInfo("No se pudo confirmar el PATCH en backend; revision guardada localmente en modo demo.");
+        return fallbackReview;
+      }
+      const detail = reviewError instanceof Error ? reviewError.message : "Error desconocido";
+      setError(`No se pudo guardar la revision en backend. Detalle: ${detail}`);
+      return undefined;
     } finally { setSaving(false); }
   }
 
@@ -323,7 +343,7 @@ function App() {
   if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
 
   return (
-    <AppShell activeView={activeView} activeNavView={activeView === "review" ? lastStudyNavView : activeView} onChangeView={changeView} health={health} modelCount={models.length} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} currentRunId={safeRun.runId} onNewAnalysis={() => changeView("analysis")} loading={false} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
+    <AppShell activeView={activeView} activeNavView={activeView === "review" ? lastStudyNavView : activeView} onChangeView={changeView} health={health} modelCount={models.length} aiModuleAvailable={safeRun?.aiModuleAvailable ?? false} degradedMode={safeRun?.degradedMode ?? false} currentRunId={safeRun?.runId} onNewAnalysis={() => changeView("analysis")} loading={false} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
       {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
       {error && (
         <div className="toast error app-error-toast" role="alert">
@@ -332,11 +352,11 @@ function App() {
         </div>
       )}
       {info && <div className="toast info">{info}</div>}
-      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando lista de trabajo" detail="Consultando estudios deidentificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun.aiModuleAvailable} degradedMode={safeRun.degradedMode} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
+      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando lista de trabajo" detail="Consultando estudios deidentificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={safeRun?.aiModuleAvailable ?? false} degradedMode={safeRun?.degradedMode ?? false} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
       {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} />}
       {activeView === "studies" && <StudiesView studies={realStudyRows} mode="all" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
       {activeView === "queue" && <StudiesView studies={realStudyRows} mode="queue" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
-      {activeView === "review" && <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} />}
+      {activeView === "review" && (safeRun ? <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} /> : <EmptyReviewState onBackToStudies={() => changeView(lastStudyNavView)} />)}
       {activeView === "patients" && <PatientsView studies={realStudyRows} loading={shouldShowDataLoading} onOpenHistory={handleOpenPatientHistory} />}
       {activeView === "history" && (shouldShowDataLoading ? <LoadingState title="Cargando historial" detail="Preparando historial longitudinal desde los estudios del backend." /> : <PatientHistoryView studies={visiblePatientStudies} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (backendPatientStudies.length ? "studies-index-no-longitudinal-model" : "no-longitudinal-backend-data")} summary={patientHistoryResponse?.summary} />)}
       {activeView === "settings" && <ProfessionalSettingsView user={session.user} onUserUpdated={(user) => setSession((current) => current ? { ...current, user } : current)} onLogout={logout} />}

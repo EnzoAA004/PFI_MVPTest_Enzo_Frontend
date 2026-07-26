@@ -18,18 +18,19 @@ export function loadSelectedStudyDetail(): StudyDetailResponse | null {
 }
 
 export function saveSelectedStudyFallback(study: StudyRow) {
+  const runs = study.runId ? [{
+    runId: study.runId,
+    caseId: study.caseId,
+    plane: study.plane,
+    modelKey: study.modelKey,
+    modelStatus: study.modelStatus,
+    reviewStatus: study.reviewStatus,
+  }] : [];
   saveSelectedStudyDetail({
     status: "fallback",
     study,
-    runs: [{
-      runId: study.runId ?? "demo-run",
-      caseId: study.caseId,
-      plane: study.plane,
-      modelKey: study.modelKey,
-      modelStatus: study.modelStatus,
-      reviewStatus: study.reviewStatus,
-    }],
-    review: { runId: study.runId, status: study.reviewStatus },
+    runs,
+    review: study.runId ? { runId: study.runId, status: study.reviewStatus } : undefined,
     measurements: [],
     humanReviewRequired: true,
     notClinicalDiagnosis: true,

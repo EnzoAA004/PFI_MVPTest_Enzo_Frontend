@@ -121,7 +121,7 @@ function measurementRows(studies: PatientStudy[]) {
   }));
 }
 
-export function PatientHistoryView({ studies, subjectRef = "PAT-0087", source, summary }: PatientHistoryViewProps) {
+export function PatientHistoryView({ studies, subjectRef = "Sin paciente seleccionado", source, summary }: PatientHistoryViewProps) {
   const [activeTab, setActiveTab] = useState<HistoryTab>("overview");
   const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
   const visible = (id: string) => !hiddenPanels[id];

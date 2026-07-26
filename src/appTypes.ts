@@ -1,6 +1,7 @@
 export type Plane = "sagittal" | "axial";
 export type ReviewStatus = "pendiente" | "aceptado" | "observado" | "descartado";
 export type Priority = "alta" | "media" | "baja";
+export type DataOrigin = "backend" | "ai_module" | "database" | "demo";
 export type ViewKey = "dashboard" | "studies" | "queue" | "review" | "patients" | "history" | "settings" | "help" | "analysis";
 
 export type PipelineRunRequest = {
@@ -66,6 +67,7 @@ export type Measurement = {
   outlier?: boolean;
   placeholder?: boolean;
   linkedLandmarks?: string[];
+  dataOrigin?: DataOrigin;
 };
 
 export type ReviewExportFormat = "json" | "csv" | "html";
@@ -228,6 +230,7 @@ export type AiRunResponse = {
     status?: string;
     requiredInputs?: string[];
   };
+  dataOrigin?: DataOrigin;
 };
 
 export type AiModel = {
@@ -236,6 +239,7 @@ export type AiModel = {
   version?: string;
   planes?: Plane[];
   enabled?: boolean;
+  dataOrigin?: DataOrigin;
 };
 
 export type StudyRow = {
@@ -248,6 +252,7 @@ export type StudyRow = {
   reviewStatus: ReviewStatus;
   priority: Priority;
   runId?: string;
+  dataOrigin?: DataOrigin;
 };
 
 export type StudyRun = {
@@ -269,6 +274,7 @@ export type StudyDetailResponse = {
   auditTrail?: AuditEvent[];
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
+  dataOrigin?: DataOrigin;
 };
 
 export type StudyRunsResponse = {
@@ -293,6 +299,7 @@ export type StudiesResponse = {
   summary?: StudiesSummary;
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
+  dataOrigin?: DataOrigin;
 };
 
 export type AuditEvent = {
@@ -344,6 +351,7 @@ export type PatientHistoryResponse = {
   governance?: PatientHistoryGovernance;
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;
+  dataOrigin?: DataOrigin;
 };
 
 export type ReviewHistoryState = {

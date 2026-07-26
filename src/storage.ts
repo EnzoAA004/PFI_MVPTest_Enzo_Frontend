@@ -1,5 +1,4 @@
 import { asyncGetItem, asyncSetItem } from "./browserStorage";
-import { initialAuditTrail, patientStudies } from "./data/mockStudies";
 import type { AiRunResponse, AuditEvent, Measurement, ReviewHistoryState, ReviewStatusResponse } from "./appTypes";
 
 const STORAGE_KEY = "lumbar-mri-review-history-v1";
@@ -8,8 +7,8 @@ const emptyState: ReviewHistoryState = {
   runs: [],
   measurementsByRunId: {},
   reviewsByRunId: {},
-  auditTrail: initialAuditTrail,
-  patientStudies,
+  auditTrail: [],
+  patientStudies: [],
 };
 
 let cachedState: ReviewHistoryState = emptyState;
@@ -36,7 +35,8 @@ export function saveReviewHistory(state: ReviewHistoryState) {
 
 export function saveRun(run: AiRunResponse) {
   const state = loadReviewHistory();
-  const runId = run.runId ?? "local-run";
+  if (!run.runId) return;
+  const runId = run.runId;
   const runs = [run, ...state.runs.filter((item) => item.runId !== runId)].slice(0, 10);
   saveReviewHistory({ ...state, runs });
 }

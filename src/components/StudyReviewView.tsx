@@ -364,7 +364,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       exportType: "academic_deidentified_review",
       generatedAt: new Date().toISOString(),
       caseId: displayRun.caseId,
-      subjectRef: selectedDetail?.study?.patientId ?? run.patientId ?? studyReview?.patientId ?? "PAT-0087",
+      subjectRef: selectedDetail?.study?.patientId ?? run.patientId ?? studyReview?.patientId ?? "Sin sujeto informado",
       studyDate: selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? "2026-07-01",
       runId: displayRun.runId,
       plane: displayRun.plane,
@@ -490,7 +490,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           <p>Espacio de revisión</p>
           <button className="back-link" onClick={onBackToStudies} type="button">← Volver a estudios</button>
           <div className="case-title-row">
-            <h1>{displayRun.caseId ?? studyReview?.caseId ?? "CASE-DEMO-0142"}</h1>
+            <h1>{displayRun.caseId ?? studyReview?.caseId ?? "Caso sin identificador"}</h1>
             <ReviewBadge status={review.status ?? "pendiente"} />
             <button className="icon-button" aria-label="More case actions" title="More case actions" type="button">⋯</button>
           </div>
