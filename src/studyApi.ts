@@ -32,7 +32,7 @@ function protectedHeaders() {
 const metadataErrorMessages: Record<string, string> = {
   INVALID_SUBJECT_REFERENCE: "La referencia de-identificada no es válida.",
   INVALID_REVIEW_PRIORITY: "La prioridad seleccionada no es válida.",
-  SUBJECT_REFERENCE_CONFLICT: "El estudio ya está asociado a otra referencia de paciente.",
+  SUBJECT_REFERENCE_CONFLICT: "El estudio ya está asociado a otra referencia de-identificada.",
   STUDY_NOT_FOUND: "El estudio no existe.",
   DATABASE_UNAVAILABLE: "La base de datos no está disponible.",
 };

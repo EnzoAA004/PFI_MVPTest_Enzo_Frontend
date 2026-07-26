@@ -476,7 +476,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
                   aria-invalid={Boolean(studyMetadataError)}
                   aria-describedby="subject-ref-help"
                 />
-                <small id="subject-ref-help">Usá un código académico estable para agrupar estudios de la misma persona sin identificarla.</small>
+                <small id="subject-ref-help">Código académico estable. No ingreses nombre, DNI, email ni datos identificatorios directos.</small>
                 {studyMetadataError && <span className="delta-alert">{studyMetadataError}</span>}
               </label>
               <label>
@@ -487,20 +487,20 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
                 <span>Modalidad</span>
                 <select value={studyMetadata.modality} onChange={(event) => setStudyMetadata((current) => ({ ...current, modality: event.target.value }))}>
                   <option value="">No informada</option>
-                  <option value="MRI">RM / MRI</option>
+                  <option value="MRI">Resonancia magnética</option>
                 </select>
               </label>
               <label>
                 <span>Prioridad</span>
                 <select value={studyMetadata.reviewPriority} onChange={(event) => setStudyMetadata((current) => ({ ...current, reviewPriority: event.target.value as StudyMetadataDraft["reviewPriority"] }))}>
-                  <option value="low">baja</option>
-                  <option value="medium">media</option>
-                  <option value="high">alta</option>
+                  <option value="low">Baja</option>
+                  <option value="medium">Media</option>
+                  <option value="high">Alta</option>
                 </select>
               </label>
               <label className="form-span-all">
                 <span>Descripción</span>
-                <input maxLength={160} value={studyMetadata.description} onChange={(event) => setStudyMetadata((current) => ({ ...current, description: event.target.value }))} placeholder="RM lumbar sagital T2" />
+                <input maxLength={200} value={studyMetadata.description} onChange={(event) => setStudyMetadata((current) => ({ ...current, description: event.target.value }))} placeholder="RM lumbar sagital T2" />
               </label>
             </div>
           </section>

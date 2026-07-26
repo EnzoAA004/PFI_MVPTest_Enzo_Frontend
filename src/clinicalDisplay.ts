@@ -52,6 +52,19 @@ const measurementLabels: Record<string, string> = {
   "disc_group height": "Altura del grupo de discos intervertebrales",
 };
 
+const modalityLabels: Record<string, string> = {
+  MRI: "Resonancia magnética",
+};
+
+const reviewPriorityLabels: Record<string, string> = {
+  low: "Baja",
+  medium: "Media",
+  high: "Alta",
+  baja: "Baja",
+  media: "Media",
+  alta: "Alta",
+};
+
 function readableFallback(value: string) {
   return value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -94,4 +107,14 @@ export function displayTechnicalReadiness(value: string | null | undefined) {
 export function displayUnit(value: string | null | undefined) {
   if (value === "mm2") return "mm²";
   return value && value.trim() ? value : "";
+}
+
+export function displayModality(value: string | null | undefined) {
+  if (!value) return "No informada";
+  return modalityLabels[value] ?? readableFallback(value);
+}
+
+export function displayReviewPriority(value: string | null | undefined) {
+  if (!value) return "Media";
+  return reviewPriorityLabels[value] ?? readableFallback(value);
 }

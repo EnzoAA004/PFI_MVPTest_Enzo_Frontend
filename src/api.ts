@@ -1,6 +1,7 @@
 import { authHeaders, refreshDoctorSession } from "./authClient";
 import { appDataMode, isDemoDataMode, isRealDataMode, markDataOrigin } from "./dataMode";
 import type { AgentDecision, AiModel, AiRunResponse, CanonicalReviewStatus, DataOrigin, Measurement, PipelineRunRequest, Plane, Priority, RawMeasurements, ReviewExportRequest, ReviewExportResponse, ReviewMeasurementCorrection, ReviewStatus, ReviewStatusResponse, ReviewUpdateRequest, StudiesResponse, StudyRow, SystemDiagnostics } from "./appTypes";
+import { priorityFromBackend } from "./studyMetadata";
 
 declare global {
   interface Window {
@@ -220,12 +221,15 @@ export function normalizeStudyRow(value: unknown, index: number): StudyRow {
   const primaryPlane = normalizePlane(record.primaryPlane) ?? aliasPlane ?? null;
   const subjectRef = optionalStringOrNull(record, "subjectRef") ?? optionalStringOrNull(record, "patientId");
   const latestRunId = optionalStringOrNull(record, "latestRunId") ?? optionalStringOrNull(record, "runId");
+  const reviewPriority = typeof record.reviewPriority === "string" ? priorityFromBackend(record.reviewPriority as "low" | "medium" | "high") : undefined;
   const dataOrigin = normalizeDataOrigin(record.dataOrigin, "backend");
   return {
     caseId: requireString(record, "caseId", "/api/studies"),
     subjectRef,
     patientId: subjectRef,
     studyDate: optionalStringOrNull(record, "studyDate"),
+    modality: optionalStringOrNull(record, "modality"),
+    description: optionalStringOrNull(record, "description"),
     status: typeof record.status === "string" ? record.status : "created",
     planes,
     primaryPlane,
@@ -235,7 +239,7 @@ export function normalizeStudyRow(value: unknown, index: number): StudyRow {
     modelKey: optionalStringOrNull(record, "modelKey"),
     modelStatus: typeof record.modelStatus === "string" ? record.modelStatus : "sin_estado",
     reviewStatus: mapReviewStatus(typeof record.reviewStatus === "string" ? record.reviewStatus : undefined),
-    priority: mapPriority(typeof record.priority === "string" ? record.priority : undefined),
+    priority: mapPriority(typeof record.priority === "string" ? record.priority : reviewPriority),
     createdAt: typeof record.createdAt === "string" ? record.createdAt : undefined,
     updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : undefined,
     dataOrigin,

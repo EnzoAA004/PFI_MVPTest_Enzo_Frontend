@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { HistoryTarget, Measurement, PatientHistorySummary, PatientStudy, Plane } from "../appTypes";
-import { displayMeasurementLabel, displayReviewStatus, displayUnit } from "../clinicalDisplay";
+import { displayMeasurementLabel, displayModality, displayReviewStatus, displayUnit } from "../clinicalDisplay";
 import { displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { PriorityBadge, ReviewBadge, StatusBadge } from "./StatusBadge";
 import { VisibilityIcon } from "./VisibilityIcon";
@@ -93,7 +93,7 @@ function renderTimeline(studies: PatientStudy[], onOpenStudyReview?: (caseId: st
           <div>
             <strong>{study.caseId}</strong>
             <p>{formatDate(study.studyDate)} · {planeLabel(study.planes)}</p>
-            <small>{study.modality || "Modalidad no informada"} · {study.description || "Descripción no informada"}</small>
+            <small>{displayModality(study.modality)} · {study.description || "Descripción no informada"}</small>
             <small>Modelo: {study.modelKey || study.modelVersion || "no informado"} · Revisor: {study.reviewer || "no informado"}</small>
             {study.reviewedAt && <small>Revisado: {formatDate(study.reviewedAt)}</small>}
           </div>

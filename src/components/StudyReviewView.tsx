@@ -2,7 +2,7 @@
 import { exportReviewReport } from "../api";
 import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudyMetadataInput, StudySeries } from "../appTypes";
-import { displayInferenceMode, displayMeasurementLabel, displayMeasurementLevel, displayReviewStatus, displayTechnicalReadiness, displayUnit } from "../clinicalDisplay";
+import { displayInferenceMode, displayMeasurementLabel, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayTechnicalReadiness, displayUnit } from "../clinicalDisplay";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
 import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
@@ -571,7 +571,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     }
     const payload = normalizeStudyMetadataInput(metadataDraft);
     if (currentMetadataDraft.subjectRef.trim() && payload.subjectRef && payload.subjectRef !== currentMetadataDraft.subjectRef.trim()) {
-      const confirmed = window.confirm("La referencia de-identificada actual será reemplazada. Confirmá que no estás mezclando identidades clínicas reales.");
+      const confirmed = window.confirm("La referencia solo puede conservarse o asignarse si estaba vacía. Cambiarla por otra puede producir un conflicto.");
       if (!confirmed) return;
     }
     if (metadataPayloadEqual(payload, currentMetadataDraft)) {
@@ -649,7 +649,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <div className="section-title">
               <div>
                 <h2 id="metadata-dialog-title">Editar metadata del estudio</h2>
-                <p className="muted compact-copy">Uso académico con datos de-identificados. La persistencia se confirma con PostgreSQL antes de actualizar la vista.</p>
+                <p className="muted compact-copy">Uso académico con datos de-identificados. La referencia solo puede conservarse o asignarse si estaba vacía. Cambiarla por otra puede producir un conflicto.</p>
               </div>
               <button className="icon-button" onClick={() => setMetadataDialogOpen(false)} disabled={metadataSaving} type="button" aria-label="Cerrar edición de metadata">×</button>
             </div>
@@ -675,20 +675,20 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <span>Modalidad</span>
                 <select value={metadataDraft.modality} onChange={(event) => setMetadataDraft((current) => ({ ...current, modality: event.target.value }))}>
                   <option value="">No informada</option>
-                  <option value="MRI">RM / MRI</option>
+                  <option value="MRI">Resonancia magnética</option>
                 </select>
               </label>
               <label>
                 <span>Prioridad</span>
                 <select value={metadataDraft.reviewPriority} onChange={(event) => setMetadataDraft((current) => ({ ...current, reviewPriority: event.target.value as StudyMetadataDraft["reviewPriority"] }))}>
-                  <option value="low">baja</option>
-                  <option value="medium">media</option>
-                  <option value="high">alta</option>
+                  <option value="low">{displayReviewPriority("low")}</option>
+                  <option value="medium">{displayReviewPriority("medium")}</option>
+                  <option value="high">{displayReviewPriority("high")}</option>
                 </select>
               </label>
               <label className="form-span-all">
                 <span>Descripción</span>
-                <input maxLength={160} value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} placeholder="RM lumbar sagital T2" />
+                <input maxLength={200} value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} placeholder="RM lumbar sagital T2" />
               </label>
             </div>
             <p className="settings-persistence-note">No ingreses nombre, DNI, correo, teléfono, domicilio ni historia clínica real.</p>
@@ -709,12 +709,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               <dl className="info-list compact-info">
                 <div><dt>ID de caso</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
                 <div><dt>Fecha de estudio</dt><dd>{displayStudyDate(selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? null)}</dd></div>
-                <div><dt>Modalidad</dt><dd>{selectedDetail?.study?.modality ?? run.modality ?? "No informada"}</dd></div>
+                <div><dt>Modalidad</dt><dd>{displayModality(selectedDetail?.study?.modality ?? run.modality ?? null)}</dd></div>
                 <div><dt>Referencia de paciente de-identificada</dt><dd>{displaySubjectRef(selectedDetail?.study?.subjectRef ?? run.patientId ?? null)}</dd></div>
                 <div><dt>Descripción</dt><dd>{selectedDetail?.study?.description ?? "No informada"}</dd></div>
                 <div><dt>Plano</dt><dd>{displayPrimaryPlane(currentSeries?.plane ?? displayRun.plane ?? null)}</dd></div>
                 <div><dt>Versión del modelo</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}</dd></div>
                 <div><dt>Estado de revisión</dt><dd><ReviewBadge status={review.status ?? "pendiente"} />{(review.status ?? "pendiente") === "aceptado" && <small>Finalizado · aprobado por revisor</small>}</dd></div>
+                <div><dt>Prioridad</dt><dd>{displayReviewPriority(selectedDetail?.study?.priority ?? null)}</dd></div>
                 <div><dt>Revisor</dt><dd>{reviewerName}</dd></div>
               </dl>
             ) : hiddenPlaceholder}

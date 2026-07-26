@@ -8,7 +8,7 @@ export type StudyMetadataDraft = {
   reviewPriority: "low" | "medium" | "high";
 };
 
-export const subjectRefErrorMessage = "La referencia debe ser un código de-identificado de entre 3 y 64 caracteres.";
+export const subjectRefErrorMessage = "La referencia debe ser un código de-identificado de entre 3 y 64 caracteres, sin espacios.";
 
 export function priorityToBackend(priority?: Priority | "low" | "medium" | "high"): StudyMetadataInput["reviewPriority"] {
   if (priority === "alta" || priority === "high") return "high";
