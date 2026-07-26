@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { CircleDot, MoreHorizontal, Rows3 } from "lucide-react";
 import type { Priority, ReviewStatus, StudyRow } from "../appTypes";
 import { fetchStudyDetail } from "../studyApi";
+import { displayLatestRunId, displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef, studyHasReviewableRun } from "../studyDisplay";
 import { loadSelectedStudyDetail, saveSelectedStudyDetail, saveSelectedStudyFallback } from "../selectedStudyStorage";
 import { PriorityBadge, ReviewBadge } from "./StatusBadge";
 
@@ -30,7 +31,8 @@ const priorityWeight: Record<Priority, number> = {
 function valueForSort(study: StudyRow, key: SortKey): string | number {
   if (key === "reviewStatus") return reviewWeight[study.reviewStatus] ?? 99;
   if (key === "priority") return priorityWeight[study.priority] ?? 99;
-  if (key === "studyDate") return Date.parse(study.studyDate) || 0;
+  if (key === "studyDate") return Date.parse(study.studyDate ?? "") || 0;
+  if (key === "plane") return displayPrimaryPlane(study.primaryPlane);
   return String(study[key] ?? "").toLowerCase();
 }
 
@@ -44,8 +46,8 @@ function compareStudy(a: StudyRow, b: StudyRow, key: SortKey, direction: SortDir
 }
 
 function sortLabel(active: boolean, direction: SortDirection) {
-  if (!active) return "↕";
-  return direction === "asc" ? "↑" : "↓";
+  if (!active) return "<>";
+  return direction === "asc" ? "^" : "v";
 }
 
 function planeIcon(plane: string) {
@@ -65,18 +67,20 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
   const lastVisible = Math.min(sortedStudies.length, (safePage + 1) * PAGE_SIZE);
 
   function rowIdentity(study: StudyRow) {
-    return study.runId ?? `${study.caseId}-${study.patientId}-${study.studyDate}-${study.plane}`;
+    return study.latestRunId ?? study.runId ?? `${study.caseId}-${study.subjectRef ?? "sin-ref"}-${study.studyDate ?? "sin-fecha"}-${study.primaryPlane ?? "sin-plano"}`;
   }
 
   function isSelected(study: StudyRow) {
     if (!selectedStudy) return false;
-    if (selectedStudy.runId || study.runId) return selectedStudy.runId === study.runId;
+    if (selectedStudy.latestRunId || selectedStudy.runId || study.latestRunId || study.runId) {
+      return (selectedStudy.latestRunId ?? selectedStudy.runId) === (study.latestRunId ?? study.runId);
+    }
     return rowIdentity(selectedStudy) === rowIdentity(study);
   }
 
   async function openStudy(study: StudyRow) {
     saveSelectedStudyFallback(study);
-    void fetchStudyDetail(study).then(saveSelectedStudyDetail).catch(() => undefined);
+    if (studyHasReviewableRun(study)) void fetchStudyDetail(study).then(saveSelectedStudyDetail).catch(() => undefined);
     onOpenReview(study);
   }
 
@@ -120,7 +124,7 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
             <SortHeader column="plane">Plano</SortHeader>
             <SortHeader column="studyDate">Fecha</SortHeader>
             <SortHeader column="modelStatus">Modelo</SortHeader>
-            <SortHeader column="reviewStatus">Revisión</SortHeader>
+            <SortHeader column="reviewStatus">Revision</SortHeader>
             <SortHeader column="priority">Prioridad</SortHeader>
             <th aria-label="Acciones"><span className="sr-only">Acciones</span></th>
           </tr>
@@ -128,21 +132,22 @@ export function WorklistTable({ studies, onOpenReview }: WorklistTableProps) {
         <tbody>
           {visibleStudies.map((study) => {
             const selected = isSelected(study);
+            const canReview = studyHasReviewableRun(study);
             return (
               <tr key={rowIdentity(study)} className={`clickable-row ${selected ? "selected-worklist-row" : ""}`} tabIndex={0} onClick={() => void openStudy(study)} onKeyDown={(event) => handleKeyDown(event, study)} aria-current={selected ? "true" : undefined}>
-                <td><button className="case-link" onClick={(event) => { event.stopPropagation(); void openStudy(study); }} type="button">{study.caseId}</button><small>{study.patientId}</small></td>
-                <td><span className="plane-cell">{planeIcon(study.plane)}{study.plane}</span></td>
-                <td>{study.studyDate}</td>
-                <td><span className="model-state">{study.modelStatus}</span><small>{study.modelKey}</small></td>
+                <td><button className="case-link" onClick={(event) => { event.stopPropagation(); void openStudy(study); }} type="button">{study.caseId}</button><small>{displaySubjectRef(study.subjectRef)}</small></td>
+                <td><span className="plane-cell">{study.primaryPlane ? planeIcon(study.primaryPlane) : null}{displayPrimaryPlane(study.primaryPlane)}</span></td>
+                <td>{displayStudyDate(study.studyDate)}</td>
+                <td><span className="model-state">{canReview ? study.modelStatus : "Sin corrida"}</span><small>{displayModelKey(study.modelKey)}</small><small>{displayLatestRunId(study.latestRunId)}</small></td>
                 <td><ReviewBadge status={study.reviewStatus} /></td>
                 <td><PriorityBadge priority={study.priority} /></td>
-                <td><MoreHorizontal aria-hidden size={18} /></td>
+                <td><button className="ghost-button" disabled={!canReview} onClick={(event) => { event.stopPropagation(); void openStudy(study); }} type="button" aria-label={canReview ? "Abrir revision" : "Sin corrida"}><MoreHorizontal aria-hidden size={18} /></button></td>
               </tr>
             );
           })}
         </tbody>
       </table>
-      <div className="table-pagination" aria-label="Paginación de lista de trabajo">
+      <div className="table-pagination" aria-label="Paginacion de lista de trabajo">
         <span>Mostrando {firstVisible} a {lastVisible} de {sortedStudies.length} estudios</span>
         <div>
           <button className="ghost-button" disabled={safePage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))} type="button">Anterior</button>

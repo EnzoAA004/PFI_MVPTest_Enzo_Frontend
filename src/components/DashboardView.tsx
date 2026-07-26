@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Brain, CheckCircle2, ClipboardCheck, Flag } from "lucide-react";
 import type { AuditEvent, Plane, Priority, ReviewStatus, StudiesSummary, StudyRow } from "../appTypes";
-import { aiAssetUrl } from "../multiplanarApi";
+import { displayLatestRunId, displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef, studyHasReviewableRun } from "../studyDisplay";
 import { AuditTrail } from "./AuditTrail";
 import { MetricCard } from "./MetricCard";
 import { PrivacyBanner } from "./PrivacyBanner";
@@ -40,11 +40,11 @@ function matchesSearch(study: StudyRow, query: string) {
   const normalized = query.trim().toLowerCase();
   return [
     study.caseId,
-    study.patientId,
-    study.runId,
-    study.plane,
-    study.studyDate,
-    study.modelKey,
+    displaySubjectRef(study.subjectRef),
+    displayLatestRunId(study.latestRunId),
+    displayPrimaryPlane(study.primaryPlane),
+    displayStudyDate(study.studyDate),
+    displayModelKey(study.modelKey),
     study.modelStatus,
     study.reviewStatus,
     study.priority,
@@ -89,18 +89,18 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
   const aiReady = studies.filter(isAiReady).length;
   const flagged = summary?.flagged ?? studies.filter((study) => study.priority === "alta" || study.reviewStatus === "observado").length;
   const modelStatusLabel = degradedMode ? "Degradado" : aiModuleAvailable === false ? "No disponible" : health === "consultando" ? "Consultando" : "Operativo";
-  const modelOptions = useMemo(() => uniqueValues(studies.map((study) => study.modelKey)), [studies]);
+  const modelOptions = useMemo(() => uniqueValues(studies.map((study) => study.modelKey ?? undefined)), [studies]);
   const filteredStudies = useMemo(() => studies.filter((study) => {
     if (!matchesSearch(study, query)) return false;
     if (!matchesQuickFilter(study, quickFilter)) return false;
-    if (plane !== "todos" && study.plane !== plane) return false;
+    if (plane !== "todos" && study.primaryPlane !== plane) return false;
     if (reviewStatus !== "todos" && study.reviewStatus !== reviewStatus) return false;
     if (priority !== "todos" && study.priority !== priority) return false;
     if (modelKey !== "todos" && study.modelKey !== modelKey) return false;
     return true;
   }), [modelKey, plane, priority, query, quickFilter, reviewStatus, studies]);
   const latestStudy = filteredStudies[0] ?? studies[0];
-  const latestOverlayUrl = latestStudy?.runId ? aiAssetUrl(latestStudy.runId, latestStudy.plane, "overlay.png") : "";
+  const latestOverlayUrl = "";
   const activeAdvanced = hasActiveAdvancedFilters({ plane, reviewStatus, priority, modelKey });
   const activeFilterCount = Number(Boolean(query.trim())) + Number(quickFilter !== "todos") + Number(activeAdvanced);
 
@@ -162,7 +162,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
               <h2>Lista de trabajo</h2>
               <p className="muted compact-copy">{filteredStudies.length} de {studies.length} estudios visibles{activeFilterCount ? ` · ${activeFilterCount} filtro/s activo/s` : ""}</p>
             </div>
-            <button className="ghost-button" disabled={!latestStudy} onClick={() => latestStudy && onOpenReview(latestStudy)} type="button">Abrir revisión</button>
+            <button className="ghost-button" disabled={!latestStudy || !studyHasReviewableRun(latestStudy)} onClick={() => latestStudy && onOpenReview(latestStudy)} type="button">Abrir revisión</button>
           </div>
 
           <div className="worklist-filter-shell">
@@ -172,7 +172,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Caso, paciente, corrida/informe, modelo, estado..."
+                  placeholder="Caso, referencia, corrida/informe, modelo, estado..."
                   type="search"
                 />
               </label>
@@ -247,7 +247,7 @@ export function DashboardView({ studies, auditTrail, onOpenReview, summary, heal
                     {["L1", "L2", "L3", "L4", "L5", "S1"].map((level) => <span key={level}><i />{level}</span>)}
                   </div>
                 </div>
-                <p className="preview-meta">{latestStudy?.caseId} - {latestStudy?.plane}</p>
+                <p className="preview-meta">{latestStudy?.caseId} - {displayPrimaryPlane(latestStudy?.primaryPlane)}</p>
               </>
             ) : (
               <div className="panel-hidden-placeholder">{previewState === "loading" ? "Verificando vista previa real disponible..." : "Sin vista previa real disponible para este estudio. No se muestra una segmentación simulada."}</div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { StudyRow } from "../appTypes";
+import { displayLatestRunId, displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { WorklistTable } from "./WorklistTable";
 
 type StudyListMode = "all" | "queue";
@@ -14,8 +15,17 @@ interface StudiesViewProps {
 function matchesQuery(study: StudyRow, query: string) {
   if (!query.trim()) return true;
   const normalized = query.trim().toLowerCase();
-  return [study.caseId, study.patientId, study.runId, study.plane, study.studyDate, study.modelKey, study.modelStatus, study.reviewStatus, study.priority]
-    .some((value) => String(value ?? "").toLowerCase().includes(normalized));
+  return [
+    study.caseId,
+    displaySubjectRef(study.subjectRef),
+    displayLatestRunId(study.latestRunId),
+    displayPrimaryPlane(study.primaryPlane),
+    displayStudyDate(study.studyDate),
+    displayModelKey(study.modelKey),
+    study.modelStatus,
+    study.reviewStatus,
+    study.priority,
+  ].some((value) => String(value ?? "").toLowerCase().includes(normalized));
 }
 
 function isQueueItem(study: StudyRow) {
@@ -32,8 +42,8 @@ export function StudiesView({ studies, mode, loading = false, onOpenReview }: St
     <div className="view-stack">
       <section className="page-heading compact-heading">
         <div>
-          <p>{isQueue ? "Cola de revisión" : "Estudios"}</p>
-          <h1>{isQueue ? "Estudios pendientes de revisión" : "Repositorio de estudios"}</h1>
+          <p>{isQueue ? "Cola de revision" : "Estudios"}</p>
+          <h1>{isQueue ? "Estudios pendientes de revision" : "Repositorio de estudios"}</h1>
         </div>
         <div className="screen-summary">
           <strong>{visibleStudies.length}</strong>
@@ -46,7 +56,7 @@ export function StudiesView({ studies, mode, loading = false, onOpenReview }: St
           <div>
             <h2>{isQueue ? "Lista pendiente" : "Todos los estudios"}</h2>
             <p className="muted compact-copy">
-              {isQueue ? "Filtrado solo a revisiónes pendientes u observadas." : "Lista completa de estudios desde backend o fallback demo configurado."}
+              {isQueue ? "Filtrado solo a revisiones pendientes u observadas." : "Estudios persistidos en el repositorio del proyecto."}
             </p>
           </div>
         </div>
@@ -54,17 +64,17 @@ export function StudiesView({ studies, mode, loading = false, onOpenReview }: St
           <div className="worklist-search-row single-action">
             <label className="worklist-search-input">
               <span>Buscar</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Caso, paciente, corrida, modelo, estado..." type="search" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Caso, referencia, corrida, modelo, estado..." type="search" />
             </label>
           </div>
         </div>
         {loading ? (
-          <div className="panel-hidden-placeholder">Consultando estudios desde backend.</div>
+          <div className="panel-hidden-placeholder">Consultando estudios persistidos.</div>
         ) : visibleStudies.length ? (
           <WorklistTable studies={visibleStudies} onOpenReview={onOpenReview} />
         ) : (
           <div className="panel-hidden-placeholder">
-            {isQueue ? "No hay estudios que requieran revisión." : "No hay estudios reales disponibles para esta lista."}
+            {isQueue ? "No hay estudios que requieran revision." : "Base disponible sin estudios persistidos para esta lista."}
           </div>
         )}
       </section>

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior",
+    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract",
     "build": "vite build",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc -b",
@@ -14,6 +14,7 @@
     "test:review-workspace": "node scripts/review-workspace-tests.mjs",
     "test:data-mode": "node scripts/data-mode-separation-tests.mjs",
     "test:p7-behavior": "node scripts/p7-behavior-tests.mjs",
+    "test:p8b-contract": "node scripts/p8b-postgres-contract-tests.mjs",
     "test:e2e:contract": "node scripts/playwright-contract-e2e.mjs",
     "preview": "vite preview"
   },

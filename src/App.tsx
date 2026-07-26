@@ -21,10 +21,11 @@ import { saveSelectedStudyDetail } from "./selectedStudyStorage";
 import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessionalReview } from "./storage";
 import { fetchStudyDetail } from "./studyApi";
 import { fetchSubjectHistory } from "./subjectHistoryApi";
+import { displayModelKey, displayPrimaryPlane, displayStudyDate, studyHasReviewableRun } from "./studyDisplay";
 import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, SelectedStudyReference, StudiesSummary, StudyRow, ViewKey } from "./appTypes";
 
 function toPatientStudy(study: StudyRow): PatientStudy {
-  return { caseId: study.caseId, studyDate: study.studyDate, planes: study.plane, modelVersion: study.modelKey, reviewStatus: study.reviewStatus, priority: study.priority };
+  return { caseId: study.caseId, studyDate: displayStudyDate(study.studyDate), planes: displayPrimaryPlane(study.primaryPlane ?? study.plane), modelVersion: displayModelKey(study.modelKey), reviewStatus: study.reviewStatus, priority: study.priority };
 }
 
 function LoadingState({ title, detail }: { title: string; detail: string }) {
@@ -103,8 +104,8 @@ function App() {
   }, [backendStudies, safeRun]);
   const backendPatientStudies = useMemo(() => {
     if (!backendStudies.length) return [];
-    const subjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId;
-    return studies.filter((study) => !subjectRef || study.patientId === subjectRef).map(toPatientStudy);
+    const subjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? null;
+    return studies.filter((study) => !subjectRef || study.subjectRef === subjectRef).map(toPatientStudy);
   }, [backendStudies, patientHistoryResponse?.subjectRef, selectedSubjectRef, studies]);
   const visiblePatientStudies = patientHistoryResponse?.studies?.length
     ? patientHistoryResponse.studies
@@ -114,7 +115,7 @@ function App() {
         ? []
         : [];
   const shouldShowDataLoading = databaseDataStatus === "loading" && backendStudies.length === 0;
-  const historySubjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? backendStudies[0]?.patientId ?? null;
+  const historySubjectRef = selectedSubjectRef ?? patientHistoryResponse?.subjectRef ?? null;
   const realStudyRows = studiesBackendAvailable ? studies : [];
   const reviewQueueCount = realStudyRows.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length;
   const pendingApproval = Boolean(session && (session.user.approved === false || session.user.roles.includes("PENDING_APPROVAL")));
@@ -216,12 +217,13 @@ function App() {
   }, [contractIssue]);
 
   useEffect(() => {
-    if (!shouldFetchSubjectHistory(historySubjectRef)) {
+    const subjectRef = historySubjectRef;
+    if (!shouldFetchSubjectHistory(subjectRef) || typeof subjectRef !== "string") {
       setPatientHistoryResponse(null);
       return;
     }
     let cancelled = false;
-    void fetchSubjectHistory(historySubjectRef).then((historyResponse) => {
+    void fetchSubjectHistory(subjectRef).then((historyResponse) => {
       if (!cancelled && historyResponse?.studies?.length) setPatientHistoryResponse(historyResponse);
     }).catch(() => undefined);
     return () => { cancelled = true; };
@@ -259,6 +261,13 @@ function App() {
   }
 
   function handleOpenReview(study: StudyRow) {
+    if (!studyHasReviewableRun(study)) {
+      setReviewError("El estudio no tiene una corrida persistida para revisar.");
+      setSelectedRun(null);
+      setSelectedStudy(toSelectedStudyReference(study));
+      setActiveView("review");
+      return;
+    }
     if (activeView === "studies" || activeView === "queue") setLastStudyNavView(activeView);
     setSelectedStudy(toSelectedStudyReference(study));
     setSelectedRun(null);
@@ -286,6 +295,7 @@ function App() {
   }
 
   function handleOpenPatientHistory(patientId: string) {
+    if (!shouldFetchSubjectHistory(patientId)) return;
     setSelectedSubjectRef(patientId);
     setPatientHistoryResponse(null);
     setActiveView("history");

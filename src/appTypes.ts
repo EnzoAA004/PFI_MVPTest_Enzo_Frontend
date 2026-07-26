@@ -70,6 +70,15 @@ export type Measurement = {
   dataOrigin?: DataOrigin;
 };
 
+export type PersistedArtifact = {
+  plane?: Plane;
+  runId?: string;
+  assetName?: string;
+  contentType?: string;
+  proxyUrl?: string;
+  createdAt?: string;
+};
+
 export type ReviewExportFormat = "json" | "csv" | "html";
 
 export type ReviewExportRequest = {
@@ -201,7 +210,17 @@ export type AiRunResponse = {
   bodyRegion?: string;
   reviewStatus?: ReviewStatus;
   plane?: Plane;
+  planes?: Plane[] | Record<string, unknown>;
+  primaryPlane?: Plane | null;
   modelKey?: string;
+  requestedInferenceMode?: string;
+  effectiveInferenceMode?: string;
+  sagittalRunId?: string | null;
+  axialRunId?: string | null;
+  sagittalModelKey?: string | null;
+  axialModelKey?: string | null;
+  sagittalArtifactHash?: string | null;
+  axialArtifactHash?: string | null;
   modelVersion?: string;
   inputId?: string;
   inputPath?: string;
@@ -216,6 +235,9 @@ export type AiRunResponse = {
   measurements?: Measurement[] | RawMeasurements;
   measurementValues?: Measurement[];
   normalizedMeasurements?: Measurement[];
+  measurementsByPlane?: Partial<Record<Plane, Measurement[]>>;
+  artifactsByPlane?: Partial<Record<Plane, PersistedArtifact[]>>;
+  corrections?: unknown[];
   measurementsStatus?: string;
   measurementsDescription?: string;
   overlayPath?: string | null;
@@ -244,31 +266,64 @@ export type AiModel = {
 
 export type StudyRow = {
   caseId: string;
-  patientId: string;
-  plane: Plane;
-  studyDate: string;
-  modelKey: string;
+  subjectRef: string | null;
+  studyDate: string | null;
+  status: string;
+  planes: Plane[];
+  primaryPlane: Plane | null;
+  latestRunId: string | null;
+  modelKey: string | null;
   modelStatus: string;
   reviewStatus: ReviewStatus;
   priority: Priority;
-  runId?: string;
-  dataOrigin?: DataOrigin;
+  createdAt?: string;
+  updatedAt?: string;
+  dataOrigin: DataOrigin;
+  patientId?: string | null;
+  plane?: Plane | null;
+  runId?: string | null;
 };
 
 export type StudyRun = {
   runId: string;
+  databaseId?: string;
+  traceId?: string;
   caseId: string;
-  plane: Plane;
-  modelKey: string;
-  modelStatus: string;
+  planes: Plane[];
+  primaryPlane: Plane | null;
+  requestedInferenceMode?: string;
+  effectiveInferenceMode?: string;
+  status: string;
   reviewStatus: ReviewStatus;
+  reviewer?: string | null;
+  reviewedAt?: string | null;
+  comments?: string | null;
+  sagittalRunId?: string | null;
+  axialRunId?: string | null;
+  sagittalModelKey?: string | null;
+  axialModelKey?: string | null;
+  sagittalArtifactHash?: string | null;
+  axialArtifactHash?: string | null;
+  modelKey?: string | null;
+  modelStatus: string;
+  measurementsByPlane?: Partial<Record<Plane, Measurement[]>>;
+  artifactsByPlane?: Partial<Record<Plane, PersistedArtifact[]>>;
+  corrections?: unknown[];
+  metricsSnapshot?: Record<string, unknown>;
+  artifactCount?: number;
   measurementCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  humanReviewRequired?: boolean;
+  notClinicalDiagnosis?: boolean;
+  dataOrigin?: DataOrigin;
+  plane?: Plane | null;
 };
 
 export type SelectedStudyReference = {
   caseId: string;
-  patientId: string;
-  studyDate: string;
+  subjectRef: string | null;
+  studyDate: string | null;
 };
 
 export type PersistedStudyRun = StudyRun;
@@ -276,8 +331,8 @@ export type PersistedStudyRun = StudyRun;
 export type ReviewableRun = AiRunResponse & {
   runId: string;
   caseId: string;
-  plane: Plane;
-  modelKey: string;
+  plane?: Plane;
+  modelKey?: string;
 };
 
 export type StudyDetailResponse = {

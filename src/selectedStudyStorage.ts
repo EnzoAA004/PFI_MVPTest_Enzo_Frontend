@@ -18,19 +18,23 @@ export function loadSelectedStudyDetail(): StudyDetailResponse | null {
 }
 
 export function saveSelectedStudyFallback(study: StudyRow) {
-  const runs = study.runId ? [{
-    runId: study.runId,
+  const runId = study.latestRunId ?? study.runId;
+  const runs = runId ? [{
+    runId,
     caseId: study.caseId,
-    plane: study.plane,
+    planes: study.planes,
+    primaryPlane: study.primaryPlane,
+    plane: study.primaryPlane,
     modelKey: study.modelKey,
     modelStatus: study.modelStatus,
+    status: study.latestRunId ? study.modelStatus : "sin_corrida",
     reviewStatus: study.reviewStatus,
   }] : [];
   saveSelectedStudyDetail({
     status: "fallback",
     study,
     runs,
-    review: study.runId ? { runId: study.runId, status: study.reviewStatus } : undefined,
+    review: runId ? { runId, status: study.reviewStatus } : undefined,
     measurements: [],
     humanReviewRequired: true,
     notClinicalDiagnosis: true,

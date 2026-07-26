@@ -1,6 +1,6 @@
 import { authHeaders, refreshDoctorSession } from "./authClient";
 import { appDataMode, isDemoDataMode, isRealDataMode, markDataOrigin } from "./dataMode";
-import type { AgentDecision, AiModel, AiRunResponse, Measurement, PipelineRunRequest, Plane, Priority, RawMeasurements, ReviewExportRequest, ReviewExportResponse, ReviewStatus, ReviewStatusResponse, ReviewUpdateRequest, StudiesResponse, StudyRow, SystemDiagnostics } from "./appTypes";
+import type { AgentDecision, AiModel, AiRunResponse, DataOrigin, Measurement, PipelineRunRequest, Plane, Priority, RawMeasurements, ReviewExportRequest, ReviewExportResponse, ReviewStatus, ReviewStatusResponse, ReviewUpdateRequest, StudiesResponse, StudyRow, SystemDiagnostics } from "./appTypes";
 
 declare global {
   interface Window {
@@ -60,6 +60,26 @@ function mapReviewStatus(value?: string): ReviewStatus {
 
 function normalizePlane(value: unknown): Plane | undefined {
   return value === "axial" || value === "sagittal" ? value : undefined;
+}
+
+function normalizeDataOrigin(value: unknown, fallback: DataOrigin): DataOrigin {
+  return value === "backend" || value === "ai_module" || value === "database" || value === "demo" ? value : fallback;
+}
+
+function optionalStringOrNull(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  if (value === null || value === undefined) return null;
+  return typeof value === "string" ? value : null;
+}
+
+function normalizePlanes(value: unknown, context: string): Plane[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    const record = asRecord(value);
+    if (record) return Object.keys(record).map(normalizePlane).filter((plane): plane is Plane => Boolean(plane));
+    throw new ContractError(`Contrato incompleto en ${context}: planes debe ser una lista.`, context);
+  }
+  return value.map(normalizePlane).filter((plane): plane is Plane => Boolean(plane));
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -181,31 +201,43 @@ function requireString(record: Record<string, unknown>, key: string, context: st
   return value;
 }
 
-function normalizeStudyRow(value: unknown, index: number): StudyRow {
+export function normalizeStudyRow(value: unknown, index: number): StudyRow {
   const record = asRecord(value);
   if (!record) throw new ContractError(`Estudio invalido en posicion ${index}.`, "/api/studies");
-  const plane = normalizePlane(record.plane);
-  if (!plane) throw new ContractError(`Estudio ${index} sin plano valido.`, "/api/studies");
+  const planes = normalizePlanes(record.planes, "/api/studies");
+  const aliasPlane = normalizePlane(record.plane);
+  const primaryPlane = normalizePlane(record.primaryPlane) ?? aliasPlane ?? null;
+  const subjectRef = optionalStringOrNull(record, "subjectRef") ?? optionalStringOrNull(record, "patientId");
+  const latestRunId = optionalStringOrNull(record, "latestRunId") ?? optionalStringOrNull(record, "runId");
+  const dataOrigin = normalizeDataOrigin(record.dataOrigin, "backend");
   return {
     caseId: requireString(record, "caseId", "/api/studies"),
-    patientId: typeof record.patientId === "string" ? record.patientId : typeof record.subjectRef === "string" ? record.subjectRef : requireString(record, "patientId", "/api/studies"),
-    plane,
-    studyDate: requireString(record, "studyDate", "/api/studies"),
-    modelKey: requireString(record, "modelKey", "/api/studies"),
+    subjectRef,
+    patientId: subjectRef,
+    studyDate: optionalStringOrNull(record, "studyDate"),
+    status: typeof record.status === "string" ? record.status : "created",
+    planes,
+    primaryPlane,
+    plane: primaryPlane,
+    latestRunId,
+    runId: latestRunId,
+    modelKey: optionalStringOrNull(record, "modelKey"),
     modelStatus: typeof record.modelStatus === "string" ? record.modelStatus : "sin_estado",
     reviewStatus: mapReviewStatus(typeof record.reviewStatus === "string" ? record.reviewStatus : undefined),
     priority: mapPriority(typeof record.priority === "string" ? record.priority : undefined),
-    runId: typeof record.runId === "string" ? record.runId : undefined,
+    createdAt: typeof record.createdAt === "string" ? record.createdAt : undefined,
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : undefined,
+    dataOrigin,
   };
 }
 
-function normalizeStudiesResponse(response: unknown): StudiesResponse {
+export function normalizeStudiesResponse(response: unknown): StudiesResponse {
   const record = asRecord(response);
   if (!record) throw new ContractError("Formato invalido de estudios.", "/api/studies");
   const itemsValue = record.items;
   if (!Array.isArray(itemsValue)) throw new ContractError("Formato invalido de estudios: falta items[].", "/api/studies");
-  const dataOrigin = record.status === "demo" || record.source === "demo" ? "demo" : "backend";
-  const items = itemsValue.map(normalizeStudyRow).map((item) => ({ ...item, dataOrigin }));
+  const dataOrigin = normalizeDataOrigin(record.dataOrigin, record.status === "demo" || record.source === "demo" ? "demo" : "backend");
+  const items = itemsValue.map(normalizeStudyRow).map((item) => ({ ...item, dataOrigin: item.dataOrigin ?? dataOrigin }));
   const pending = items.filter((item) => item.reviewStatus === "pendiente" || item.reviewStatus === "observado").length;
   const completed = items.filter((item) => item.reviewStatus === "aceptado").length;
   const flagged = items.filter((item) => item.priority === "alta" || item.reviewStatus === "observado").length;
@@ -229,17 +261,28 @@ function validateReviewPayload(payload: ReviewUpdateRequest) {
 export function normalizeRealRun(run?: AiRunResponse): AiRunResponse {
   const record = asRecord(run);
   if (!record) throw new ContractError("Contrato de corrida invalido: respuesta vacia.", "/api/ai/pipeline/run");
-  const plane = normalizePlane(record.plane);
+  const planes = normalizePlanes(record.planes, "/api/ai/pipeline/run");
+  const plane = normalizePlane(record.plane) ?? normalizePlane(record.primaryPlane) ?? planes[0];
   if (!plane) throw new ContractError("Contrato de corrida invalido: plano faltante o invalido.", "/api/ai/pipeline/run");
   const runId = requireString(record, "runId", "/api/ai/pipeline/run");
   const measurementState = normalizeMeasurements(record.measurements ?? record.measurementValues ?? record.normalizedMeasurements);
   const metadata = asRecord(record.metadata) ?? undefined;
+  const modelKey = typeof record.modelKey === "string" && record.modelKey.trim()
+    ? record.modelKey
+    : typeof record.sagittalModelKey === "string" && record.sagittalModelKey.trim()
+      ? record.sagittalModelKey
+      : typeof record.axialModelKey === "string" && record.axialModelKey.trim()
+        ? record.axialModelKey
+        : undefined;
+  if (!modelKey) throw new ContractError("Contrato de corrida invalido: falta modelKey.", "/api/ai/pipeline/run");
   return {
     ...run,
     runId,
     caseId: requireString(record, "caseId", "/api/ai/pipeline/run"),
     plane,
-    modelKey: requireString(record, "modelKey", "/api/ai/pipeline/run"),
+    planes: planes.length ? planes : [plane],
+    primaryPlane: plane,
+    modelKey,
     inputId: typeof record.inputId === "string" ? record.inputId : undefined,
     inputPath: typeof record.inputPath === "string" && !record.inputPath.startsWith("demo/") ? record.inputPath : undefined,
     metadata,
@@ -254,7 +297,7 @@ export function normalizeRealRun(run?: AiRunResponse): AiRunResponse {
     degradedMode: run?.degradedMode ?? false,
     humanReviewRequired: run?.humanReviewRequired ?? run?.agentDecision?.humanReviewRequired ?? run?.aiOutput?.humanReviewRequired ?? true,
     notClinicalDiagnosis: run?.notClinicalDiagnosis ?? run?.agentDecision?.notClinicalDiagnosis ?? run?.aiOutput?.notClinicalDiagnosis ?? true,
-    dataOrigin: "backend",
+    dataOrigin: normalizeDataOrigin(record.dataOrigin, "backend"),
   } as AiRunResponse;
 }
 

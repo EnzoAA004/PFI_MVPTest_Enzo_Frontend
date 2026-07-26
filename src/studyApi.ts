@@ -1,6 +1,6 @@
 import { API_BASE_URL, ApiError, ContractError } from "./api";
 import { authHeaders } from "./authClient";
-import type { Measurement, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyRow, StudyRun } from "./appTypes";
+import type { DataOrigin, Measurement, PersistedArtifact, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyRow, StudyRun } from "./appTypes";
 
 function mapPriority(value?: string): Priority {
   if (value === "alta" || value === "high") return "alta";
@@ -17,6 +17,10 @@ function mapPlane(value: unknown): Plane | undefined {
   return value === "axial" || value === "sagittal" ? value : undefined;
 }
 
+function mapDataOrigin(value: unknown, fallback: DataOrigin): DataOrigin {
+  return value === "backend" || value === "ai_module" || value === "database" || value === "demo" ? value : fallback;
+}
+
 function protectedHeaders() {
   return { "Content-Type": "application/json", ...authHeaders() };
 }
@@ -31,55 +35,148 @@ function requireString(record: Record<string, unknown>, key: string, context: st
   return value;
 }
 
-function normalizeStudy(value: unknown): StudyRow {
+function optionalString(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" ? value : null;
+}
+
+function normalizePlanes(value: unknown): Plane[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(mapPlane).filter((plane): plane is Plane => Boolean(plane));
+}
+
+function normalizeStudy(value: unknown, fallback?: StudyRow): StudyRow {
   const row = asRecord(value);
   if (!row) throw new ContractError("Detalle de estudio invalido.", "/api/studies/{caseId}");
-  const plane = mapPlane(row.plane);
-  if (!plane) throw new ContractError("Detalle de estudio sin plano valido.", "/api/studies/{caseId}");
+  const subjectRef = optionalString(row, "subjectRef") ?? optionalString(row, "patientId");
+  const primaryPlane = mapPlane(row.primaryPlane) ?? mapPlane(row.plane) ?? null;
+  const planes = normalizePlanes(row.planes);
+  const latestRunId = optionalString(row, "latestRunId") ?? optionalString(row, "runId");
   return {
     caseId: requireString(row, "caseId", "/api/studies/{caseId}"),
-    patientId: typeof row.patientId === "string" ? row.patientId : typeof row.subjectRef === "string" ? row.subjectRef : requireString(row, "patientId", "/api/studies/{caseId}"),
-    plane,
-    studyDate: requireString(row, "studyDate", "/api/studies/{caseId}"),
-    modelKey: requireString(row, "modelKey", "/api/studies/{caseId}"),
-    modelStatus: typeof row.modelStatus === "string" ? row.modelStatus : "sin_estado",
-    reviewStatus: mapStatus(typeof row.reviewStatus === "string" ? row.reviewStatus : undefined),
-    priority: mapPriority(typeof row.priority === "string" ? row.priority : undefined),
-    runId: typeof row.runId === "string" ? row.runId : undefined,
-    dataOrigin: "backend",
+    subjectRef,
+    patientId: subjectRef,
+    studyDate: optionalString(row, "studyDate"),
+    status: typeof row.status === "string" ? row.status : fallback?.status ?? "created",
+    planes,
+    primaryPlane,
+    plane: primaryPlane,
+    latestRunId,
+    runId: latestRunId,
+    modelKey: optionalString(row, "modelKey"),
+    modelStatus: typeof row.modelStatus === "string" ? row.modelStatus : fallback?.modelStatus ?? "sin_estado",
+    reviewStatus: mapStatus(typeof row.reviewStatus === "string" ? row.reviewStatus : fallback?.reviewStatus),
+    priority: mapPriority(typeof row.priority === "string" ? row.priority : fallback?.priority),
+    createdAt: typeof row.createdAt === "string" ? row.createdAt : fallback?.createdAt,
+    updatedAt: typeof row.updatedAt === "string" ? row.updatedAt : fallback?.updatedAt,
+    dataOrigin: mapDataOrigin(row.dataOrigin, fallback?.dataOrigin ?? "database"),
   };
 }
 
-function normalizeRun(value: unknown, study: StudyRow): StudyRun {
-  const run = asRecord(value);
-  if (!run) throw new ContractError("Corrida de estudio invalida.", "/api/studies/{caseId}/runs");
-  const plane = mapPlane(run.plane ?? study.plane);
-  if (!plane) throw new ContractError("Corrida sin plano valido.", "/api/studies/{caseId}/runs");
-  return {
-    runId: requireString(run, "runId", "/api/studies/{caseId}/runs"),
-    caseId: typeof run.caseId === "string" ? run.caseId : study.caseId,
-    plane,
-    modelKey: typeof run.modelKey === "string" ? run.modelKey : study.modelKey,
-    modelStatus: typeof run.modelStatus === "string" ? run.modelStatus : study.modelStatus,
-    reviewStatus: mapStatus(typeof run.reviewStatus === "string" ? run.reviewStatus : study.reviewStatus),
-    measurementCount: typeof run.measurementCount === "number" ? run.measurementCount : undefined,
-  };
-}
-
-function normalizeMeasurement(value: unknown, index: number): Measurement {
+function normalizeMeasurement(value: unknown, index: number, plane?: Plane): Measurement {
   const item = asRecord(value);
   if (!item) throw new ContractError(`Medicion invalida en posicion ${index}.`, "/api/studies/{caseId}");
+  const aiValue = typeof item.aiValue === "number" || typeof item.aiValue === "string"
+    ? item.aiValue
+    : typeof item.value === "number" || typeof item.value === "string"
+      ? item.value
+      : "";
+  const reviewerValue = typeof item.reviewerValue === "number" || typeof item.reviewerValue === "string" || item.reviewerValue === null ? item.reviewerValue : undefined;
+  const effectiveValue = reviewerValue ?? (typeof item.value === "number" || typeof item.value === "string" ? item.value : aiValue);
+  const linkedLandmarks = Array.isArray(item.linkedLandmarks) ? item.linkedLandmarks.filter((entry): entry is string => typeof entry === "string") : undefined;
   return {
     id: typeof item.id === "string" ? item.id : `measurement-${index}`,
     label: typeof item.label === "string" ? item.label : "Medicion revisable",
-    value: typeof item.value === "number" || typeof item.value === "string" ? item.value : "",
+    value: effectiveValue,
+    aiValue,
+    reviewerValue,
     unit: typeof item.unit === "string" ? item.unit : "",
     confidence: typeof item.confidence === "number" ? item.confidence : undefined,
-    plane: mapPlane(item.plane),
+    plane: mapPlane(item.plane) ?? plane,
     source: item.source === "Reviewer" || item.source === "Placeholder" ? item.source : "AI",
     status: item.status === "revisado" || item.status === "editado" ? item.status : "pendiente",
     outlier: Boolean(item.outlier),
-    dataOrigin: "backend",
+    linkedLandmarks,
+    dataOrigin: "database",
+  };
+}
+
+function normalizeMeasurementsByPlane(value: unknown): Partial<Record<Plane, Measurement[]>> {
+  const record = asRecord(value);
+  if (!record) return {};
+  const result: Partial<Record<Plane, Measurement[]>> = {};
+  for (const plane of ["sagittal", "axial"] as const) {
+    const values = record[plane];
+    if (Array.isArray(values)) result[plane] = values.map((item, index) => normalizeMeasurement(item, index, plane));
+  }
+  return result;
+}
+
+function normalizeArtifactsByPlane(value: unknown): Partial<Record<Plane, PersistedArtifact[]>> {
+  const record = asRecord(value);
+  if (!record) return {};
+  const result: Partial<Record<Plane, PersistedArtifact[]>> = {};
+  for (const plane of ["sagittal", "axial"] as const) {
+    const values = record[plane];
+    if (!Array.isArray(values)) continue;
+    result[plane] = values.map((item) => {
+      const artifact = asRecord(item) ?? {};
+      return {
+        plane: mapPlane(artifact.plane) ?? plane,
+        runId: typeof artifact.runId === "string" ? artifact.runId : undefined,
+        assetName: typeof artifact.assetName === "string" ? artifact.assetName : undefined,
+        contentType: typeof artifact.contentType === "string" ? artifact.contentType : undefined,
+        proxyUrl: typeof artifact.proxyUrl === "string" ? artifact.proxyUrl : undefined,
+        createdAt: typeof artifact.createdAt === "string" ? artifact.createdAt : undefined,
+      };
+    });
+  }
+  return result;
+}
+
+function normalizeRun(value: unknown, study: StudyRow): StudyRun {
+  const rawRun = asRecord(value);
+  if (!rawRun) throw new ContractError("Corrida de estudio invalida.", "/api/studies/{caseId}/runs");
+  const run = asRecord(rawRun.summary) ?? rawRun;
+  const planes = normalizePlanes(run.planes);
+  const primaryPlane = mapPlane(run.primaryPlane) ?? mapPlane(run.plane) ?? planes[0] ?? null;
+  const modelKey = optionalString(run, "modelKey") ?? optionalString(run, "sagittalModelKey") ?? optionalString(run, "axialModelKey");
+  const measurementsByPlane = normalizeMeasurementsByPlane(rawRun.measurementsByPlane ?? run.measurementsByPlane);
+  const artifactsByPlane = normalizeArtifactsByPlane(rawRun.artifactsByPlane ?? run.artifactsByPlane);
+  return {
+    runId: requireString(run, "runId", "/api/studies/{caseId}/runs"),
+    databaseId: optionalString(run, "databaseId") ?? undefined,
+    traceId: optionalString(run, "traceId") ?? undefined,
+    caseId: typeof run.caseId === "string" ? run.caseId : study.caseId,
+    planes,
+    primaryPlane,
+    plane: primaryPlane,
+    requestedInferenceMode: optionalString(run, "requestedInferenceMode") ?? undefined,
+    effectiveInferenceMode: optionalString(run, "effectiveInferenceMode") ?? undefined,
+    status: typeof run.status === "string" ? run.status : "completed",
+    reviewStatus: mapStatus(typeof run.reviewStatus === "string" ? run.reviewStatus : study.reviewStatus),
+    reviewer: optionalString(run, "reviewer"),
+    reviewedAt: optionalString(run, "reviewedAt"),
+    comments: optionalString(run, "comments"),
+    sagittalRunId: optionalString(run, "sagittalRunId"),
+    axialRunId: optionalString(run, "axialRunId"),
+    sagittalModelKey: optionalString(run, "sagittalModelKey"),
+    axialModelKey: optionalString(run, "axialModelKey"),
+    sagittalArtifactHash: optionalString(run, "sagittalArtifactHash"),
+    axialArtifactHash: optionalString(run, "axialArtifactHash"),
+    modelKey,
+    modelStatus: typeof run.status === "string" ? run.status : study.modelStatus,
+    measurementsByPlane,
+    artifactsByPlane,
+    corrections: Array.isArray(rawRun.corrections) ? rawRun.corrections : [],
+    metricsSnapshot: asRecord(rawRun.metricsSnapshot),
+    artifactCount: typeof run.artifactCount === "number" ? run.artifactCount : Object.values(artifactsByPlane).reduce((sum, values) => sum + (values?.length ?? 0), 0),
+    measurementCount: typeof run.measurementCount === "number" ? run.measurementCount : Object.values(measurementsByPlane).reduce((sum, values) => sum + (values?.length ?? 0), 0),
+    createdAt: typeof run.createdAt === "string" ? run.createdAt : undefined,
+    updatedAt: typeof run.updatedAt === "string" ? run.updatedAt : undefined,
+    humanReviewRequired: run.humanReviewRequired === undefined ? true : Boolean(run.humanReviewRequired),
+    notClinicalDiagnosis: run.notClinicalDiagnosis === undefined ? true : Boolean(run.notClinicalDiagnosis),
+    dataOrigin: mapDataOrigin(run.dataOrigin, mapDataOrigin(rawRun.dataOrigin, "database")),
   };
 }
 
@@ -91,19 +188,20 @@ async function readJson(path: string) {
 
 export async function fetchStudyDetail(study: StudyRow): Promise<StudyDetailResponse> {
   const payload = await readJson(`/api/studies/${study.caseId}`);
-  const normalizedStudy = normalizeStudy(payload.study ?? study);
+  const normalizedStudy = normalizeStudy(payload.study ?? study, study);
   const runs = Array.isArray(payload.runs) ? payload.runs.map((run) => normalizeRun(run, normalizedStudy)) : [];
   const review = payload.review && typeof payload.review === "object" ? payload.review as ReviewStatusResponse : undefined;
-  const measurements = Array.isArray(payload.measurements) ? payload.measurements.map(normalizeMeasurement) : [];
+  const measurements = runs[0]?.measurementsByPlane?.sagittal ?? [];
   return {
     status: "ok",
     study: normalizedStudy,
     runs,
     review,
     measurements,
+    auditTrail: Array.isArray(payload.auditTrail) ? payload.auditTrail as any[] : [],
     humanReviewRequired: payload.humanReviewRequired === undefined ? true : Boolean(payload.humanReviewRequired),
     notClinicalDiagnosis: payload.notClinicalDiagnosis === undefined ? true : Boolean(payload.notClinicalDiagnosis),
-    dataOrigin: "backend",
+    dataOrigin: mapDataOrigin(payload.dataOrigin, "database"),
   };
 }
 

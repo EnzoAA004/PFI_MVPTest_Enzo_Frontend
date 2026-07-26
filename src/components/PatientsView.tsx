@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { StudyRow } from "../appTypes";
+import { displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { PriorityBadge, ReviewBadge } from "./StatusBadge";
 
 interface PatientsViewProps {
@@ -10,6 +11,7 @@ interface PatientsViewProps {
 
 type PatientRow = {
   patientId: string;
+  clickable: boolean;
   totalStudies: number;
   firstStudy: string;
   mostRecent: string;
@@ -19,19 +21,25 @@ type PatientRow = {
 };
 
 const priorityRank: Record<StudyRow["priority"], number> = { alta: 0, media: 1, baja: 2 };
+const NO_REF_KEY = "__sin_ref__";
 
 function buildPatients(studies: StudyRow[]): PatientRow[] {
   const grouped = new Map<string, StudyRow[]>();
-  studies.forEach((study) => grouped.set(study.patientId, [...(grouped.get(study.patientId) ?? []), study]));
+  studies.forEach((study) => {
+    const key = study.subjectRef ?? NO_REF_KEY;
+    grouped.set(key, [...(grouped.get(key) ?? []), study]);
+  });
   return Array.from(grouped.entries()).map(([patientId, patientStudies]) => {
-    const sortedByDate = [...patientStudies].sort((a, b) => Date.parse(a.studyDate) - Date.parse(b.studyDate));
+    const sortedByDate = [...patientStudies].sort((a, b) => Date.parse(a.studyDate ?? "") - Date.parse(b.studyDate ?? ""));
     const latest = sortedByDate[sortedByDate.length - 1] ?? patientStudies[0];
     const highestPriority = [...patientStudies].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0]?.priority ?? "baja";
+    const clickable = patientId !== NO_REF_KEY;
     return {
-      patientId,
+      patientId: clickable ? patientId : displaySubjectRef(null),
+      clickable,
       totalStudies: patientStudies.length,
-      firstStudy: sortedByDate[0]?.studyDate ?? "sin datos",
-      mostRecent: latest?.studyDate ?? "sin datos",
+      firstStudy: displayStudyDate(sortedByDate[0]?.studyDate),
+      mostRecent: displayStudyDate(latest?.studyDate),
       pending: patientStudies.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length,
       highestPriority,
       latestReviewStatus: latest?.reviewStatus ?? "pendiente",
@@ -56,11 +64,11 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
       <section className="page-heading compact-heading">
         <div>
           <p>Pacientes</p>
-          <h1>Índice de pacientes</h1>
+          <h1>Indice de pacientes</h1>
         </div>
         <div className="screen-summary">
           <strong>{visiblePatients.length}</strong>
-          <span>registros de pacientes deidentificados</span>
+          <span>grupos de referencias deidentificadas</span>
         </div>
       </section>
 
@@ -68,19 +76,19 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
         <div className="section-title">
           <div>
             <h2>Pacientes</h2>
-            <p className="muted compact-copy">Derivado de filas reales de estudios disponibles para el frontend. No se infieren métricas longitudinales acá.</p>
+            <p className="muted compact-copy">Derivado de filas reales de estudios disponibles para el frontend. No se infieren metricas longitudinales aca.</p>
           </div>
         </div>
         <div className="worklist-filter-shell">
           <div className="worklist-search-row single-action">
             <label className="worklist-search-input">
               <span>Buscar</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ID de paciente, fecha, estado..." type="search" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Referencia, fecha, estado..." type="search" />
             </label>
           </div>
         </div>
         {loading ? (
-          <div className="panel-hidden-placeholder">Consultando filas de estudios de pacientes desde backend.</div>
+          <div className="panel-hidden-placeholder">Consultando filas de estudios desde backend.</div>
         ) : visiblePatients.length ? (
           <>
           {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- axe requires keyboard focus for horizontally scrollable tables. */}
@@ -88,10 +96,10 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
             <table className="worklist-table patient-index-table">
               <thead>
                 <tr>
-                  <th>Paciente</th>
+                  <th>Referencia</th>
                   <th>Estudios</th>
                   <th>Primer estudio</th>
-                  <th>Más reciente</th>
+                  <th>Mas reciente</th>
                   <th>Pendientes</th>
                   <th>Prioridad</th>
                   <th>Estado</th>
@@ -101,14 +109,14 @@ export function PatientsView({ studies, loading = false, onOpenHistory }: Patien
               <tbody>
                 {visiblePatients.map((patient) => (
                   <tr key={patient.patientId}>
-                    <td><strong>{patient.patientId}</strong><small>Deidentificado</small></td>
+                    <td><strong>{patient.patientId}</strong><small>{patient.clickable ? "Deidentificado" : "Agrupacion visual"}</small></td>
                     <td>{patient.totalStudies}</td>
                     <td>{patient.firstStudy}</td>
                     <td>{patient.mostRecent}</td>
                     <td>{patient.pending}</td>
                     <td><PriorityBadge priority={patient.highestPriority} /></td>
                     <td><ReviewBadge status={patient.latestReviewStatus} /></td>
-                    <td><button className="ghost-button" onClick={() => onOpenHistory(patient.patientId)} type="button">Abrir historial</button></td>
+                    <td><button className="ghost-button" disabled={!patient.clickable} onClick={() => patient.clickable && onOpenHistory(patient.patientId)} type="button">Abrir historial</button></td>
                   </tr>
                 ))}
               </tbody>

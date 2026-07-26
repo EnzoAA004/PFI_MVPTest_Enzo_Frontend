@@ -2,6 +2,7 @@
 import { exportReviewReport } from "../api";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudySeries } from "../appTypes";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
+import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
 import { MriSliceViewer } from "./MriSliceViewer";
@@ -364,8 +365,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       exportType: "academic_deidentified_review",
       generatedAt: new Date().toISOString(),
       caseId: displayRun.caseId,
-      subjectRef: selectedDetail?.study?.patientId ?? run.patientId ?? studyReview?.patientId ?? "Sin sujeto informado",
-      studyDate: selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? "2026-07-01",
+      subjectRef: displaySubjectRef(selectedDetail?.study?.subjectRef ?? run.patientId ?? studyReview?.patientId ?? null),
+      studyDate: displayStudyDate(selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? null),
       runId: displayRun.runId,
       plane: displayRun.plane,
       modelKey: displayRun.modelKey,
@@ -513,10 +514,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             {panelVisible("case-summary") ? (
               <dl className="info-list compact-info">
                 <div><dt>ID de caso</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
-                <div><dt>Fecha de estudio</dt><dd>{selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? "2026-07-01"}</dd></div>
+                <div><dt>Fecha de estudio</dt><dd>{displayStudyDate(selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? null)}</dd></div>
                 <div><dt>Modalidad</dt><dd>RM</dd></div>
-                <div><dt>Plano</dt><dd>{currentSeries?.plane ?? displayRun.plane}</dd></div>
-                <div><dt>Versión del modelo</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayRun.modelKey}</dd></div>
+                <div><dt>Plano</dt><dd>{displayPrimaryPlane(currentSeries?.plane ?? displayRun.plane ?? null)}</dd></div>
+                <div><dt>Versión del modelo</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}</dd></div>
                 <div><dt>Estado de revisión</dt><dd><ReviewBadge status={review.status ?? "pendiente"} /></dd></div>
                 <div><dt>Revisor</dt><dd>{reviewerName}</dd></div>
               </dl>
