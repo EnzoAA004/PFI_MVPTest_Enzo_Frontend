@@ -2,6 +2,8 @@ export type Plane = "sagittal" | "axial";
 export type ReviewStatus = "pendiente" | "aceptado" | "observado" | "descartado";
 export type Priority = "alta" | "media" | "baja";
 export type DataOrigin = "backend" | "ai_module" | "database" | "demo";
+export type MultiplanarRunId = string;
+export type PlaneRunId = string;
 export type ViewKey = "dashboard" | "studies" | "queue" | "review" | "patients" | "history" | "settings" | "help" | "analysis";
 
 export type PipelineRunRequest = {
@@ -95,6 +97,11 @@ export type PersistedArtifact = {
   assetName?: string;
   contentType?: string;
   proxyUrl?: string;
+  storageStatus?: "stored" | "upstream_only" | "missing" | "rejected" | "unavailable" | string;
+  storageKind?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  available?: boolean;
   createdAt?: string;
 };
 
@@ -152,6 +159,11 @@ export type StudySeries = {
   overlayUrl?: string | null;
   overlayOpacity?: number;
   status?: string;
+  assets?: Partial<Record<"input.png" | "overlay.png" | "mask-preview.png", string>>;
+  planeRunId?: string;
+  storageStatus?: string;
+  available?: boolean;
+  coordinateSpace?: string;
 };
 
 export type StudyMask = {

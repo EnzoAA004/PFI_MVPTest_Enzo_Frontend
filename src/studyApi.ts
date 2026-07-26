@@ -130,6 +130,11 @@ function normalizeArtifactsByPlane(value: unknown): Partial<Record<Plane, Persis
         assetName: typeof artifact.assetName === "string" ? artifact.assetName : undefined,
         contentType: typeof artifact.contentType === "string" ? artifact.contentType : undefined,
         proxyUrl: typeof artifact.proxyUrl === "string" ? artifact.proxyUrl : undefined,
+        storageStatus: typeof artifact.storageStatus === "string" ? artifact.storageStatus : undefined,
+        storageKind: typeof artifact.storageKind === "string" ? artifact.storageKind : undefined,
+        sizeBytes: typeof artifact.sizeBytes === "number" ? artifact.sizeBytes : undefined,
+        sha256: typeof artifact.sha256 === "string" ? artifact.sha256 : undefined,
+        available: typeof artifact.available === "boolean" ? artifact.available : undefined,
         createdAt: typeof artifact.createdAt === "string" ? artifact.createdAt : undefined,
       };
     });

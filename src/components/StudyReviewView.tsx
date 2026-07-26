@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { exportReviewReport } from "../api";
+import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudySeries } from "../appTypes";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
@@ -89,6 +90,46 @@ function asRecord(value: unknown): Record<string, any> | undefined {
   return value && typeof value === "object" ? value as Record<string, any> : undefined;
 }
 
+function isDemoRun(run: AiRunResponse) {
+  return run.dataOrigin === "demo" || run.effectiveInferenceMode === "mock" || run.requestedInferenceMode === "mock";
+}
+
+function planeRunRecord(run: AiRunResponse, plane: "sagittal" | "axial") {
+  const planes = asRecord(run.planes);
+  return asRecord(planes?.[plane]);
+}
+
+function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspace): StudySeries | null {
+  const planeRun = planeRunRecord(run, workspace.plane);
+  const metadata = asRecord(planeRun?.metadata);
+  const sliceCount = typeof metadata?.sliceCount === "number" && metadata.sliceCount > 0 ? metadata.sliceCount : 1;
+  const selectedSlice = typeof metadata?.selectedSlice === "number" && metadata.selectedSlice >= 0 ? metadata.selectedSlice : 0;
+  const coordinateSpace = typeof planeRun?.coordinateSpace === "string"
+    ? planeRun.coordinateSpace
+    : typeof planeRun?.measurements?.coordinateSpace === "string"
+      ? planeRun.measurements.coordinateSpace
+      : undefined;
+  const assets = {
+    ...(workspace.inputUrl ? { "input.png": workspace.inputUrl } : {}),
+    ...(workspace.overlayUrl ? { "overlay.png": workspace.overlayUrl } : {}),
+    ...(workspace.maskPreviewUrl ? { "mask-preview.png": workspace.maskPreviewUrl } : {}),
+  };
+  return workspace.planeRunId ? {
+    id: `${workspace.planeRunId}-${workspace.plane}`,
+    name: workspace.plane === "sagittal" ? "Sagital" : "Axial",
+    plane: workspace.plane,
+    sliceCount,
+    selectedSlice,
+    imageUrl: workspace.inputUrl ?? null,
+    overlayUrl: workspace.overlayUrl ?? null,
+    assets,
+    planeRunId: workspace.planeRunId,
+    storageStatus: workspace.storageStatus,
+    available: workspace.available,
+    coordinateSpace,
+    status: workspace.available ? "stored" : workspace.storageStatus,
+  } : null;
+}
 
 function readinessLabel(value?: string) {
   if (value === "real_artifact_available") return "artifact real disponible";
@@ -137,7 +178,7 @@ function normalizeRow(item: any): MeasurementRow {
   return {
     id: String(item.id ?? item.label ?? "measurement"),
     label: String(item.label ?? "Medición"),
-    level: String(item.level ?? (String(item.label ?? "").includes("L5-S1") ? "L5-S1" : "L4-L5")),
+    level: String(item.level ?? "Nivel no informado"),
     aiValue: value,
     reviewerValue: item.reviewerValue ?? null,
     unit: String(item.unit ?? ""),
@@ -211,23 +252,26 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     return () => window.removeEventListener(SELECTED_STUDY_EVENT, update);
   }, []);
 
-  const selectedRun = selectedDetail?.runs?.[0];
+  const demoMode = isDemoRun(run);
   const displayRun: AiRunResponse = {
     ...run,
-    runId: selectedRun?.runId ?? run.runId,
     caseId: selectedDetail?.study?.caseId ?? run.caseId,
-    plane: selectedRun?.plane ?? selectedDetail?.study?.plane ?? run.plane,
-    modelKey: selectedRun?.modelKey ?? selectedDetail?.study?.modelKey ?? run.modelKey,
+    plane: run.plane ?? selectedDetail?.study?.plane ?? selectedDetail?.study?.primaryPlane ?? undefined,
+    modelKey: run.modelKey ?? selectedDetail?.study?.modelKey ?? undefined,
     review: selectedDetail?.review ?? run.review,
   };
 
-  const hasPipelineVisualContract = Array.isArray(run.series) && run.series.length > 0;
+  const sagittalWorkspace = useMemo(() => resolvePersistedPlaneWorkspace(displayRun, "sagittal"), [displayRun]);
+  const axialWorkspace = useMemo(() => resolvePersistedPlaneWorkspace(displayRun, "axial"), [displayRun]);
+  const persistedSeries = useMemo(() => [seriesFromPlaneRun(displayRun, sagittalWorkspace), seriesFromPlaneRun(displayRun, axialWorkspace)].filter((item): item is StudySeries => Boolean(item)), [axialWorkspace, displayRun, sagittalWorkspace]);
+  const hasPipelineVisualContract = demoMode && Array.isArray(run.series) && run.series.length > 0;
   const pipelineMeasurements = hasPipelineVisualContract && Array.isArray(run.normalizedMeasurements) ? run.normalizedMeasurements : [];
-  const sourceMeasurements = selectedDetail?.measurements?.length ? selectedDetail.measurements : pipelineMeasurements.length ? pipelineMeasurements : measurements;
+  const persistedMeasurements = sagittalWorkspace.measurements.length ? sagittalWorkspace.measurements : axialWorkspace.measurements;
+  const sourceMeasurements = persistedMeasurements.length ? persistedMeasurements : selectedDetail?.measurements?.length ? selectedDetail.measurements : pipelineMeasurements.length ? pipelineMeasurements : measurements;
   const review = useMemo(() => displayRun.review ?? { status: "pendiente" as ReviewStatus }, [displayRun.review]);
-  const seriesList = hasPipelineVisualContract ? run.series ?? fallbackSeries : Array.isArray(studyReview?.series) && studyReview.series.length ? studyReview.series : fallbackSeries;
-  const masks = hasPipelineVisualContract && Array.isArray(run.masks) ? run.masks : Array.isArray(studyReview?.masks) && studyReview.masks.length ? studyReview.masks : fallbackMasks;
-  const landmarks: StudyLandmark[] = hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [];
+  const seriesList = persistedSeries.length ? persistedSeries : demoMode ? hasPipelineVisualContract ? run.series ?? fallbackSeries : Array.isArray(studyReview?.series) && studyReview.series.length ? studyReview.series : fallbackSeries : [];
+  const masks = demoMode ? hasPipelineVisualContract && Array.isArray(run.masks) ? run.masks : Array.isArray(studyReview?.masks) && studyReview.masks.length ? studyReview.masks : fallbackMasks : Array.isArray(run.masks) ? run.masks : [];
+  const landmarks: StudyLandmark[] = demoMode ? hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [] : Array.isArray(run.landmarks) ? run.landmarks : [];
   const displayLandmarks = useMemo(() => {
     const byId = new Map<string, StudyLandmark>();
     landmarks.forEach((landmark) => byId.set(landmark.id, landmark));
@@ -241,6 +285,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   };
   const currentSeries = seriesList.find((item: any) => item.id === selectedSeriesId) ?? seriesList.find((item: any) => item.plane === tab.toLowerCase()) ?? seriesList[0];
   const activePlano = currentSeries?.plane === "axial" ? "axial" : "sagittal";
+  const activeWorkspace = activePlano === "axial" ? axialWorkspace : sagittalWorkspace;
   const overlayAvailable = overlayAvailableByPlano[activePlano] === true;
   const activeCoordinateSpace = coordinateSpaceFrom(currentSeries, displayLandmarks);
 
@@ -254,8 +299,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const modelArtifact = run.modelArtifact;
   const artifact = artifactFrom(run);
   const quality = qualityFrom(run);
-  const inferenceMode = aiOutput.inferenceMode ?? String(metadata?.inferenceMode ?? "contract");
-  const requestedInferenceMode = aiOutput.requestedInferenceMode ?? String(metadata?.requestedInferenceMode ?? metadata?.inferenceMode ?? inferenceMode);
+  const activePlaneRun = planeRunRecord(displayRun, activePlano);
+  const inferenceMode = displayRun.effectiveInferenceMode ?? String(activePlaneRun?.effectiveInferenceMode ?? activePlaneRun?.inferenceMode ?? aiOutput.inferenceMode ?? displayRun.requestedInferenceMode ?? metadata?.inferenceMode ?? "sin datos");
+  const requestedInferenceMode = displayRun.requestedInferenceMode ?? aiOutput.requestedInferenceMode ?? String(activePlaneRun?.requestedInferenceMode ?? metadata?.requestedInferenceMode ?? metadata?.inferenceMode ?? "sin datos");
   const modelReadiness = aiOutput.modelReadiness ?? modelArtifact?.readiness ?? String(metadata?.modelReadiness ?? "sin datos");
   const selectedStudyRecord = asRecord(selectedDetail?.study);
   const patientSafe = asRecord(selectedStudyRecord?.metadata) ?? asRecord(studyReview?.patientSafeMetadata) ?? asRecord(metadata?.patientSafeMetadata) ?? {};
@@ -538,9 +584,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <dl className="info-list compact-info">
                   <div><dt>Edad al estudio</dt><dd>{String(patientSafe.ageAtStudy ?? patientSafe.age ?? "Desconocido")}</dd></div>
                   <div><dt>Sexo</dt><dd>{String(patientSafe.sex ?? "Desconocido")}</dd></div>
-                  <div><dt>Región corporal</dt><dd>{String(patientSafe.bodyRegion ?? "Columna lumbar")}</dd></div>
-                  <div><dt>Descripción</dt><dd>{String(patientSafe.studyDescription ?? "Columna lumbar sin contraste")}</dd></div>
-                  <div><dt>Series Count</dt><dd>{seriesList.length}</dd></div>
+                  <div><dt>Región corporal</dt><dd>{String(patientSafe.bodyRegion ?? "No informado")}</dd></div>
+                  <div><dt>Descripción</dt><dd>{String(patientSafe.studyDescription ?? "No informado")}</dd></div>
+                  <div><dt>Planos disponibles</dt><dd>{seriesList.length ? `${seriesList.length} plano${seriesList.length === 1 ? "" : "s"}` : "No informado"}</dd></div>
                   <div><dt>Resolución de imagen</dt><dd>{String(patientSafe.imageResolution ?? (quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm de espaciado` : "sin datos"))}</dd></div>
                 </dl>
                 <button className="text-link-button" type="button">Show more</button>
@@ -549,15 +595,15 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </article>
 
           <article className="panel-card compact-card">
-            <PanelTitle panelId="series-nav" title="Navegador de series"><span className="muted">{seriesList.length} series</span></PanelTitle>
+            <PanelTitle panelId="series-nav" title="Navegador de series"><span className="muted">{seriesList.length ? `${seriesList.length} plano${seriesList.length === 1 ? "" : "s"}` : "sin planos persistidos"}</span></PanelTitle>
             {panelVisible("series-nav") ? (
               <div className="series-list compact-list">
-                {seriesList.map((item: any, index: number) => (
+                {seriesList.length ? seriesList.map((item: any, index: number) => (
                   <button className={`series-item ${currentSeries?.id === item.id ? "active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
                     <span className="thumbnail neutral-thumbnail" aria-hidden="true"><em>{String(index + 1).padStart(2, "0")}</em></span>
-                    <span><strong>{item.name}</strong><small>single served asset</small></span>
+                    <span><strong>{item.name}</strong><small>{item.available ? "input.png persistido" : `asset ${item.storageStatus ?? "no disponible"}`}</small></span>
                   </button>
-                ))}
+                )) : <div className="panel-hidden-placeholder">El estudio no declara planos persistidos revisables.</div>}
               </div>
             ) : hiddenPlaceholder}
           </article>
@@ -577,7 +623,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
         <section className="center-column">
           <div className="workspace-tabs">
-            {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => <button className={tab === item ? "active" : ""} key={item} onClick={() => setTab(item)} type="button">{item === "3D Reconstruction" ? "Reconstrucción 3D" : item === "Sagittal" ? "Sagital" : "Axial"}</button>)}
+            {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => {
+              const disabled = item === "Axial" ? !axialWorkspace.available : item === "3D Reconstruction" ? displayRun.threeD?.status === "blocked_missing_axial" || displayRun.threeD?.enabled === false : !sagittalWorkspace.planeRunId;
+              return <button aria-disabled={disabled} className={tab === item ? "active" : ""} disabled={disabled} key={item} onClick={() => setTab(item)} title={disabled ? item === "Axial" ? "Axial opcional no disponible para esta revisión sagital." : item === "3D Reconstruction" ? "3D paciente-específico bloqueado: falta axial real." : "Sagital persistido no disponible." : undefined} type="button">{item === "3D Reconstruction" ? "Reconstrucción 3D" : item === "Sagittal" ? "Sagital" : "Axial"}</button>;
+            })}
           </div>
           <div className="toolbar compact-toolbar review-toolbar" role="toolbar" aria-label="Herramientas de revisión">
             <button disabled title={futureFeatureTitle} type="button">Editar máscara</button>
@@ -592,7 +641,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <button className={overlayEnabled && overlayAvailable ? "active" : ""} disabled={!overlayAvailable} onClick={() => setOverlayEnabled((value) => !value)} title={overlayAvailable ? "Activar o desactivar overlay.png real" : "overlay.png no disponible desde backend"} type="button">Superposición IA</button>
             <label className="opacity-control">Opacidad <input min="25" max="100" value={overlayOpacidad} onChange={(event) => setOverlayOpacidad(Number(event.target.value))} type="range" /></label>
           </div>
-          <div className="edit-state compact-copy">Serie: <strong>{currentSeries?.name}</strong> · Recurso servido: <strong>input.png único</strong> · Superposición: <strong>{overlayAvailable ? "overlay.png real" : "no disponible"}</strong> · Borradores del revisor: <strong>{reviewerDraftCount} medición/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
+          <div className="edit-state compact-copy">Plano: <strong>{currentSeries?.name ?? "sin plano persistido"}</strong> · Run de plano: <strong>{activeWorkspace.planeRunId ?? "no informado"}</strong> · Storage: <strong>{activeWorkspace.storageStatus}</strong> · Superposición: <strong>{overlayAvailable ? "overlay.png real" : activeWorkspace.overlayUrl ? "verificando overlay.png" : "no disponible"}</strong> · Borradores del revisor: <strong>{reviewerDraftCount} medición/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
           {tab === "3D Reconstruction" ? (
             <article className="panel-card full-viewer"><SpineReconstructionPreview threeD={displayRun.threeD} /></article>
           ) : (
@@ -600,7 +649,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               <MriSliceViewer
                 variant={currentSeries?.plane === "axial" ? "axial" : "sagittal"}
                 series={currentSeries}
-                runId={displayRun.runId}
+                planeRunId={activeWorkspace.planeRunId ?? undefined}
                 masks={masks}
                 landmarks={displayLandmarks}
                 maskVisibility={maskVisibility}
@@ -622,13 +671,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 {panelVisible("legend") ? (
                   <>
                     <div className="legend-grid layer-legend-grid">
-                      {masks.map((mask: any) => (
+                      {masks.length ? masks.map((mask: any) => (
                         <button disabled key={mask.id} title="Requiere máscaras por clase desde backend (FE-007/AI-017); hoy solo hay overlay.png combinado." type="button">
                           <i style={{ background: maskTokenVar(mask) }} />{mask.label}
                         </button>
-                      ))}
+                      )) : <button disabled title="El backend declaró overlay.png combinado, sin máscaras por clase persistidas." type="button"><i style={{ background: "var(--mask-disc)" }} />Superposición combinada</button>}
                     </div>
-                    <p className="viewer-limit-note">La visibilidad por clase requiere máscaras por clase desde backend. El visor actual usa overlay.png combinado cuando está disponible.</p>
+                    <p className="viewer-limit-note">{masks.length ? "La visibilidad por clase requiere máscaras por clase desde backend. El visor actual usa overlay.png combinado cuando está disponible." : "No hay máscaras por clase persistidas; se muestra solo la superposición combinada si overlay.png está disponible."}</p>
                   </>
                 ) : hiddenPlaceholder}
               </article>

@@ -30,10 +30,21 @@ function loadApi() {
 
 function loadGuards() {
   const source = readFileSync(join(root, "src/appDataGuards.ts"), "utf8")
-    .replace(/^import type .*$/gm, "")
+    .replace(/^import .*$/gm, "")
     .replace(/export /g, "");
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const sandbox = { exports: {}, console };
+  const sandbox = {
+    exports: {},
+    console,
+    API_BASE_URL: "https://backend.example",
+    normalizeAiAssetUrl: (value, apiBaseUrl = "") => {
+      const rawUrl = typeof value === "string" ? value : value?.url ?? value?.proxyUrl;
+      if (typeof rawUrl !== "string") return undefined;
+      if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+      if (rawUrl.startsWith("/api/")) return `${apiBaseUrl}${rawUrl}`;
+      return undefined;
+    },
+  };
   vm.runInNewContext(`${js}\nexports.isReviewQueueItem = isReviewQueueItem;`, sandbox);
   return sandbox.exports;
 }

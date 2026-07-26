@@ -523,7 +523,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
             </div>
             <MriSliceViewer
               variant="sagittal"
-              runId={sagittalPlaneRun?.runId}
+              planeRunId={sagittalPlaneRun?.runId}
               series={sagittalPlaneRun?.series?.[0]}
               masks={sagittalPlaneRun?.masks}
               landmarks={sagittalPlaneRun?.landmarks as unknown as StudyLandmark[]}

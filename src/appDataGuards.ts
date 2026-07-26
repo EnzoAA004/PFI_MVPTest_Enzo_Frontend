@@ -1,4 +1,7 @@
-import type { AiRunResponse, PersistedStudyRun, ReviewableRun, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow } from "./appTypes";
+import { API_BASE_URL } from "./api";
+import { normalizeAiAssetUrl } from "./inferenceReadiness";
+import type { AssetName } from "./multiplanarRunTypes";
+import type { AiRunResponse, Measurement, PersistedArtifact, PersistedStudyRun, Plane, PlaneRunId, ReviewableRun, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow } from "./appTypes";
 
 export type ContractIssue = {
   message: string;
@@ -16,10 +19,129 @@ export type BootstrapStatuses = {
   reviewSnapshotStatus: DataStatus;
 };
 
+export type PersistedPlaneWorkspace = {
+  planeRunId: PlaneRunId | null;
+  plane: Plane;
+  modelKey: string | null;
+  artifactHash: string | null;
+  measurements: Measurement[];
+  artifacts: PersistedArtifact[];
+  inputUrl?: string;
+  overlayUrl?: string;
+  maskPreviewUrl?: string;
+  storageStatus: string;
+  available: boolean;
+};
+
+const assetNames = ["input.png", "overlay.png", "mask-preview.png"] as const;
+const unavailableStorageStatuses = new Set(["missing", "rejected", "unavailable"]);
+
 function errorField(error: unknown, field: "code" | "path" | "traceId") {
   return error && typeof error === "object" && field in error && typeof (error as Record<string, unknown>)[field] === "string"
     ? (error as Record<string, string>)[field]
     : undefined;
+}
+
+function recordFrom(value: unknown): Record<string, any> | undefined {
+  return value && typeof value === "object" ? value as Record<string, any> : undefined;
+}
+
+function stringFrom(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function assetUrlFrom(value: unknown) {
+  const record = recordFrom(value);
+  return normalizeAiAssetUrl(typeof value === "string" ? value : record?.proxyUrl ?? record?.url, API_BASE_URL);
+}
+
+function artifactAvailable(artifact?: PersistedArtifact | null) {
+  if (!artifact) return false;
+  if (artifact.available === false) return false;
+  if (artifact.storageStatus && unavailableStorageStatuses.has(artifact.storageStatus)) return false;
+  return Boolean(artifact.proxyUrl);
+}
+
+function artifactUrl(artifact?: PersistedArtifact | null) {
+  return artifactAvailable(artifact) ? normalizeAiAssetUrl(artifact?.proxyUrl, API_BASE_URL) : undefined;
+}
+
+function artifactsFromPlaneRun(planeRun: Record<string, any> | undefined, plane: Plane): PersistedArtifact[] {
+  const assets = recordFrom(planeRun?.assets);
+  if (!assets) return [];
+  return assetNames.flatMap((assetName) => {
+    const value = assets[assetName];
+    const proxyUrl = assetUrlFrom(value);
+    if (!proxyUrl) return [];
+    const source = recordFrom(value);
+    return [{
+      plane,
+      runId: stringFrom(source?.runId) ?? stringFrom(planeRun?.runId) ?? undefined,
+      assetName,
+      contentType: stringFrom(source?.contentType) ?? undefined,
+      proxyUrl,
+      storageStatus: stringFrom(source?.storageStatus) ?? "stored",
+      storageKind: stringFrom(source?.storageKind) ?? undefined,
+      sizeBytes: typeof source?.sizeBytes === "number" ? source.sizeBytes : typeof source?.size === "number" ? source.size : undefined,
+      sha256: stringFrom(source?.sha256) ?? stringFrom(source?.checksum) ?? undefined,
+      available: source?.available === false ? false : true,
+    }];
+  });
+}
+
+function artifactByName(artifacts: PersistedArtifact[], assetName: AssetName) {
+  return artifacts.find((artifact) => artifact.assetName === assetName);
+}
+
+function mergeArtifactsByPriority(primary: PersistedArtifact[], secondary: PersistedArtifact[]) {
+  const byName = new Map<string, PersistedArtifact>();
+  for (const artifact of secondary) {
+    if (artifact.assetName) byName.set(artifact.assetName, artifact);
+  }
+  for (const artifact of primary) {
+    if (artifact.assetName) byName.set(artifact.assetName, artifact);
+  }
+  return Array.from(byName.values());
+}
+
+function measurementsFromPlaneRun(planeRun: Record<string, any> | undefined): Measurement[] {
+  const measurements = planeRun?.measurements;
+  if (Array.isArray(measurements)) return measurements as Measurement[];
+  if (Array.isArray(measurements?.values)) return measurements.values as Measurement[];
+  return [];
+}
+
+export function resolvePersistedPlaneWorkspace(run: AiRunResponse | null | undefined, plane: Plane): PersistedPlaneWorkspace {
+  const planes = recordFrom(run?.planes);
+  const planeRun = recordFrom(planes?.[plane]);
+  const explicitPlaneRunId = plane === "sagittal" ? run?.sagittalRunId : run?.axialRunId;
+  const planeRunId = stringFrom(planeRun?.runId) ?? stringFrom(explicitPlaneRunId);
+  const planeRunArtifacts = artifactsFromPlaneRun(planeRun, plane);
+  const persistedArtifacts = run?.artifactsByPlane?.[plane] ?? [];
+  const artifacts = mergeArtifactsByPriority(planeRunArtifacts, persistedArtifacts);
+  const inputArtifact = artifactByName(artifacts, "input.png");
+  const overlayArtifact = artifactByName(artifacts, "overlay.png");
+  const maskPreviewArtifact = artifactByName(artifacts, "mask-preview.png");
+  const inputUrl = artifactUrl(inputArtifact);
+  const overlayUrl = artifactUrl(overlayArtifact);
+  const maskPreviewUrl = artifactUrl(maskPreviewArtifact);
+  const measurements = run?.measurementsByPlane?.[plane] ?? measurementsFromPlaneRun(planeRun);
+  const modelKey = stringFrom(planeRun?.modelKey) ?? stringFrom(plane === "sagittal" ? run?.sagittalModelKey : run?.axialModelKey) ?? stringFrom(run?.modelKey);
+  const artifactHash = stringFrom(planeRun?.artifactHash) ?? stringFrom(planeRun?.aiOutput?.artifactHash) ?? stringFrom(plane === "sagittal" ? run?.sagittalArtifactHash : run?.axialArtifactHash);
+  const storageStatus = inputArtifact?.storageStatus ?? overlayArtifact?.storageStatus ?? (planeRunId ? "missing" : "unavailable");
+  return {
+    planeRunId,
+    plane,
+    modelKey,
+    artifactHash,
+    measurements,
+    artifacts,
+    inputUrl,
+    overlayUrl,
+    maskPreviewUrl,
+    storageStatus,
+    available: Boolean(planeRunId && inputUrl),
+  };
 }
 
 export function toContractIssue(error: unknown): ContractIssue {

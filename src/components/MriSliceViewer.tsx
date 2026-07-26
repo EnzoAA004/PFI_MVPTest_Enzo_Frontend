@@ -20,7 +20,7 @@ type Size = {
 
 type Props = {
   variant: "sagittal" | "axial";
-  runId?: string;
+  planeRunId?: string;
   series?: any;
   masks?: any[];
   landmarks?: StudyLandmark[];
@@ -111,9 +111,18 @@ function maskFallbackColor(group: string) {
   return "var(--mask-foramen-other-soft-tissue)";
 }
 
+function assetStorageMessage(status?: string, hasUrl?: boolean) {
+  if (status === "stored") return "Recurso persistido disponible.";
+  if (status === "upstream_only") return "Recurso temporal disponible desde AI Module.";
+  if (status === "missing") return "El recurso derivado ya no se encuentra disponible.";
+  if (status === "rejected") return "El recurso fue rechazado durante la persistencia.";
+  if (status === "unavailable") return "No existe un recurso visual para esta corrida.";
+  return hasUrl ? "Recurso visual declarado por backend." : "No existe un recurso visual para esta corrida.";
+}
+
 export function MriSliceViewer({
   variant,
-  runId,
+  planeRunId,
   series,
   masks = [],
   landmarks = [],
@@ -129,8 +138,9 @@ export function MriSliceViewer({
 }: Props) {
   const plane = variant as Plane;
   const assets = assetRefsFrom(series);
-  const inputUrl = safeAssetUrl(series?.imageUrl) ?? safeAssetUrl(assets?.["input.png"]) ?? (runId ? aiAssetUrl(runId, plane, "input.png") : undefined);
-  const overlayUrl = safeAssetUrl(series?.overlayUrl) ?? safeAssetUrl(assets?.["overlay.png"]) ?? (runId ? aiAssetUrl(runId, plane, "overlay.png") : undefined);
+  const declaredUnavailable = series?.available === false || ["missing", "rejected", "unavailable"].includes(String(series?.storageStatus ?? ""));
+  const inputUrl = safeAssetUrl(series?.imageUrl) ?? safeAssetUrl(assets?.["input.png"]) ?? (!declaredUnavailable && planeRunId ? aiAssetUrl(planeRunId, plane, "input.png") : undefined);
+  const overlayUrl = safeAssetUrl(series?.overlayUrl) ?? safeAssetUrl(assets?.["overlay.png"]) ?? (!declaredUnavailable && planeRunId ? aiAssetUrl(planeRunId, plane, "overlay.png") : undefined);
   const inputAsset = useAuthenticatedImageUrl(inputUrl);
   const overlayAsset = useAuthenticatedImageUrl(overlayUrl);
   const inputState = inputAsset.state;
@@ -171,6 +181,7 @@ export function MriSliceViewer({
   }, [masks]);
   const imageLoaded = inputState === "loaded";
   const overlayLoaded = overlayState === "loaded";
+  const storageMessage = assetStorageMessage(series?.storageStatus, Boolean(inputUrl));
   const canEditLandmarks = Boolean(imageLoaded && coordinateSpace && onLandmarkDraftChange);
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
   const filter = `brightness(${brightness}%) contrast(${contrast}%)`;
@@ -330,11 +341,11 @@ export function MriSliceViewer({
     <div className={`mri-viewer real-asset-viewer ${variant}`}>
       <div className="viewer-caption">
         <div>
-          <strong>{series?.name ?? (variant === "sagittal" ? "Sagital T2" : "Axial T2")}</strong>
-          <span>{imageLoaded ? "Recurso real del backend" : inputState === "failed" ? "Imagen no disponible desde backend" : "Verificando recurso real"}</span>
+          <strong>{series?.name ?? (variant === "sagittal" ? "Sagital" : "Axial")}</strong>
+          <span>{imageLoaded ? storageMessage : inputState === "failed" ? storageMessage : "Verificando recurso real"}</span>
         </div>
         <div className="dicom-meta">
-          <em>PNG servido unico</em>
+          <em>PNG servido único</em>
           <em>W/L aprox. {Math.round(contrast)} / {Math.round(brightness)}</em>
           <em>Zoom {formatZoomPercent(zoom, fitZoom)}</em>
           {coordinateSpace && <em>{coordinateSpace}</em>}
@@ -364,11 +375,11 @@ export function MriSliceViewer({
       <div className="plane-controls-panel">
         <label className="toggle-row">
           <input checked={overlayVisible} disabled={!overlayLoaded} onChange={(event) => setOverlayVisible(event.target.checked)} type="checkbox" />
-          <span>Mostrar segmentacion</span>
+          <span>Mostrar segmentación</span>
         </label>
         <label className="opacity-control">
           <span>Opacidad {Math.round(overlayAlpha * 100)}%</span>
-          <input aria-label="Opacidad de segmentacion" disabled={!overlayLoaded} max="1" min="0" onChange={(event) => setOverlayAlpha(Number(event.target.value))} step="0.01" type="range" value={overlayAlpha} />
+          <input aria-label="Opacidad de segmentación" disabled={!overlayLoaded} max="1" min="0" onChange={(event) => setOverlayAlpha(Number(event.target.value))} step="0.01" type="range" value={overlayAlpha} />
         </label>
         <label className="toggle-row">
           <input checked={landmarksVisible} onChange={(event) => setLandmarksVisible(event.target.checked)} type="checkbox" />
@@ -377,7 +388,7 @@ export function MriSliceViewer({
       </div>
 
       <div className="segmentation-legend-panel">
-        <strong>Leyenda de segmentacion</strong>
+        <strong>Leyenda de segmentación</strong>
         <div className="segmentation-legend-list">
           {maskGroups.length ? maskGroups.map((group) => (
             <label className="segmentation-class-control" key={group.id} title={`Control por clase pendiente de assets separados. Clase tecnica: ${group.technicalName}`}>
@@ -385,9 +396,9 @@ export function MriSliceViewer({
               <span className="mask-swatch" style={{ background: group.color }} />
               <span>{group.label}</span>
             </label>
-          )) : <span className="muted">Mascara por clase no informada.</span>}
+          )) : <span className="muted">Máscara por clase no informada.</span>}
         </div>
-        <p className="viewer-limit-note">El overlay actual es compuesto. Ocultar clases individuales requiere assets separados por clase; por ahora el switch global de segmentacion es el control funcional.</p>
+        <p className="viewer-limit-note">El overlay actual es compuesto. Ocultar clases individuales requiere assets separados por clase; por ahora el switch global de segmentación es el control funcional.</p>
       </div>
 
       <p className="viewer-limit-note">W/L es un filtro aproximado de brillo/contraste sobre un PNG de 8 bits. El ventaneo DICOM y la navegacion multicorte requieren AI-009.</p>
@@ -442,18 +453,18 @@ export function MriSliceViewer({
         ) : (
           <div className="asset-empty-state">
             <strong>{inputState === "failed" ? "Imagen no disponible desde backend" : "Verificando input.png real"}</strong>
-            <span>No se renderiza una resonancia simulada. El visor espera el recurso real `input.png` de la corrida.</span>
+            <span>{storageMessage} No se renderiza una resonancia simulada. El visor espera el recurso real `input.png` de la corrida de plano.</span>
           </div>
         )}
       </div>
 
       <div className="viewer-footer real-viewer-footer">
-        <span>{overlayLoaded ? "overlay.png disponible" : overlayState === "failed" ? "overlay.png no disponible" : "superposicion pendiente"}</span>
-        <span>{overlayVisible && overlayLoaded ? `${Math.round(overlayAlpha * 100)}% opacidad` : "Segmentacion IA deshabilitada si falta el recurso"}</span>
+        <span>{overlayLoaded ? "overlay.png disponible" : overlayState === "failed" ? "overlay.png no disponible" : "superposición pendiente"}</span>
+        <span>{overlayVisible && overlayLoaded ? `${Math.round(overlayAlpha * 100)}% opacidad` : "Segmentación IA deshabilitada si falta el recurso"}</span>
         <span>{landmarksVisible ? `${realLandmarks.length} puntos visibles` : "Puntos de referencia ocultos"}</span>
         <span>{landmarkEditMode && canEditLandmarks ? "Edicion de landmarks del revisor" : "Corte unico servido"}</span>
       </div>
-      {overlayState === "failed" && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend. Se muestra input.png sin superposicion simulada.</div>}
+      {overlayState === "failed" && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend. Se muestra input.png sin superposición simulada.</div>}
       {!coordinateSpace && <div className="panel-hidden-placeholder">Espacio de coordenadas no informado por backend; mover/agregar landmarks queda deshabilitado para no inventar model_256/original.</div>}
       {coordinateSpace && landmarkEditMode && <div className="panel-hidden-placeholder">Correcciones de landmarks en borrador local no persistido. Pendiente BE-008/FE-010 + AI-011.</div>}
     </div>
