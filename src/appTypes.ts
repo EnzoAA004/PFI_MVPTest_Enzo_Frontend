@@ -265,6 +265,21 @@ export type StudyRun = {
   measurementCount?: number;
 };
 
+export type SelectedStudyReference = {
+  caseId: string;
+  patientId: string;
+  studyDate: string;
+};
+
+export type PersistedStudyRun = StudyRun;
+
+export type ReviewableRun = AiRunResponse & {
+  runId: string;
+  caseId: string;
+  plane: Plane;
+  modelKey: string;
+};
+
 export type StudyDetailResponse = {
   status: string;
   study: StudyRow;

@@ -37,7 +37,7 @@ assertContains("src/App.tsx", app, /useState<Measurement\[\]>\(\[\]\)/, "App ini
 assertContains("src/App.tsx", app, /EmptyReviewState/, "Review debe tener empty state cuando no hay corrida");
 assertNotContains("src/App.tsx", app, /inputPath:\s*`demo\//, "abrir estudio no debe construir inputPath demo");
 assertNotContains("src/App.tsx", app, /PAT-0087|CASE-DEMO|demo-run-2026-001|local-run/, "App real no debe usar IDs demo/fallback visibles");
-assertContains("src/App.tsx", app, /No se pudo consultar el backend/, "backend 500 debe mostrar error humano");
+assertContains("src/App.tsx", app, /Error al consultar estudios|No se pudo consultar el backend/, "backend 500 debe mostrar error humano");
 
 assertNotContains("src/studyApi.ts", studyApi, /mockMeasurements|worklistStudies|demo-run|status: "demo"/, "studyApi no debe fabricar detalle/runs/mediciones");
 assertContains("src/studyApi.ts", studyApi, /throw new ApiError/, "fetchStudyDetail/fetchStudyRuns deben propagar errores backend");
