@@ -1,6 +1,6 @@
 import { API_BASE_URL, ApiError, ContractError } from "./api";
 import { authHeaders } from "./authClient";
-import type { DataOrigin, Measurement, PersistedArtifact, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyRow, StudyRun } from "./appTypes";
+import type { DataOrigin, Measurement, PersistedArtifact, PersistedReviewCorrection, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyRow, StudyRun } from "./appTypes";
 
 function mapPriority(value?: string): Priority {
   if (value === "alta" || value === "high") return "alta";
@@ -104,6 +104,91 @@ function normalizeMeasurement(value: unknown, index: number, plane?: Plane): Mea
   };
 }
 
+function normalizeCorrectionValue(value: unknown): PersistedReviewCorrection["beforeValue"] | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const rawValue = record.value;
+  return {
+    value: typeof rawValue === "number" || typeof rawValue === "string" || rawValue === null ? rawValue : null,
+    unit: typeof record.unit === "string" ? record.unit : undefined,
+    confidence: typeof record.confidence === "number" ? record.confidence : undefined,
+    plane: mapPlane(record.plane),
+  };
+}
+
+export function normalizePersistedCorrection(value: unknown, index: number): PersistedReviewCorrection | null {
+  const item = asRecord(value);
+  if (!item) return null;
+  const measurementId = typeof item.measurementId === "string" && item.measurementId.trim() ? item.measurementId.trim() : "";
+  const beforeValue = normalizeCorrectionValue(item.beforeValue);
+  const afterValue = normalizeCorrectionValue(item.afterValue);
+  if (!measurementId || !beforeValue || !afterValue) {
+    if (import.meta.env.DEV) console.warn("[contract] Correccion persistida ignorada por shape incompleto.", { index, measurementId });
+    return null;
+  }
+  return {
+    id: typeof item.id === "string" ? item.id : undefined,
+    studyRunId: typeof item.studyRunId === "string" ? item.studyRunId : undefined,
+    measurementId,
+    label: typeof item.label === "string" ? item.label : undefined,
+    beforeValue,
+    afterValue,
+    comment: typeof item.comment === "string" || item.comment === null ? item.comment : undefined,
+    createdAt: typeof item.createdAt === "string" ? item.createdAt : undefined,
+  };
+}
+
+function correctionOrder(correction: PersistedReviewCorrection, index: number) {
+  const time = correction.createdAt ? Date.parse(correction.createdAt) : Number.NaN;
+  return Number.isFinite(time) ? time : index;
+}
+
+function latestCorrectionsByMeasurement(corrections: PersistedReviewCorrection[]) {
+  const latest = new Map<string, { correction: PersistedReviewCorrection; order: number }>();
+  corrections.forEach((correction, index) => {
+    const order = correctionOrder(correction, index);
+    const current = latest.get(correction.measurementId);
+    if (!current || order >= current.order) latest.set(correction.measurementId, { correction, order });
+  });
+  return latest;
+}
+
+export function applyCorrectionsToMeasurements(
+  measurementsByPlane: Partial<Record<Plane, Measurement[]>>,
+  corrections: PersistedReviewCorrection[] = [],
+): Partial<Record<Plane, Measurement[]>> {
+  if (!corrections.length) return measurementsByPlane;
+  const latest = latestCorrectionsByMeasurement(corrections);
+  const matched = new Set<string>();
+  const result: Partial<Record<Plane, Measurement[]>> = {};
+  for (const plane of ["sagittal", "axial"] as const) {
+    const rows = measurementsByPlane[plane];
+    if (!rows) continue;
+    result[plane] = rows.map((measurement) => {
+      const entry = latest.get(measurement.id);
+      if (!entry) return measurement;
+      matched.add(measurement.id);
+      const reviewerValue = entry.correction.afterValue.value;
+      return {
+        ...measurement,
+        value: reviewerValue ?? measurement.value,
+        aiValue: measurement.aiValue ?? entry.correction.beforeValue.value ?? measurement.value,
+        reviewerValue,
+        unit: measurement.unit || entry.correction.afterValue.unit || entry.correction.beforeValue.unit || "",
+        plane: measurement.plane ?? entry.correction.afterValue.plane ?? entry.correction.beforeValue.plane ?? plane,
+        source: "Reviewer",
+        status: "editado",
+      };
+    });
+  }
+  if (import.meta.env.DEV) {
+    corrections
+      .filter((correction) => !matched.has(correction.measurementId))
+      .forEach((correction) => console.warn("[contract] Correccion persistida sin medicion base; no se fabrica medicion.", { measurementId: correction.measurementId }));
+  }
+  return result;
+}
+
 function normalizeMeasurementsByPlane(value: unknown): Partial<Record<Plane, Measurement[]>> {
   const record = asRecord(value);
   if (!record) return {};
@@ -142,6 +227,14 @@ function normalizeArtifactsByPlane(value: unknown): Partial<Record<Plane, Persis
   return result;
 }
 
+function normalizePersistedCorrections(value: unknown): PersistedReviewCorrection[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    const correction = normalizePersistedCorrection(item, index);
+    return correction ? [correction] : [];
+  });
+}
+
 function normalizeRun(value: unknown, study: StudyRow): StudyRun {
   const rawRun = asRecord(value);
   if (!rawRun) throw new ContractError("Corrida de estudio invalida.", "/api/studies/{caseId}/runs");
@@ -151,6 +244,8 @@ function normalizeRun(value: unknown, study: StudyRow): StudyRun {
   const modelKey = optionalString(run, "modelKey") ?? optionalString(run, "sagittalModelKey") ?? optionalString(run, "axialModelKey");
   const measurementsByPlane = normalizeMeasurementsByPlane(rawRun.measurementsByPlane ?? run.measurementsByPlane);
   const artifactsByPlane = normalizeArtifactsByPlane(rawRun.artifactsByPlane ?? run.artifactsByPlane);
+  const corrections = normalizePersistedCorrections(rawRun.corrections ?? run.corrections);
+  const correctedMeasurementsByPlane = applyCorrectionsToMeasurements(measurementsByPlane, corrections);
   return {
     runId: requireString(run, "runId", "/api/studies/{caseId}/runs"),
     databaseId: optionalString(run, "databaseId") ?? undefined,
@@ -174,9 +269,9 @@ function normalizeRun(value: unknown, study: StudyRow): StudyRun {
     axialArtifactHash: optionalString(run, "axialArtifactHash"),
     modelKey,
     modelStatus: typeof run.status === "string" ? run.status : study.modelStatus,
-    measurementsByPlane,
+    measurementsByPlane: correctedMeasurementsByPlane,
     artifactsByPlane,
-    corrections: Array.isArray(rawRun.corrections) ? rawRun.corrections : [],
+    corrections,
     metricsSnapshot: asRecord(rawRun.metricsSnapshot),
     artifactCount: typeof run.artifactCount === "number" ? run.artifactCount : Object.values(artifactsByPlane).reduce((sum, values) => sum + (values?.length ?? 0), 0),
     measurementCount: typeof run.measurementCount === "number" ? run.measurementCount : Object.values(measurementsByPlane).reduce((sum, values) => sum + (values?.length ?? 0), 0),

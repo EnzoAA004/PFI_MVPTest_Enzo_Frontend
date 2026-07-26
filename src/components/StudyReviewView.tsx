@@ -157,7 +157,11 @@ function severityWeight(severity: DeltaSeverity) {
 function formatDelta(delta: number | null, unit: string) {
   if (delta === null) return "—";
   const sign = delta > 0 ? "+" : "";
-  return `${sign}${delta.toFixed(1)} ${unit}`;
+  return `${sign}${delta.toFixed(2)} ${displayUnit(unit)}`;
+}
+
+function displayUnit(unit: string) {
+  return unit === "mm2" ? "mm²" : unit;
 }
 
 function confidenceToneClass(confidence?: number) {
@@ -232,8 +236,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [tab, setTab] = useState<"Sagittal" | "Axial" | "3D Reconstruction">("Sagittal");
   const [selectedSeriesId, setSelectedSeriesId] = useState("");
   const [maskVisibility, setMaskVisibility] = useState<Record<string, boolean>>({});
-  const [overlayEnabled, setOverlayEnabled] = useState(true);
-  const [overlayOpacidad, setOverlayOpacidad] = useState(74);
   const [editMode, setEditMode] = useState(false);
   const [selectedMask, setSelectedMask] = useState("mask-disc");
   const [selectedLandmark, setSelectedLandmark] = useState("L4");
@@ -243,6 +245,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [landmarkAddMode, setLandmarkAddMode] = useState(false);
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
+  const [saveMessage, setSaveMessage] = useState("");
   const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
   const [selectedDetail, setSelectedDetail] = useState<StudyDetailResponse | null>(() => loadSelectedStudyDetail());
 
@@ -251,6 +254,15 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     window.addEventListener(SELECTED_STUDY_EVENT, update);
     return () => window.removeEventListener(SELECTED_STUDY_EVENT, update);
   }, []);
+
+  useEffect(() => {
+    setReviewStatus(run.review?.status ?? "pendiente");
+    setNotes(run.review?.notes ?? run.review?.observations ?? "");
+    setReviewerValues({});
+    setLandmarkDrafts({});
+    setLandmarkAddMode(false);
+    setSaveMessage("");
+  }, [run.runId]);
 
   const demoMode = isDemoRun(run);
   const displayRun: AiRunResponse = {
@@ -321,7 +333,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     const reviewerNumber = asNumber(reviewerValue);
     const delta = aiNumber !== null && reviewerNumber !== null ? reviewerNumber - aiNumber : null;
     const severity = deltaSeverity(delta, item.outlier);
-    const status = draftValue !== undefined && draftValue !== "" ? "draft" : persistedValue ? "guardado" : item.status ?? "pendiente";
+    const hasPersistedReviewerValue = persistedValue !== undefined && persistedValue !== null && persistedValue !== "";
+    const status = draftValue !== undefined && draftValue !== "" ? "draft" : hasPersistedReviewerValue ? "guardado" : item.status ?? "pendiente";
     return { ...item, reviewerValue, draftValue, persistedValue, delta, severity, status };
   }).sort((a, b) => {
     const outlierDiff = Number(Boolean(b.outlier)) - Number(Boolean(a.outlier));
@@ -337,6 +350,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const hasReviewerDrafts = hasMeasurementDrafts || landmarkDraftCount > 0;
   const relevantChanges = resultRows.filter((row) => row.severity === "medium" || row.severity === "high").length;
   const outlierCount = resultRows.filter((row) => row.outlier).length;
+  const confirmDisabled = saving || reviewStatus === "pendiente";
 
   function toggleMask(maskId: string) {
     setMaskVisibility((current) => ({ ...current, [maskId]: !(current[maskId] ?? true) }));
@@ -352,6 +366,11 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   }
 
   function resetReviewerValue(measurementId: string) {
+    const row = resultRows.find((item) => item.id === measurementId);
+    if (row?.persistedValue !== "" && row?.aiValue !== undefined && row.aiValue !== null) {
+      setReviewerValues((current) => ({ ...current, [measurementId]: String(row.aiValue) }));
+      return;
+    }
     setReviewerValues((current) => {
       const next = { ...current };
       delete next[measurementId];
@@ -388,6 +407,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       outlier: Boolean(item.outlier ?? existing?.outlier),
       placeholder: existing?.placeholder,
       linkedLandmarks: existing?.linkedLandmarks,
+      forceCorrection: reviewerValue !== undefined && reviewerValue !== "",
     };
   }
 
@@ -395,7 +415,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     const existingIds = new Set(sourceMeasurements.map((item) => item.id));
     const updated = sourceMeasurements.map((item) => {
       const reviewerValue = reviewerValues[item.id];
-      return reviewerValue !== undefined && reviewerValue !== "" ? { ...item, value: reviewerValue, reviewerValue, source: "Reviewer" as const, status: "editado" as const } : item;
+      return reviewerValue !== undefined && reviewerValue !== "" ? { ...item, value: reviewerValue, reviewerValue, source: "Reviewer" as const, status: "editado" as const, forceCorrection: true } : item;
     });
     const appended = studyMeasurements
       .filter((item) => reviewerValues[item.id] !== undefined && reviewerValues[item.id] !== "" && !existingIds.has(item.id))
@@ -406,7 +426,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   function commitReviewerMeasurements() {
     if (!hasMeasurementDrafts) return sourceMeasurements;
     const nextMeasurements = currentReviewerMeasurements();
-    onMeasurementsChange(nextMeasurements, `${reviewerDraftCount} medición/es guardadas por revisor desde resultados IA`);
+    onMeasurementsChange(nextMeasurements, `${reviewerDraftCount} corrección/es confirmadas por backend`);
     setReviewerValues({});
     return nextMeasurements;
   }
@@ -506,10 +526,11 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   }
 
   async function save(status: ReviewStatus) {
-    const canonicalDraftStatus = status === "pendiente" ? "pendiente" : status;
-    setReviewStatus(canonicalDraftStatus);
-    const nextMeasurements = hasMeasurementDrafts ? commitReviewerMeasurements() : currentReviewerMeasurements();
-    await onSaveReview(canonicalDraftStatus, notes, nextMeasurements);
+    const nextMeasurements = currentReviewerMeasurements();
+    const review = await onSaveReview(status, notes, nextMeasurements);
+    if (!review) return;
+    if (hasMeasurementDrafts) commitReviewerMeasurements();
+    setSaveMessage(status === "pendiente" ? "Borrador guardado" : status === "observado" ? "Estado observado confirmado" : status === "aceptado" ? "Estudio aceptado" : "Estudio descartado");
   }
 
   function panelVisible(panelId: string) {
@@ -637,9 +658,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <button className={landmarkAddMode ? "active" : ""} disabled={!editMode || !activeCoordinateSpace} onClick={() => setLandmarkAddMode((value) => !value)} title={!activeCoordinateSpace ? "Espacio de coordenadas no informado por backend" : editMode ? "Clic sobre la imagen real para agregar landmark del revisor" : "Activar Editar landmark primero"} type="button">Agregar landmark</button>
             <button disabled title={futureFeatureTitle} type="button">Recalcular</button>
             <button disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores del revisor"} type="button">Deshacer</button>
-            <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Aprobar</button>
-            <button className={overlayEnabled && overlayAvailable ? "active" : ""} disabled={!overlayAvailable} onClick={() => setOverlayEnabled((value) => !value)} title={overlayAvailable ? "Activar o desactivar overlay.png real" : "overlay.png no disponible desde backend"} type="button">Superposición IA</button>
-            <label className="opacity-control">Opacidad <input min="25" max="100" value={overlayOpacidad} onChange={(event) => setOverlayOpacidad(Number(event.target.value))} type="range" /></label>
           </div>
           <div className="edit-state compact-copy">Plano: <strong>{currentSeries?.name ?? "sin plano persistido"}</strong> · Run de plano: <strong>{activeWorkspace.planeRunId ?? "no informado"}</strong> · Storage: <strong>{activeWorkspace.storageStatus}</strong> · Superposición: <strong>{overlayAvailable ? "overlay.png real" : activeWorkspace.overlayUrl ? "verificando overlay.png" : "no disponible"}</strong> · Borradores del revisor: <strong>{reviewerDraftCount} medición/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
           {tab === "3D Reconstruction" ? (
@@ -654,8 +672,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 landmarks={displayLandmarks}
                 maskVisibility={maskVisibility}
                 selectedMask={selectedMask}
-                overlayEnabled={overlayEnabled}
-                overlayOpacity={overlayOpacidad / 100}
+                overlayEnabled
                 editMode={editMode}
                 selectedLandmark={selectedLandmark}
                 onSelectMask={setSelectedMask}
@@ -686,57 +703,25 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         </section>
 
         <aside className="right-column">
-          <section className="panel-card results-panel measurements-review-panel">
-            <div className="section-title">
-              <h2>Mediciones</h2>
-              <button className="text-link-button" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Restaurar valores del revisor al valor IA original" : "No hay mediciones del revisor editadas"} type="button">Restaurar valor IA</button>
-            </div>
-            <p className="muted compact-copy">IA inicial y revisor se mantienen separados. La confianza y el valor atípico pertenecen a IA; no se inventan para la corrección del revisor.</p>
-            <table className="measurement-review-table" aria-label="Mediciones">
-              <thead>
-                <tr className="measurement-review-head">
-                  <th scope="col">Medición</th>
-                  <th scope="col">IA inicial</th>
-                  <th scope="col">Revisor</th>
-                  <th scope="col">Delta</th>
-                  <th scope="col">Confianza IA</th>
-                  <th scope="col">Atípico</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resultRows.map((item) => (
-                  <tr className={`measurement-review-row ${item.draftValue !== undefined && item.draftValue !== "" ? "is-draft" : ""}`} key={item.id}>
-                    <td><strong>{item.label}</strong><small>{item.level}</small></td>
-                    <td className="tabular-value"><em>IA</em>{item.aiValue} {item.unit}</td>
-                    <td className="reviewer-input-cell">
-                    <input aria-label={`Valor del revisor para ${item.label}`} className="reviewer-value-input" inputMode="decimal" onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder={String(item.aiValue ?? "")} value={String(item.reviewerValue ?? "")} />
-                    <button className="measurement-reset-button" disabled={item.draftValue === undefined && !item.persistedValue} onClick={() => resetReviewerValue(item.id)} title="Restaurar valor IA para esta medición" type="button">Restaurar</button>
-                    {item.draftValue !== undefined && item.draftValue !== "" && <span className="draft-chip">Borrador</span>}
-                    </td>
-                    <td><span className={`delta-chip delta-${item.severity}`}>{formatDelta(item.delta, item.unit)}</span></td>
-                    <td><span className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `${Math.round(item.confidence * 100)}%` : "N/D"}</span></td>
-                    <td>{item.outlier ? <StatusBadge tone="amber">Atípico IA</StatusBadge> : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medición/es y {landmarkDraftCount} landmark/s en borrador. Mediciones persisten por el flujo existente; landmarks quedan en borrador local no persistido, pendiente BE-008/FE-010 + AI-011.</p>}
-          </section>
-
           <section className="panel-card notes-card compact-card decision-panel">
             <PanelTitle panelId="decision-visible" title="Notas" />
             {panelVisible("decision-visible") ? (
               <>
                 <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Agregar notas sobre mediciones o hallazgos..." />
                 <div className="review-actions compact-actions decision-actions">
-                  <select aria-label="Estado de revisión" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
-                    <option value="pendiente">pendiente</option>
-                    <option value="aceptado">aceptado</option>
-                    <option value="observado">observado</option>
-                    <option value="descartado">descartado</option>
-                  </select>
+                  <label className="decision-status-field">
+                    <span>Estado de revisión</span>
+                    <select aria-label="Estado de revisión" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
+                      <option value="pendiente">Pendiente</option>
+                      <option value="observado">Observado</option>
+                      <option value="aceptado">Aceptado</option>
+                      <option value="descartado">Descartado</option>
+                    </select>
+                  </label>
                   <button className="ghost-button" disabled={saving} onClick={() => void save("pendiente")} type="button">Guardar borrador</button>
-                  <button className="primary-button" disabled={saving} onClick={() => void save("aceptado")} type="button">Aprobar y completar</button>
+                  <button className="primary-button" disabled={confirmDisabled} onClick={() => void save(reviewStatus)} title={reviewStatus === "pendiente" ? "Usá Guardar borrador para conservar una revisión pendiente." : undefined} type="button">Confirmar estado</button>
+                  {reviewStatus === "pendiente" && <p className="viewer-limit-note decision-help">Usá Guardar borrador para conservar una revisión pendiente.</p>}
+                  {saveMessage && <p className="review-save-result" role="status">{saveMessage}</p>}
                 </div>
               </>
             ) : hiddenPlaceholder}
@@ -749,6 +734,46 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             {panelVisible("audit") ? <AuditTrail events={auditTrail.slice(0, 4)} /> : hiddenPlaceholder}
           </section>
         </aside>
+
+        <section className="panel-card results-panel measurements-review-panel measurements-wide-panel">
+          <div className="section-title">
+            <h2>Mediciones</h2>
+            <button className="text-link-button" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Descartar borradores locales y volver a los valores persistidos" : "No hay mediciones del revisor editadas"} type="button">Descartar borradores</button>
+          </div>
+          <p className="muted compact-copy">IA original y revisor se mantienen separados. La confianza y el valor atípico pertenecen a IA; no se inventan para la corrección del revisor.</p>
+          <table className="measurement-review-table" aria-label="Mediciones">
+            <thead>
+              <tr className="measurement-review-head">
+                <th scope="col">Métrica</th>
+                <th scope="col">Valor IA original</th>
+                <th scope="col">Valor del revisor</th>
+                <th scope="col">Diferencia</th>
+                <th scope="col">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {resultRows.map((item) => (
+                <tr className={`measurement-review-row ${item.draftValue !== undefined && item.draftValue !== "" ? "is-draft" : ""}`} key={item.id}>
+                  <td className="measurement-metric-cell" data-label="Métrica">
+                    <strong>{item.label}</strong>
+                    <small>{item.level}</small>
+                    <span className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `Confianza IA ${Math.round(item.confidence * 100)}%` : "Confianza IA N/D"}</span>
+                    {item.outlier && <StatusBadge tone="amber">Atípico IA</StatusBadge>}
+                  </td>
+                  <td className="tabular-value" data-label="Valor IA original"><em>IA</em>{item.aiValue} {displayUnit(item.unit)}</td>
+                  <td className="reviewer-input-cell" data-label="Valor del revisor">
+                    <input aria-label={`Valor del revisor para ${item.label}. Valor IA original ${item.aiValue} ${displayUnit(item.unit)}`} className="reviewer-value-input" inputMode="decimal" onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder={String(item.aiValue ?? "")} value={String(item.reviewerValue ?? "")} />
+                    <button className="measurement-reset-button" disabled={item.draftValue === undefined && (item.persistedValue === undefined || item.persistedValue === null || item.persistedValue === "")} onClick={() => resetReviewerValue(item.id)} title={item.persistedValue !== undefined && item.persistedValue !== null && item.persistedValue !== "" ? "Restaurar en borrador: enviará el valor IA como corrección explícita" : "Restaurar valor IA para esta medición"} type="button">Restaurar</button>
+                    {item.draftValue !== undefined && item.draftValue !== "" && <span className="draft-chip">Borrador</span>}
+                  </td>
+                  <td data-label="Diferencia"><span className={`delta-chip delta-${item.severity}`}>{formatDelta(item.delta, item.unit)}</span></td>
+                  <td data-label="Estado"><StatusBadge tone={item.status === "guardado" ? "green" : item.status === "draft" ? "blue" : "slate"}>{item.status === "draft" ? "Borrador" : item.status === "guardado" ? "Guardado" : "Sin cambios"}</StatusBadge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medición/es y {landmarkDraftCount} landmark/s en borrador. Mediciones se envían en la revisión canónica; landmarks quedan en borrador local no persistido, pendiente BE-008/FE-010 + AI-011.</p>}
+        </section>
       </section>
       <PrivacyBanner />
     </div>

@@ -41,6 +41,17 @@ export type ReviewMeasurementCorrection = {
   comment?: string;
 };
 
+export type PersistedReviewCorrection = {
+  id?: string;
+  studyRunId?: string;
+  measurementId: string;
+  label?: string;
+  beforeValue: ReviewCorrectionValue;
+  afterValue: ReviewCorrectionValue;
+  comment?: string | null;
+  createdAt?: string;
+};
+
 export type ReviewStatusResponse = {
   runId?: string;
   status?: ReviewStatus;
@@ -89,6 +100,7 @@ export type Measurement = {
   placeholder?: boolean;
   linkedLandmarks?: string[];
   dataOrigin?: DataOrigin;
+  forceCorrection?: boolean;
 };
 
 export type PersistedArtifact = {
@@ -268,7 +280,7 @@ export type AiRunResponse = {
   normalizedMeasurements?: Measurement[];
   measurementsByPlane?: Partial<Record<Plane, Measurement[]>>;
   artifactsByPlane?: Partial<Record<Plane, PersistedArtifact[]>>;
-  corrections?: unknown[];
+  corrections?: PersistedReviewCorrection[];
   measurementsStatus?: string;
   measurementsDescription?: string;
   overlayPath?: string | null;
@@ -339,7 +351,7 @@ export type StudyRun = {
   modelStatus: string;
   measurementsByPlane?: Partial<Record<Plane, Measurement[]>>;
   artifactsByPlane?: Partial<Record<Plane, PersistedArtifact[]>>;
-  corrections?: unknown[];
+  corrections?: PersistedReviewCorrection[];
   metricsSnapshot?: Record<string, unknown>;
   artifactCount?: number;
   measurementCount?: number;

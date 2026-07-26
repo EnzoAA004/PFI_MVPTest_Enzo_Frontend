@@ -133,8 +133,10 @@ button  {
   justify-content: flex-end;
 }
 .primary-button, .ghost-button, .warning-button, .toolbar button, .workspace-tabs button, .viewer-controls button, .segmented-control button  {
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
+  color: var(--text);
   min-height: 38px;
   padding: 8px 12px;
 }
@@ -149,6 +151,35 @@ button  {
   color: var(--primary);
   font-weight: 750;
 }
+.primary-button:hover:not(:disabled),
+.toolbar button.active,
+.workspace-tabs button.active,
+.viewer-controls button.active,
+.segmented-control button.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--surface);
+}
+.ghost-button:hover:not(:disabled),
+.toolbar button:hover:not(:disabled),
+.workspace-tabs button:hover:not(:disabled),
+.viewer-controls button:hover:not(:disabled),
+.segmented-control button:hover:not(:disabled) {
+  background: var(--info-bg);
+  border-color: var(--border-info);
+  color: var(--text-primary-strong);
+}
+.primary-button:focus-visible,
+.ghost-button:focus-visible,
+.warning-button:focus-visible,
+.toolbar button:focus-visible,
+.workspace-tabs button:focus-visible,
+.viewer-controls button:focus-visible,
+.segmented-control button:focus-visible,
+.reviewer-value-input:focus-visible {
+  box-shadow: var(--focus-ring);
+  outline: 2px solid transparent;
+}
 .warning-button  {
   background: var(--surface-warm);
   border-color: var(--border-warning);
@@ -156,8 +187,11 @@ button  {
   font-weight: 800;
 }
 button:disabled  {
+  background: var(--surface-subtle);
+  border-color: var(--border);
+  color: var(--text-muted);
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 1;
 }
 .view-stack  {
   display: grid;
@@ -3026,6 +3060,9 @@ body {
 .review-toolbar .primary-button {
   min-height: 34px;
 }
+.measurements-wide-panel {
+  grid-column: 2 / 4;
+}
 .edit-state {
   background: var(--surface-subtle);
   border: 1px solid var(--border);
@@ -3037,7 +3074,7 @@ body {
   margin-bottom: 8px;
 }
 .measurement-review-table {
-  --measurement-review-grid: minmax(104px, 1fr) 58px minmax(104px, .85fr) 58px 64px 70px;
+  --measurement-review-grid: minmax(220px, 1.35fr) minmax(136px, .75fr) minmax(220px, 1fr) minmax(120px, .65fr) minmax(120px, .65fr);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   display: grid;
@@ -3080,8 +3117,17 @@ body {
   font-size: var(--fs-small);
   margin-top: var(--sp-1);
 }
+.measurement-metric-cell {
+  display: grid;
+  gap: var(--sp-1);
+}
+.measurement-metric-cell .confidence-pill,
+.measurement-metric-cell .status-badge {
+  justify-self: start;
+}
 .tabular-value {
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 .tabular-value em {
   color: var(--text-ai-strong);
@@ -3094,21 +3140,31 @@ body {
 .reviewer-input-cell {
   align-items: center;
   display: grid;
-  gap: var(--sp-1);
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  grid-template-columns: minmax(110px, 1fr) auto;
 }
 .reviewer-value-input {
+  background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-input);
   color: var(--text);
   font-variant-numeric: tabular-nums;
-  min-height: 32px;
-  min-width: 0;
-  padding: var(--sp-2) var(--sp-2);
+  min-height: 40px;
+  min-width: 110px;
+  padding: var(--sp-2) var(--sp-3);
+  text-align: right;
   width: 100%;
 }
+.reviewer-value-input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+.reviewer-value-input::selection {
+  background: var(--info-bg);
+  color: var(--text-primary-strong);
+}
 .measurement-reset-button {
-  min-height: 28px;
+  min-height: 36px;
   padding: var(--sp-1) var(--sp-2);
 }
 .draft-chip {
@@ -3126,19 +3182,38 @@ body {
   justify-self: start;
 }
 .measurement-review-row .delta-chip,
-.measurement-review-row .confidence-pill,
 .measurement-review-row > td:last-child {
   justify-self: stretch;
   text-align: center;
 }
-.measurement-review-row .delta-chip,
-.measurement-review-row .confidence-pill {
+.measurement-review-row .delta-chip {
   width: 100%;
 }
 .measurement-review-row > td:last-child {
   align-items: center;
   display: flex;
   justify-content: center;
+}
+.decision-status-field {
+  display: grid;
+  gap: var(--sp-1);
+}
+.decision-status-field span {
+  color: var(--text-muted);
+  font-size: var(--fs-small);
+  font-weight: 900;
+}
+.decision-actions {
+  align-items: end;
+}
+.decision-help,
+.review-save-result {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+.review-save-result {
+  color: var(--text-success-strong);
+  font-weight: 850;
 }
 .confidence-pill {
   align-items: center;
@@ -3681,8 +3756,11 @@ body,
   .review-workspace .review-grid, .review-workspace .right-column {
     grid-template-columns: 1fr;
   }
+  .measurements-wide-panel {
+    grid-column: 1;
+  }
   .measurement-review-head, .measurement-review-row {
-    grid-template-columns: 1fr .7fr 1fr .55fr .65fr .55fr;
+    grid-template-columns: minmax(180px, 1fr) minmax(120px, .75fr) minmax(190px, 1fr) minmax(110px, .65fr) minmax(110px, .65fr);
   }
 }
 @media (max-width: 760px) {
@@ -3696,7 +3774,43 @@ body,
     display: none;
   }
   .measurement-review-row {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
     grid-template-columns: 1fr;
+    margin: var(--sp-2);
+    padding: var(--sp-3);
+  }
+  .measurement-review-table {
+    background: var(--surface-subtle);
+    gap: var(--sp-2);
+    padding: var(--sp-2);
+  }
+  .measurement-review-table tbody {
+    gap: var(--sp-2);
+  }
+  .measurement-review-row > td {
+    align-items: stretch;
+    display: grid;
+    gap: var(--sp-1);
+  }
+  .measurement-review-row > td::before {
+    color: var(--text-muted);
+    content: attr(data-label);
+    font-size: var(--fs-small);
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .measurement-metric-cell::before {
+    content: "Métrica";
+  }
+  .tabular-value {
+    text-align: left;
+  }
+  .reviewer-input-cell {
+    grid-template-columns: 1fr;
+  }
+  .measurement-reset-button {
+    width: 100%;
   }
   .decision-actions {
     justify-content: stretch;

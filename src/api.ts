@@ -277,7 +277,8 @@ export function buildReviewCorrections(measurements: Measurement[] = [], comment
   return measurements.flatMap((measurement) => {
     const aiValue = measurement.aiValue ?? measurement.value;
     const reviewerValue = measurement.reviewerValue;
-    if (reviewerValue === undefined || reviewerValue === null || reviewerValue === "" || !valuesDiffer(aiValue, reviewerValue)) return [];
+    if (reviewerValue === undefined || reviewerValue === null || reviewerValue === "") return [];
+    if (!measurement.forceCorrection && !valuesDiffer(aiValue, reviewerValue)) return [];
     return [{
       measurementId: measurement.id,
       label: measurement.label,

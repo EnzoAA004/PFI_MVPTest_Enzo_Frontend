@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
+import { buildReviewCorrections, getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
 import { logoutDoctor, updateDoctorSettings } from "./authClient";
 import { hydrateAuthSession, loadAuthSession } from "./authStorage";
 import { AnalysisTimelineView } from "./components/AnalysisTimelineView";
@@ -365,14 +365,15 @@ function App() {
       return undefined;
     }
     try {
+      const confirmedCorrections = buildReviewCorrections(reviewMeasurements, trimmedNotes).length;
       const review = await updateReview(runId, { status, notes: trimmedNotes, observations: trimmedNotes, reviewer: session?.user.fullName ?? "Revisor", measurements: reviewMeasurements });
       setSelectedRun((current) => current ? { ...current, review } : current);
       setBackendStudies((current) => current.map((row) => (row.latestRunId ?? row.runId) === runId ? { ...row, reviewStatus: review.status ?? status } : row));
       if (isDemoDataMode) saveProfessionalReview(runId, review);
       await refreshStudiesFromPostgres();
       await refreshSelectedStudyFromPostgres();
-      recordAudit(status === "aceptado" ? "estado aprobado" : status === "observado" ? "estado observado" : "revision guardada", `Revision ${status} guardada para ${runId}.`);
-      setInfo(isDemoMode() ? "Revision guardada en modo demo local porque el backend no confirmo la operacion." : "Revision guardada correctamente en el backend.");
+      recordAudit(status === "aceptado" ? "estado aprobado" : status === "observado" ? "estado observado" : "revision guardada", `Revision ${status} guardada para ${runId}. Correcciones confirmadas: ${confirmedCorrections}.`);
+      setInfo(isDemoMode() ? "Revision guardada en modo demo local porque el backend no confirmo la operacion." : `Revision guardada correctamente en el backend. Correcciones confirmadas: ${confirmedCorrections}.`);
       return review;
     } catch (reviewError) {
       if (isBackendValidationError(reviewError)) {
