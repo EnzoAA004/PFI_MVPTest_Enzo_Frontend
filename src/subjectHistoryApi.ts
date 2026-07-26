@@ -1,6 +1,7 @@
-import { API_BASE_URL } from "./api";
+import { API_BASE_URL, ApiError, ContractError } from "./api";
 import { authHeaders } from "./authClient";
-import type { Measurement, PatientHistoryResponse, PatientStudy, PersistedReviewCorrection, Plane, Priority, ReviewStatus } from "./appTypes";
+import { validateVisibleDataOrigin } from "./dataMode";
+import type { Measurement, PatientHistoryGovernance, PatientHistoryResponse, PatientHistorySummary, PatientStudy, PersistedReviewCorrection, Plane, Priority, ReviewStatus } from "./appTypes";
 import { applyCorrectionsToMeasurements, normalizePersistedCorrection } from "./studyApi";
 
 function mapPriority(value?: string): Priority {
@@ -30,26 +31,39 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
   return typeof value === "string" ? value : null;
 }
 
+function isValue(value: unknown): value is number | string {
+  return typeof value === "number" || typeof value === "string";
+}
+
 function normalizePlanes(value: unknown): string {
   if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string").join(", ");
   return typeof value === "string" ? value : "";
 }
 
-function normalizeMeasurement(value: unknown, index: number, plane: Plane): Measurement | null {
+function contractError(payload: Record<string, unknown> | undefined, path: string) {
+  const code = typeof payload?.code === "string" ? payload.code : typeof payload?.errorCode === "string" ? payload.errorCode : undefined;
+  const traceId = typeof payload?.traceId === "string" ? payload.traceId : undefined;
+  return new ContractError("Respuesta incompatible con el historial de sujetos.", path, { code, traceId, body: payload });
+}
+
+function normalizeMeasurement(value: unknown, _index: number, plane: Plane): Measurement | null {
   const item = asRecord(value);
   if (!item) return null;
-  const id = optionalString(item, "id") ?? optionalString(item, "measurementId") ?? `${plane}-measurement-${index + 1}`;
-  const label = optionalString(item, "label") ?? optionalString(item, "name") ?? "Medición técnica";
+  const id = optionalString(item, "id") ?? optionalString(item, "measurementId");
+  const label = optionalString(item, "label") ?? optionalString(item, "name");
+  const aiValue = item.aiValue ?? item.value;
   const rawValue = item.value;
-  const aiValue = item.aiValue ?? rawValue;
   const reviewerValue = item.reviewerValue;
-  if (typeof rawValue !== "number" && typeof rawValue !== "string" && typeof aiValue !== "number" && typeof aiValue !== "string") return null;
+  if (!id || !label || !isValue(aiValue)) {
+    console.warn("[subject-history] Medición excluida: falta id, label o valor IA real.");
+    return null;
+  }
   return {
     id,
     label,
-    value: typeof reviewerValue === "number" || typeof reviewerValue === "string" ? reviewerValue : typeof rawValue === "number" || typeof rawValue === "string" ? rawValue : aiValue as number | string,
-    aiValue: typeof aiValue === "number" || typeof aiValue === "string" ? aiValue : undefined,
-    reviewerValue: typeof reviewerValue === "number" || typeof reviewerValue === "string" || reviewerValue === null ? reviewerValue : undefined,
+    value: isValue(reviewerValue) ? reviewerValue : isValue(rawValue) ? rawValue : aiValue,
+    aiValue,
+    reviewerValue: isValue(reviewerValue) || reviewerValue === null ? reviewerValue : undefined,
     unit: optionalString(item, "unit") ?? "",
     confidence: typeof item.confidence === "number" ? item.confidence : undefined,
     plane: mapPlane(item.plane) ?? plane,
@@ -83,10 +97,10 @@ function normalizeCorrections(value: unknown): PersistedReviewCorrection[] {
   });
 }
 
-function normalizeHistoryStudy(value: unknown, index: number): PatientStudy {
+function normalizeHistoryStudy(value: unknown, index: number, path: string): PatientStudy {
   const record = asRecord(value) ?? {};
   const caseId = optionalString(record, "caseId");
-  if (!caseId) throw new Error(`Historial inválido: falta caseId en estudio ${index + 1}`);
+  if (!caseId) throw contractError({ code: "MISSING_CASE_ID", path: `${path}/studies/${index}` }, path);
   const corrections = normalizeCorrections(record.corrections);
   const measurementsByPlane = applyCorrectionsToMeasurements(normalizeMeasurementsByPlane(record.measurementsByPlane), corrections);
   return {
@@ -110,39 +124,93 @@ function normalizeHistoryStudy(value: unknown, index: number): PatientStudy {
   };
 }
 
-export async function fetchSubjectHistory(subjectRef: string): Promise<PatientHistoryResponse> {
-  const response = await fetch(`${API_BASE_URL}/api/subjects/${encodeURIComponent(subjectRef)}/history`, {
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-  });
-  if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
-  const payload = await response.json() as Record<string, unknown>;
-  const studies = Array.isArray(payload.studies) ? payload.studies.map(normalizeHistoryStudy) : [];
-  const summary = payload.summary && typeof payload.summary === "object" ? payload.summary as Record<string, unknown> : {};
-  const governance = payload.governance && typeof payload.governance === "object" ? payload.governance as Record<string, unknown> : {};
+function normalizeSummary(value: unknown, studies: PatientStudy[]): PatientHistorySummary {
+  const summary = asRecord(value);
+  if (!summary) {
+    return { totalStudies: studies.length };
+  }
   return {
-    status: typeof payload.status === "string" ? payload.status : "ok",
-    source: typeof payload.source === "string" ? payload.source : "frontend-subject-history",
-    subjectRef: typeof payload.subjectRef === "string" ? payload.subjectRef : subjectRef,
-    deidentified: Boolean(payload.deidentified ?? true),
+    totalStudies: typeof summary.totalStudies === "number" ? summary.totalStudies : studies.length,
+    mostRecent: typeof summary.mostRecent === "string" ? summary.mostRecent : undefined,
+    firstStudy: typeof summary.firstStudy === "string" ? summary.firstStudy : undefined,
+    pending: typeof summary.pending === "number" ? summary.pending : undefined,
+    completed: typeof summary.completed === "number" ? summary.completed : undefined,
+    observed: typeof summary.observed === "number" ? summary.observed : undefined,
+    withStudyDate: typeof summary.withStudyDate === "number" ? summary.withStudyDate : undefined,
+  };
+}
+
+function normalizeGovernance(value: unknown): PatientHistoryGovernance | undefined {
+  const governance = asRecord(value);
+  if (!governance) return undefined;
+  return {
+    dataScope: optionalString(governance, "dataScope") ?? undefined,
+    rawImagesExport: optionalString(governance, "rawImagesExport") ?? undefined,
+    derivedMetricsExport: optionalString(governance, "derivedMetricsExport") ?? undefined,
+    humanReviewRequired: typeof governance.humanReviewRequired === "boolean" ? governance.humanReviewRequired : undefined,
+    notClinicalDiagnosis: typeof governance.notClinicalDiagnosis === "boolean" ? governance.notClinicalDiagnosis : undefined,
+  };
+}
+
+export function normalizeSubjectHistoryResponse(payload: unknown, requestedSubjectRef: string): PatientHistoryResponse {
+  const record = asRecord(payload);
+  const path = `/api/subjects/${requestedSubjectRef}/history`;
+  if (!record) throw contractError(undefined, path);
+  const responseSubjectRef = optionalString(record, "subjectRef")?.trim();
+  if (
+    record.status !== "ok"
+    || record.source !== "postgres-domain"
+    || record.dataOrigin !== "database"
+    || record.deidentified !== true
+    || !responseSubjectRef
+    || responseSubjectRef.toLowerCase() !== requestedSubjectRef.trim().toLowerCase()
+    || !Array.isArray(record.studies)
+    || !asRecord(record.summary)
+  ) {
+    throw contractError(record, path);
+  }
+  const studies = record.studies.map((study, index) => normalizeHistoryStudy(study, index, path));
+  validateVisibleDataOrigin(`historial ${responseSubjectRef}`, "database");
+  return {
+    status: "ok",
+    source: "postgres-domain",
+    subjectRef: responseSubjectRef,
+    deidentified: true,
     studies,
-    summary: {
-      totalStudies: typeof summary.totalStudies === "number" ? summary.totalStudies : studies.length,
-      mostRecent: typeof summary.mostRecent === "string" ? summary.mostRecent : studies[0]?.studyDate || undefined,
-      firstStudy: typeof summary.firstStudy === "string" ? summary.firstStudy : studies[studies.length - 1]?.studyDate || undefined,
-      pending: typeof summary.pending === "number" ? summary.pending : studies.filter((study) => study.reviewStatus === "pendiente").length,
-      completed: typeof summary.completed === "number" ? summary.completed : studies.filter((study) => study.reviewStatus === "aceptado").length,
-      observed: typeof summary.observed === "number" ? summary.observed : studies.filter((study) => study.reviewStatus === "observado").length,
-      withStudyDate: typeof summary.withStudyDate === "number" ? summary.withStudyDate : studies.filter((study) => Boolean(study.studyDate)).length,
-    },
-    governance: {
-      dataScope: typeof governance.dataScope === "string" ? governance.dataScope : "academic-deidentified",
-      rawImagesExport: typeof governance.rawImagesExport === "string" ? governance.rawImagesExport : "not_permitted",
-      derivedMetricsExport: typeof governance.derivedMetricsExport === "string" ? governance.derivedMetricsExport : "permitted",
-      humanReviewRequired: Boolean(governance.humanReviewRequired ?? payload.humanReviewRequired ?? true),
-      notClinicalDiagnosis: Boolean(governance.notClinicalDiagnosis ?? payload.notClinicalDiagnosis ?? true),
-    },
-    humanReviewRequired: Boolean(payload.humanReviewRequired ?? true),
-    notClinicalDiagnosis: Boolean(payload.notClinicalDiagnosis ?? true),
+    summary: normalizeSummary(record.summary, studies),
+    governance: normalizeGovernance(record.governance),
+    humanReviewRequired: typeof record.humanReviewRequired === "boolean" ? record.humanReviewRequired : undefined,
+    notClinicalDiagnosis: typeof record.notClinicalDiagnosis === "boolean" ? record.notClinicalDiagnosis : undefined,
     dataOrigin: "database",
   };
+}
+
+async function readError(response: Response): Promise<Record<string, unknown> | undefined> {
+  try {
+    const payload = await response.clone().json();
+    return asRecord(payload);
+  } catch {
+    return undefined;
+  }
+}
+
+const historyErrorMessages: Record<string, string> = {
+  DATABASE_UNAVAILABLE: "No se pudo consultar el historial porque la base de datos no está disponible.",
+  INVALID_SUBJECT_REFERENCE: "La referencia de-identificada no es válida.",
+};
+
+export function historyApiError(path: string, response: Response, body?: Record<string, unknown>) {
+  const code = typeof body?.code === "string" ? body.code : typeof body?.errorCode === "string" ? body.errorCode : undefined;
+  const traceId = typeof body?.traceId === "string" ? body.traceId : response.headers.get("X-Trace-Id") ?? undefined;
+  const message = code ? historyErrorMessages[code] ?? `Backend respondió ${response.status}` : `Backend respondió ${response.status}`;
+  return new ApiError(message, { status: response.status, code, path, traceId, body });
+}
+
+export async function fetchSubjectHistory(subjectRef: string): Promise<PatientHistoryResponse> {
+  const path = `/api/subjects/${encodeURIComponent(subjectRef)}/history`;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+  });
+  if (!response.ok) throw historyApiError(path, response, await readError(response));
+  return normalizeSubjectHistoryResponse(await response.json(), subjectRef);
 }

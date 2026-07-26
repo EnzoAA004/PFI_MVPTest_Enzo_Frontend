@@ -275,7 +275,7 @@ function App() {
       }).catch((historyFetchError) => {
         if (!cancelled) {
           setStudyTraceabilityStudies([]);
-          setHistoryError(historyFetchError instanceof Error ? historyFetchError.message : "No se pudo consultar la trazabilidad del estudio.");
+          setHistoryError(apiErrorDetail(historyFetchError));
         }
       }).finally(() => {
         if (!cancelled) setHistoryLoading(false);
@@ -292,7 +292,7 @@ function App() {
     }).catch((historyFetchError) => {
       if (!cancelled) {
         setPatientHistoryResponse(null);
-        setHistoryError(historyFetchError instanceof Error ? historyFetchError.message : "No se pudo consultar el historial.");
+        setHistoryError(apiErrorDetail(historyFetchError));
       }
     }).finally(() => {
       if (!cancelled) setHistoryLoading(false);

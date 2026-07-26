@@ -34,11 +34,17 @@ export class ApiError extends Error {
 
 export class ContractError extends Error {
   path?: string;
+  code?: string;
+  traceId?: string;
+  body?: unknown;
 
-  constructor(message: string, path?: string) {
+  constructor(message: string, path?: string, options?: { code?: string; traceId?: string; body?: unknown }) {
     super(message);
     this.name = "ContractError";
     this.path = path;
+    this.code = options?.code;
+    this.traceId = options?.traceId;
+    this.body = options?.body;
   }
 }
 

@@ -40,8 +40,48 @@ exports.buildPatients = buildPatients;`, sandbox);
   return sandbox.exports;
 }
 
+function loadSubjectHistory() {
+  const source = readFileSync(join(root, "src/subjectHistoryApi.ts"), "utf8")
+    .replace(/^import .*$/gm, "")
+    .replace(/export /g, "");
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  class ApiError extends Error {
+    constructor(message, options) {
+      super(message);
+      this.name = "ApiError";
+      Object.assign(this, options);
+    }
+  }
+  class ContractError extends Error {
+    constructor(message, path, options = {}) {
+      super(message);
+      this.name = "ContractError";
+      this.path = path;
+      Object.assign(this, options);
+    }
+  }
+  const sandbox = {
+    exports: {},
+    console,
+    API_BASE_URL: "https://backend.example",
+    authHeaders: () => ({ Authorization: "Bearer test-token" }),
+    validateVisibleDataOrigin: () => undefined,
+    applyCorrectionsToMeasurements: (measurements) => measurements,
+    normalizePersistedCorrection: (entry) => entry && typeof entry === "object" && typeof entry.measurementId === "string" ? entry : null,
+    ApiError,
+    ContractError,
+  };
+  vm.runInNewContext(`${js}
+exports.normalizeSubjectHistoryResponse = normalizeSubjectHistoryResponse;
+exports.historyApiError = historyApiError;
+exports.ApiError = ApiError;
+exports.ContractError = ContractError;`, sandbox);
+  return sandbox.exports;
+}
+
 const metadata = loadStudyMetadata();
 const patients = loadPatients();
+const subjectHistory = loadSubjectHistory();
 
 let count = 0;
 function test(name, fn) {
@@ -67,6 +107,114 @@ function study(overrides = {}) {
     ...overrides,
   };
 }
+
+function validHistoryPayload(overrides = {}) {
+  return {
+    status: "ok",
+    source: "postgres-domain",
+    dataOrigin: "database",
+    deidentified: true,
+    subjectRef: "SPIDER-101",
+    summary: { totalStudies: 1, pending: 1 },
+    studies: [{
+      caseId: "CASE-101",
+      subjectRef: "SPIDER-101",
+      studyDate: "2026-07-26",
+      modality: "MRI",
+      planes: ["sagittal"],
+      modelKey: "sagittal_spider",
+      modelVersion: "sagittal-spider-final-v1",
+      reviewStatus: "pending",
+      priority: "medium",
+      measurementsByPlane: {
+        sagittal: [{ measurementId: "m-1", label: "Canal", aiValue: 12.4, value: 12.4, unit: "mm" }],
+      },
+      corrections: [{ measurementId: "m-1", afterValue: { value: 12.1, unit: "mm", plane: "sagittal" } }],
+    }],
+    ...overrides,
+  };
+}
+
+test("P8-E2.1 A subjectRef null queda editable en metadata", () => {
+  const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
+  assert.match(source, /const subjectRefLocked = Boolean\(currentSubjectRef\)/);
+  assert.match(source, /readOnly=\{subjectRefLocked\}/);
+});
+
+test("P8-E2.1 B subjectRef existente queda readOnly con aviso de inmutabilidad", () => {
+  const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
+  assert.match(source, /La referencia de-identificada ya fue asignada y no puede reemplazarse/);
+  assert.match(source, /Esto evita vincular estudios de personas distintas/);
+});
+
+test("P8-E2.1 C no se envia PUT para reemplazar solo subjectRef existente", () => {
+  const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
+  const saveFunction = source.slice(source.indexOf("async function saveStudyMetadata"), source.indexOf("function panelVisible"));
+  assert.doesNotMatch(saveFunction, /window\.confirm/);
+  assert.match(saveFunction, /payload\.subjectRef = currentSubjectRef/);
+  assert.match(saveFunction, /La referencia de-identificada ya fue asignada y no puede reemplazarse/);
+});
+
+test("P8-E2.1 D SPIDER-101 y spider-101 se agrupan por referencia case-insensitive", () => {
+  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: "SPIDER-101" }), study({ caseId: "CASE-B", subjectRef: "spider-101" })]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].label, "SPIDER-101");
+  assert.equal(rows[0].totalStudies, 2);
+});
+
+test("P8-E2.1 E dos subjectRef null quedan separados por caseId", () => {
+  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: null }), study({ caseId: "CASE-B", subjectRef: null })]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows.every((row) => row.kind === "study"), true);
+});
+
+test("P8-E2.1 F source distinto de postgres-domain lanza ContractError", () => {
+  assert.throws(() => subjectHistory.normalizeSubjectHistoryResponse(validHistoryPayload({ source: "frontend" }), "SPIDER-101"), subjectHistory.ContractError);
+});
+
+test("P8-E2.1 G dataOrigin distinto de database lanza ContractError", () => {
+  assert.throws(() => subjectHistory.normalizeSubjectHistoryResponse(validHistoryPayload({ dataOrigin: "demo" }), "SPIDER-101"), subjectHistory.ContractError);
+});
+
+test("P8-E2.1 H deidentified distinto de true lanza ContractError", () => {
+  assert.throws(() => subjectHistory.normalizeSubjectHistoryResponse(validHistoryPayload({ deidentified: false }), "SPIDER-101"), subjectHistory.ContractError);
+});
+
+test("P8-E2.1 I subjectRef de respuesta no coincide lanza ContractError", () => {
+  assert.throws(() => subjectHistory.normalizeSubjectHistoryResponse(validHistoryPayload({ subjectRef: "SPIDER-999" }), "SPIDER-101"), subjectHistory.ContractError);
+});
+
+test("P8-E2.1 J studies ausente lanza ContractError", () => {
+  const payload = validHistoryPayload();
+  delete payload.studies;
+  assert.throws(() => subjectHistory.normalizeSubjectHistoryResponse(payload, "SPIDER-101"), subjectHistory.ContractError);
+});
+
+test("P8-E2.1 K medicion sin id no recibe id sintetico", () => {
+  const payload = validHistoryPayload({ studies: [{ ...validHistoryPayload().studies[0], measurementsByPlane: { sagittal: [{ label: "Canal", aiValue: 11.2, unit: "mm" }] } }] });
+  const normalized = subjectHistory.normalizeSubjectHistoryResponse(payload, "SPIDER-101");
+  assert.equal(normalized.studies[0].measurementsByPlane.sagittal.length, 0);
+  assert.equal(JSON.stringify(normalized).includes("measurement-1"), false);
+});
+
+test("P8-E2.1 L respuesta valida conserva mediciones y correcciones", () => {
+  const normalized = subjectHistory.normalizeSubjectHistoryResponse(validHistoryPayload(), "SPIDER-101");
+  assert.equal(normalized.source, "postgres-domain");
+  assert.equal(normalized.dataOrigin, "database");
+  assert.equal(normalized.deidentified, true);
+  assert.equal(normalized.studies[0].measurementsByPlane.sagittal[0].id, "m-1");
+  assert.equal(normalized.studies[0].corrections[0].measurementId, "m-1");
+});
+
+test("P8-E2.1 M error HTTP preserva code y traceId", () => {
+  const response = { status: 503, headers: { get: () => "trace-header" } };
+  const error = subjectHistory.historyApiError("/api/subjects/SPIDER-101/history", response, { code: "DATABASE_UNAVAILABLE", traceId: "trace-json" });
+  assert.equal(error.name, "ApiError");
+  assert.equal(error.status, 503);
+  assert.equal(error.code, "DATABASE_UNAVAILABLE");
+  assert.equal(error.traceId, "trace-json");
+  assert.match(error.message, /base de datos no está disponible/);
+});
 
 test("A subjectRef SPIDER-101 es válido y se normaliza en studyMetadata", () => {
   assert.equal(metadata.validateSubjectRef(" SPIDER-101 "), null);

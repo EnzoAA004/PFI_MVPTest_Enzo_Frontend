@@ -29,14 +29,15 @@ const priorityRank: Record<StudyRow["priority"], number> = { alta: 0, media: 1, 
 export function buildPatients(studies: StudyRow[]): PatientRow[] {
   const grouped = new Map<string, StudyRow[]>();
   studies.forEach((study) => {
-    const key = study.subjectRef && study.subjectRef.trim() ? `subject:${study.subjectRef}` : `study:${study.caseId}`;
+    const subjectRef = study.subjectRef?.trim();
+    const key = subjectRef ? `subject:${subjectRef.toLowerCase()}` : `study:${study.caseId}`;
     grouped.set(key, [...(grouped.get(key) ?? []), study]);
   });
   return Array.from(grouped.entries()).map(([key, patientStudies]) => {
     const sortedByDate = [...patientStudies].sort((a, b) => Date.parse(a.studyDate ?? "0001-01-01") - Date.parse(b.studyDate ?? "0001-01-01"));
     const latest = sortedByDate[sortedByDate.length - 1] ?? patientStudies[0];
     const highestPriority = [...patientStudies].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0]?.priority ?? "baja";
-    const subjectRef = latest?.subjectRef?.trim();
+    const subjectRef = patientStudies.find((study) => study.subjectRef?.trim())?.subjectRef?.trim() ?? latest?.subjectRef?.trim();
     const isSubject = key.startsWith("subject:") && Boolean(subjectRef);
     const target: HistoryTarget = isSubject ? { kind: "subject", subjectRef: subjectRef as string } : { kind: "study", caseId: latest?.caseId ?? "" };
     return {

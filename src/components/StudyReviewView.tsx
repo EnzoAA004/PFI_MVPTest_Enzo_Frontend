@@ -238,7 +238,9 @@ function metadataDraftFromDetail(detail: StudyDetailResponse | null, run: AiRunR
 }
 
 function metadataPayloadEqual(next: StudyMetadataInput, current: StudyMetadataDraft) {
-  return next.subjectRef === (current.subjectRef.trim() || null)
+  const nextSubjectRef = next.subjectRef?.trim().toLowerCase() ?? null;
+  const currentSubjectRef = current.subjectRef.trim().toLowerCase() || null;
+  return nextSubjectRef === currentSubjectRef
     && next.studyDate === (current.studyDate || null)
     && next.modality === (current.modality || null)
     && next.description === (current.description.trim() || null)
@@ -343,6 +345,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const reviewerName = displayRun.review?.reviewer ?? run.review?.reviewer ?? "Revisor";
   const futureFeatureTitle = "Disponible en una fase futura";
   const currentMetadataDraft = metadataDraftFromDetail(selectedDetail, run);
+  const currentSubjectRef = currentMetadataDraft.subjectRef.trim();
+  const subjectRefLocked = Boolean(currentSubjectRef);
 
   function getPersistedReviewerValue(measurementId: string) {
     const persisted = sourceMeasurements.find((item) => item.id === measurementId && item.source === "Reviewer");
@@ -570,9 +574,18 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       return;
     }
     const payload = normalizeStudyMetadataInput(metadataDraft);
-    if (currentMetadataDraft.subjectRef.trim() && payload.subjectRef && payload.subjectRef !== currentMetadataDraft.subjectRef.trim()) {
-      const confirmed = window.confirm("La referencia solo puede conservarse o asignarse si estaba vacía. Cambiarla por otra puede producir un conflicto.");
-      if (!confirmed) return;
+    if (subjectRefLocked) {
+      const nextSubjectKey = payload.subjectRef?.trim().toLowerCase() ?? "";
+      const currentSubjectKey = currentSubjectRef.toLowerCase();
+      if (nextSubjectKey && nextSubjectKey !== currentSubjectKey) {
+        payload.subjectRef = currentSubjectRef;
+        if (metadataPayloadEqual(payload, currentMetadataDraft)) {
+          setMetadataError("La referencia de-identificada ya fue asignada y no puede reemplazarse.");
+          return;
+        }
+      } else {
+        payload.subjectRef = currentSubjectRef;
+      }
     }
     if (metadataPayloadEqual(payload, currentMetadataDraft)) {
       setMetadataError("No hay cambios para guardar.");
@@ -649,7 +662,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             <div className="section-title">
               <div>
                 <h2 id="metadata-dialog-title">Editar metadata del estudio</h2>
-                <p className="muted compact-copy">Uso académico con datos de-identificados. La referencia solo puede conservarse o asignarse si estaba vacía. Cambiarla por otra puede producir un conflicto.</p>
+                <p className="muted compact-copy">Uso académico con datos de-identificados.</p>
               </div>
               <button className="icon-button" onClick={() => setMetadataDialogOpen(false)} disabled={metadataSaving} type="button" aria-label="Cerrar edición de metadata">×</button>
             </div>
@@ -657,9 +670,11 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               <label>
                 <span>Referencia de paciente de-identificada</span>
                 <input
-                  value={metadataDraft.subjectRef}
-                  onBlur={() => setMetadataError(validateSubjectRef(metadataDraft.subjectRef) ?? "")}
+                  value={subjectRefLocked ? currentSubjectRef : metadataDraft.subjectRef}
+                  readOnly={subjectRefLocked}
+                  onBlur={() => setMetadataError(subjectRefLocked ? "" : validateSubjectRef(metadataDraft.subjectRef) ?? "")}
                   onChange={(event) => {
+                    if (subjectRefLocked) return;
                     setMetadataDraft((current) => ({ ...current, subjectRef: event.target.value }));
                     setMetadataError("");
                   }}
@@ -667,6 +682,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   aria-invalid={Boolean(metadataError)}
                 />
               </label>
+              {subjectRefLocked && <p className="settings-persistence-note form-span-all">La referencia de-identificada ya fue asignada y no puede reemplazarse. Esto evita vincular estudios de personas distintas.</p>}
               <label>
                 <span>Fecha del estudio</span>
                 <input type="date" value={metadataDraft.studyDate} onChange={(event) => setMetadataDraft((current) => ({ ...current, studyDate: event.target.value }))} />
