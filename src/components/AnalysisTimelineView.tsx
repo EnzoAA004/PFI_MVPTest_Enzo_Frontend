@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { API_BASE_URL } from "../api";
 import { BackendApiError, aiAssetUrl, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
+import { canonicalRunToLegacyViewModel } from "../adapters/multiplanarRunAdapter";
 import type { Measurement, Plane, StudyLandmark } from "../appTypes";
 import type { AssetName, InputResponse, MultiplanarMeasurementValue, MultiplanarPlaneRun, MultiplanarRunPayload, MultiplanarRunResponse, RunReviewStatus } from "../multiplanarRunTypes";
 import type { MultiplanarContract } from "../multiplanarTypes";
@@ -358,7 +359,8 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
         },
         ...(axialUploadReady ? { axialInputId: uploads.axial.input?.inputId, axialModelKey: "axial_t2_alkafri" } : {}),
       };
-      const result = await runMultiplanarAnalysis(payload);
+      const canonicalResult = await runMultiplanarAnalysis(payload);
+      const result = canonicalRunToLegacyViewModel(canonicalResult);
       const readiness = evaluateRealInferenceReadiness(result);
       setRun(result);
       if (readiness.ready) {

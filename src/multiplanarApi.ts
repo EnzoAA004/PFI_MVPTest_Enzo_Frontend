@@ -1,6 +1,8 @@
 import { API_BASE_URL } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
-import type { AssetName, DiagnosticEndpointResponse, InputResponse, MultiplanarRunPayload, MultiplanarRunResponse, RunReviewRequest, RunReviewResponse } from "./multiplanarRunTypes";
+import { parseMultiplanarRunResponse } from "./adapters/multiplanarRunAdapter";
+import type { CanonicalMultiplanarRun } from "./contracts/canonicalMultiplanarRun";
+import type { AssetName, DiagnosticEndpointResponse, InputResponse, MultiplanarRunPayload, RunReviewRequest, RunReviewResponse } from "./multiplanarRunTypes";
 import type { MultiplanarContract } from "./multiplanarTypes";
 import type { Plane } from "./appTypes";
 
@@ -111,11 +113,12 @@ export async function syncRealModelArtifacts(force = false): Promise<ModelSyncRe
   return multiplanarRequest<ModelSyncResponse>(`/api/ai/models/sync?force=${force}`, { method: "POST" });
 }
 
-export async function runMultiplanarAnalysis(payload: MultiplanarRunPayload): Promise<MultiplanarRunResponse> {
-  return multiplanarRequest<MultiplanarRunResponse>("/api/ai/multiplanar/run", {
+export async function runMultiplanarAnalysis(payload: MultiplanarRunPayload): Promise<CanonicalMultiplanarRun> {
+  const raw = await multiplanarRequest<unknown>("/api/ai/multiplanar/run", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+  return parseMultiplanarRunResponse(raw);
 }
 
 export async function getRunReview(multiplanarRunId: string): Promise<RunReviewResponse> {
