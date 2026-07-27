@@ -173,9 +173,15 @@ function coordinateSpaceFrom(series?: any, landmarks?: StudyLandmark[]) {
 
 function normalizeRow(item: any): MeasurementRow {
   const value = item.aiValue ?? item.value ?? "";
+  const label =
+    typeof item.label === "string" && item.label.trim()
+      ? item.label.trim()
+      : typeof item.labelKey === "string" && item.labelKey.trim()
+        ? item.labelKey.trim()
+        : "Medición revisable";
   return {
-    id: String(item.id ?? item.label ?? "measurement"),
-    label: String(item.label ?? "Medición"),
+    id: String(item.id ?? item.labelKey ?? item.label ?? "measurement"),
+    label,
     level: String(item.level ?? "Nivel no informado"),
     aiValue: value,
     reviewerValue: item.reviewerValue ?? null,

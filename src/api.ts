@@ -163,9 +163,15 @@ function toMeasurement(value: unknown, index: number): Measurement {
       : "";
   const reviewerValue = typeof record.reviewerValue === "number" || typeof record.reviewerValue === "string" || record.reviewerValue === null ? record.reviewerValue : undefined;
   const linkedLandmarks = Array.isArray(record.linkedLandmarks) ? record.linkedLandmarks.filter((item): item is string => typeof item === "string") : undefined;
+  const label =
+    typeof record.label === "string" && record.label.trim()
+      ? record.label.trim()
+      : typeof record.labelKey === "string" && record.labelKey.trim()
+        ? record.labelKey.trim()
+        : "Medición revisable";
   return {
     id: typeof record.id === "string" ? record.id : `measurement-${index}`,
-    label: typeof record.label === "string" ? record.label : "Medicion revisable",
+    label,
     level: typeof record.level === "string" ? record.level : undefined,
     value: baseValue,
     aiValue: typeof record.aiValue === "number" || typeof record.aiValue === "string" ? record.aiValue : baseValue,

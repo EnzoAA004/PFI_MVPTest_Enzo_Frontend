@@ -99,9 +99,15 @@ function normalizeMeasurement(value: unknown, index: number, plane?: Plane): Mea
   const reviewerValue = typeof item.reviewerValue === "number" || typeof item.reviewerValue === "string" || item.reviewerValue === null ? item.reviewerValue : undefined;
   const effectiveValue = reviewerValue ?? (typeof item.value === "number" || typeof item.value === "string" ? item.value : aiValue);
   const linkedLandmarks = Array.isArray(item.linkedLandmarks) ? item.linkedLandmarks.filter((entry): entry is string => typeof entry === "string") : undefined;
+  const label =
+    typeof item.label === "string" && item.label.trim()
+      ? item.label.trim()
+      : typeof item.labelKey === "string" && item.labelKey.trim()
+        ? item.labelKey.trim()
+        : "Medición revisable";
   return {
     id: typeof item.id === "string" ? item.id : `measurement-${index}`,
-    label: typeof item.label === "string" ? item.label : "Medicion revisable",
+    label,
     value: effectiveValue,
     aiValue,
     reviewerValue,
