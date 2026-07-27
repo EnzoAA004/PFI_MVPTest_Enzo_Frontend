@@ -142,3 +142,84 @@ adapter antes de llegar al modelo canónico.
   contenedor) se descartan silenciosamente por el adapter. Esto es intencional
   (fuga de infraestructura interna), pero implica que un estudio histórico con
   solo esos assets puede terminar con `assets: []` en el modelo canónico.
+
+## 8. P9-C.1.1 — Hotfix: gobernanza detrás del presenter público P8
+
+Commit base del hotfix: `89636144fa39c33ff02309a6637be27b3a3b51ec`.
+
+### 8.1 Wire del AI Module vs. modelo canónico del backend vs. presenter público v2
+
+Existen tres capas distintas en el lado backend, y P9-C.1 asumió que la
+segunda y la tercera coincidían exactamente. No es así:
+
+1. **Wire del AI Module**: la salida cruda de los modelos de inferencia
+   (`mask.npy`, rutas de contenedor, artefactos internos). El frontend nunca
+   la ve.
+2. **Modelo canónico del backend**: la forma interna que el backend usa una
+   vez validado el contrato v2 (`schemaVersion=pfi.multiplanar-run.v2`,
+   `synthetic`, `fallbackReason` como campos de primer nivel tanto en la raíz
+   como en cada plano).
+3. **Presentación pública temporal v2→P8** (`CanonicalMultiplanarRunLegacyPresenter`
+   en el backend): la respuesta HTTP real de `POST /api/ai/multiplanar/run`
+   mientras el backend mantiene compatibilidad con consumidores P8. Esta capa
+   **no** expone `root.synthetic` ni `plane.synthetic` de forma directa en
+   todos los casos: los codifica a través de `degradedMode`,
+   `plane.aiOutput.synthetic`, `plane.metadata.synthetic` y sus equivalentes
+   de `fallbackReason`.
+
+P9-C.1 exigía únicamente `record.synthetic` (y `plane.synthetic` directo),
+que es la forma de la capa 2, no la capa 3 que realmente responde el backend
+en producción. Resultado: `ContractError: falta synthetic obligatorio para
+pfi.multiplanar-run.v2` en toda corrida real, y bloqueo del botón "Continuar
+a evaluación" incluso cuando sí se resolvía synthetic, porque
+`canonicalRunToLegacyViewModel()` no derivaba `allowContractFallback` /
+`degradedMode` a partir de los datos canónicos y los dejaba en `undefined`.
+
+### 8.2 Alias `synthetic` → `degradedMode` / `aiOutput.*` / `metadata.*` aceptado temporalmente
+
+El adapter (`src/adapters/multiplanarRunAdapter.ts`) ahora resuelve
+`synthetic` con esta prioridad, vía `requireBooleanAlias()` (raíz) y
+`resolvePlaneSynthetic()` (plano):
+
+| Nivel | Prioridad de resolución |
+| --- | --- |
+| Raíz | `record.synthetic` → `record.degradedMode` → `ContractError` (v2) / `null` (v1) |
+| Plano | `plane.synthetic` → `plane.degradedMode` → `plane.aiOutput.synthetic` → `plane.metadata.synthetic` → `ContractError` (v2) / `null` (v1) |
+
+`fallbackReason` sigue una prioridad análoga (`record.fallbackReason` →
+`aiOutput.fallbackReason` → `metadata.fallbackReason` → `null`; string vacío
+se trata como `null`), tanto a nivel de plano como de raíz (donde además se
+hereda desde `sagittal.fallbackReason` / `axial.fallbackReason` si la raíz no
+lo informa explícitamente).
+
+Esto es un alias, no un campo nuevo: en ningún caso se inventa un valor de
+`synthetic` que el backend no haya comunicado por alguna de esas rutas. Si
+ninguna fuente es `boolean` y la respuesta es v2, se sigue lanzando
+`ContractError` (test `P9-C.1.1 B`).
+
+### 8.3 Legacy view model corregido
+
+`canonicalRunToLegacyViewModel()` ahora deriva, en vez de dejar `undefined`:
+
+- `allowContractFallback = !cleanRealBaseline`, donde `cleanRealBaseline`
+  exige `effectiveInferenceMode === "real_baseline"`, `synthetic === false` y
+  ausencia de `fallbackReason`.
+- `aiOutput.realInferenceAvailable` es `true` únicamente cuando además del
+  `cleanRealBaseline` anterior, `model.availableForRealInference === true`.
+  Nunca se copia `model.availableForRealInference` en crudo: una corrida en
+  fallback no puede presentarse como inferencia real disponible.
+- `degradedMode` (plano y raíz) se deriva de `synthetic` cuando el backend no
+  lo informó explícitamente como booleano en la raíz.
+
+### 8.4 Eliminación futura del alias
+
+Este alias debe retirarse cuando el backend deje de necesitar
+`CanonicalMultiplanarRunLegacyPresenter` y exponga `root.synthetic` /
+`plane.synthetic` directamente en la respuesta pública v2 (es decir, cuando
+las capas 2 y 3 de la sección 8.1 converjan). Criterio de salida para
+P9-C.2/P9-C.3: si un fixture con solo `record.synthetic` (sin `degradedMode`
+ni `aiOutput.synthetic` ni `metadata.synthetic`) sigue pasando todos los
+tests de `scripts/p9c1-canonical-contract-tests.mjs`, los alias adicionales
+(`degradedMode`, `aiOutput.synthetic`, `metadata.synthetic`) pueden
+eliminarse de `resolvePlaneSynthetic()` y `requireBooleanAlias()` sin romper
+nada, porque en ese punto el backend ya emite el campo canónico directo.

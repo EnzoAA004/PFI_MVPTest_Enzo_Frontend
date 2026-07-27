@@ -96,6 +96,30 @@ function requireString(record: Record<string, unknown>, key: string, context: st
   return value;
 }
 
+function requireBooleanAlias(
+  record: Record<string, unknown>,
+  keys: string[],
+  context: string,
+  isV2: boolean,
+  raw: unknown,
+  traceId?: string,
+): boolean | null {
+  for (const key of keys) {
+    const value = asBoolean(record[key]);
+    if (value !== undefined) return value;
+  }
+  if (isV2) throw contractError(`Contrato incompleto en ${context}: falta ${keys[0]} obligatorio para ${MULTIPLANAR_CONTRACT_V2}.`, `${context}.${keys[0]}`, raw, traceId);
+  return null;
+}
+
+function resolveFallbackReason(...values: unknown[]): string | null {
+  for (const value of values) {
+    const str = asString(value);
+    if (str) return str;
+  }
+  return null;
+}
+
 function isSanitizedPublicUrl(value: unknown): string | undefined {
   const url = asString(value);
   if (!url) return undefined;
@@ -263,16 +287,30 @@ function parseInput(rawPlane: Record<string, unknown>): CanonicalPlaneInput {
   };
 }
 
-function parsePlaneRun(rawPlane: unknown, plane: Plane, context: string, raw: unknown, traceId?: string): CanonicalPlaneRun {
+function resolvePlaneSynthetic(record: Record<string, unknown>, context: string, isV2: boolean, raw: unknown, traceId?: string): boolean | null {
+  const aiOutput = asRecord(record.aiOutput);
+  const metadata = asRecord(record.metadata);
+  const flat: Record<string, unknown> = {
+    synthetic: record.synthetic,
+    degradedMode: record.degradedMode,
+    "aiOutput.synthetic": aiOutput?.synthetic,
+    "metadata.synthetic": metadata?.synthetic,
+  };
+  return requireBooleanAlias(flat, ["synthetic", "degradedMode", "aiOutput.synthetic", "metadata.synthetic"], context, isV2, raw, traceId);
+}
+
+function parsePlaneRun(rawPlane: unknown, plane: Plane, context: string, raw: unknown, isV2: boolean, traceId?: string): CanonicalPlaneRun {
   const record = asRecord(rawPlane);
   if (!record) throw contractError(`Contrato incompleto en ${context}: plano ${plane} ausente o invalido.`, `${context}.${plane}`, raw, traceId);
+  const aiOutput = asRecord(record.aiOutput);
+  const metadata = asRecord(record.metadata);
   return {
     planeRunId: pickFirst(asString(record.runId), asString(record.planeRunId)),
     plane,
     status: asString(record.status),
-    effectiveInferenceMode: pickFirst(asString(record.effectiveInferenceMode), asString(record.inferenceMode), asString(asRecord(record.aiOutput)?.inferenceMode)),
-    synthetic: asBoolean(record.synthetic) ?? null,
-    fallbackReason: asString(record.fallbackReason) ?? null,
+    effectiveInferenceMode: pickFirst(asString(record.effectiveInferenceMode), asString(record.inferenceMode), asString(aiOutput?.inferenceMode)),
+    synthetic: resolvePlaneSynthetic(record, `${context}.${plane}`, isV2, raw, traceId),
+    fallbackReason: resolveFallbackReason(record.fallbackReason, aiOutput?.fallbackReason, metadata?.fallbackReason),
     model: parseModel(record),
     input: parseInput(record),
     coordinateSpace: asString(record.coordinateSpace),
@@ -312,9 +350,13 @@ export function parseMultiplanarRunResponse(raw: unknown): CanonicalMultiplanarR
 
   const planesRecord = asRecord(record.planes);
   const rawSagittal = planesRecord?.sagittal;
-  const sagittal = parsePlaneRun(rawSagittal, "sagittal", REQUEST_PATH, raw, traceId);
+  const sagittal = parsePlaneRun(rawSagittal, "sagittal", REQUEST_PATH, raw, isV2, traceId);
   const rawAxial = planesRecord?.axial;
-  const axial = rawAxial ? parsePlaneRun(rawAxial, "axial", REQUEST_PATH, raw, traceId) : undefined;
+  const axial = rawAxial ? parsePlaneRun(rawAxial, "axial", REQUEST_PATH, raw, isV2, traceId) : undefined;
+
+  const synthetic = requireBooleanAlias(record, ["synthetic", "degradedMode"], REQUEST_PATH, isV2, raw, traceId);
+  const fallbackReason = resolveFallbackReason(record.fallbackReason, sagittal.fallbackReason, axial?.fallbackReason);
+  const degradedMode = asBoolean(record.degradedMode) ?? (synthetic === null ? undefined : synthetic);
 
   return {
     status: asString(record.status),
@@ -328,9 +370,9 @@ export function parseMultiplanarRunResponse(raw: unknown): CanonicalMultiplanarR
     planes: { sagittal, axial },
     humanReviewRequired: requireGovernanceField(record, "humanReviewRequired", REQUEST_PATH, isV2, raw, traceId),
     notClinicalDiagnosis: requireGovernanceField(record, "notClinicalDiagnosis", REQUEST_PATH, isV2, raw, traceId),
-    synthetic: requireGovernanceField(record, "synthetic", REQUEST_PATH, isV2, raw, traceId),
-    fallbackReason: asString(record.fallbackReason) ?? null,
-    degradedMode: asBoolean(record.degradedMode),
+    synthetic,
+    fallbackReason,
+    degradedMode,
   };
 }
 
@@ -342,24 +384,33 @@ function legacyAssetsFromCanonical(assets: CanonicalPlaneAsset[]): MultiplanarPl
   }, {});
 }
 
-function canonicalPlaneToLegacy(plane: CanonicalPlaneRun): MultiplanarPlaneRun {
+function canonicalPlaneToLegacy(plane: CanonicalPlaneRun, root: CanonicalMultiplanarRun): MultiplanarPlaneRun {
+  const cleanRealBaseline = plane.effectiveInferenceMode === "real_baseline" && plane.synthetic === false && !plane.fallbackReason;
+  const realInferenceAvailable = plane.model.availableForRealInference === true
+    && plane.effectiveInferenceMode === "real_baseline"
+    && plane.synthetic === false
+    && !plane.fallbackReason;
   return {
     runId: plane.planeRunId ?? "",
     plane: plane.plane as Plane,
     status: plane.status,
     effectiveInferenceMode: plane.effectiveInferenceMode,
+    requestedInferenceMode: root.requestedInferenceMode,
     synthetic: plane.synthetic ?? undefined,
     fallbackReason: plane.fallbackReason ?? undefined,
     modelKey: plane.model.key,
     modelVersion: plane.model.version,
     artifactHash: plane.model.artifactHash,
-    allowContractFallback: undefined,
+    allowContractFallback: !cleanRealBaseline,
     inputId: plane.input.inputId,
     aiOutput: {
       status: plane.status,
       inferenceMode: plane.effectiveInferenceMode,
+      requestedInferenceMode: root.requestedInferenceMode,
       artifactHash: plane.model.artifactHash,
-      realInferenceAvailable: plane.model.availableForRealInference,
+      realInferenceAvailable,
+      synthetic: plane.synthetic ?? undefined,
+      fallbackReason: plane.fallbackReason ?? undefined,
       humanReviewRequired: plane.humanReviewRequired ?? undefined,
       notClinicalDiagnosis: plane.notClinicalDiagnosis ?? undefined,
     },
@@ -380,7 +431,7 @@ function canonicalPlaneToLegacy(plane: CanonicalPlaneRun): MultiplanarPlaneRun {
     quality: plane.quality as Record<string, unknown> | undefined,
     humanReviewRequired: plane.humanReviewRequired ?? undefined,
     notClinicalDiagnosis: plane.notClinicalDiagnosis ?? undefined,
-    degradedMode: undefined,
+    degradedMode: plane.synthetic ?? undefined,
     assets: legacyAssetsFromCanonical(plane.assets),
     landmarks: plane.landmarks.map((landmark) => ({
       id: landmark.id,
@@ -415,11 +466,11 @@ export function canonicalRunToLegacyViewModel(run: CanonicalMultiplanarRun): Mul
     requestedInferenceMode: run.requestedInferenceMode,
     effectiveInferenceMode: run.effectiveInferenceMode,
     planes: {
-      sagittal: canonicalPlaneToLegacy(run.planes.sagittal),
-      axial: run.planes.axial ? canonicalPlaneToLegacy(run.planes.axial) : undefined,
+      sagittal: canonicalPlaneToLegacy(run.planes.sagittal, run),
+      axial: run.planes.axial ? canonicalPlaneToLegacy(run.planes.axial, run) : undefined,
     },
     humanReviewRequired: run.humanReviewRequired ?? undefined,
     notClinicalDiagnosis: run.notClinicalDiagnosis ?? undefined,
-    degradedMode: run.degradedMode,
+    degradedMode: run.degradedMode ?? (run.synthetic === null ? undefined : run.synthetic),
   };
 }

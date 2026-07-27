@@ -41,6 +41,9 @@ function loadFixtures() {
   vm.runInNewContext(`${js}
 exports.rawMultiplanarRunV2Fixture = rawMultiplanarRunV2Fixture;
 exports.rawMultiplanarRunV1Fixture = rawMultiplanarRunV1Fixture;
+exports.rawMultiplanarRunV2PublicPresenterFixture = rawMultiplanarRunV2PublicPresenterFixture;
+exports.rawMultiplanarRunV2MissingGovernanceFixture = rawMultiplanarRunV2MissingGovernanceFixture;
+exports.rawMultiplanarRunV2FallbackPresenterFixture = rawMultiplanarRunV2FallbackPresenterFixture;
 exports.SAGITTAL_FIXTURE_ARTIFACT_HASH = SAGITTAL_FIXTURE_ARTIFACT_HASH;
 exports.SAGITTAL_FIXTURE_MEASUREMENT_LABEL_KEYS = SAGITTAL_FIXTURE_MEASUREMENT_LABEL_KEYS;`, sandbox);
   return sandbox.exports;
@@ -54,9 +57,19 @@ exports.displayMeasurementLabel = displayMeasurementLabel;`, sandbox);
   return sandbox.exports;
 }
 
+function loadInferenceReadiness() {
+  const js = transpile("src/inferenceReadiness.ts");
+  const sandbox = { exports: {}, console };
+  vm.runInNewContext(`${js}
+exports.evaluateSagittalReviewReadiness = evaluateSagittalReviewReadiness;
+exports.resolveReviewWorkspaceMode = resolveReviewWorkspaceMode;`, sandbox);
+  return sandbox.exports;
+}
+
 const adapter = loadAdapter();
 const fixtures = loadFixtures();
 const display = loadClinicalDisplay();
+const readiness = loadInferenceReadiness();
 
 let count = 0;
 function test(name, fn) {
@@ -225,6 +238,58 @@ test("O status de gobernanza no positivo por defecto para v1 sin synthetic infor
   assert.equal(canonical.synthetic, null);
   assert.notEqual(canonical.synthetic, true);
   assert.notEqual(canonical.synthetic, false);
+});
+
+test("P9-C.1.1 A respuesta publica v2 sin synthetic directo pero con degradedMode=false no lanza ContractError", () => {
+  const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2PublicPresenterFixture);
+  assert.equal(canonical.synthetic, false);
+  assert.equal(canonical.degradedMode, false);
+  assert.equal(canonical.planes.sagittal.synthetic, false);
+});
+
+test("P9-C.1.1 B respuesta v2 sin synthetic ni degradedMode en ninguna fuente lanza ContractError identificando synthetic", () => {
+  assert.throws(() => adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2MissingGovernanceFixture), (error) => {
+    assert.ok(error instanceof ContractError);
+    assert.ok(error.body.missingField.includes("synthetic"));
+    return true;
+  });
+});
+
+test("P9-C.1.1 C respuesta fallback conserva synthetic/fallbackReason y bloquea inferencia real en el legacy view model", () => {
+  const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2FallbackPresenterFixture);
+  assert.equal(canonical.synthetic, true);
+  assert.equal(canonical.planes.sagittal.synthetic, true);
+  assert.equal(canonical.planes.sagittal.fallbackReason, "sagittal_model_unavailable_switched_to_synthetic");
+  assert.equal(canonical.fallbackReason, "sagittal_model_unavailable_switched_to_synthetic");
+
+  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
+  assert.equal(legacy.planes.sagittal.allowContractFallback, true);
+  assert.equal(legacy.planes.sagittal.aiOutput.realInferenceAvailable, false);
+  assert.equal(legacy.degradedMode, true);
+});
+
+test("P9-C.1.1 D respuesta real_baseline limpia habilita allowContractFallback=false y realInferenceAvailable=true", () => {
+  const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2PublicPresenterFixture);
+  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
+  assert.equal(legacy.planes.sagittal.allowContractFallback, false);
+  assert.equal(legacy.planes.sagittal.aiOutput.realInferenceAvailable, true);
+  assert.equal(legacy.degradedMode, false);
+  assert.equal(legacy.planes.sagittal.requestedInferenceMode, "real_baseline");
+});
+
+test("P9-C.1.1 E readiness integrado: presenter publico real habilita evaluateSagittalReviewReadiness", () => {
+  const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2PublicPresenterFixture);
+  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
+  const result = readiness.evaluateSagittalReviewReadiness(legacy);
+  assert.equal(result.ready, true, `reasons: ${result.reasons.join(" | ")}`);
+  assert.equal(result.reasons.length, 0);
+  assert.equal(readiness.resolveReviewWorkspaceMode(legacy), "sagittal_only");
+});
+
+test("P9-C.1.1 F v1 sin synthetic ni degradedMode no lanza ContractError al parsear", () => {
+  const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV1Fixture);
+  assert.equal(canonical.synthetic, null);
+  assert.equal(canonical.planes.sagittal.synthetic, null);
 });
 
 console.log(`P9-C.1 canonical contract tests passed: ${count}`);
