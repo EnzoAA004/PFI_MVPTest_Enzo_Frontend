@@ -1,23 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
-import type { Plane, StudyLandmark, StudyMask, StudySeries } from "../appTypes";
-import type { CanonicalAssetName, CanonicalPlaneAsset, CanonicalPlaneMask, CanonicalPlaneSeriesItem, CanonicalLandmark } from "../contracts/canonicalMultiplanarRun";
-import { API_BASE_URL } from "../api";
 import { useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { displayLandmarkLabel } from "../clinicalDisplay";
-import { normalizeAiAssetUrl } from "../inferenceReadiness";
-import { aiAssetUrl } from "../multiplanarApi";
+import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
 
 /**
- * MriSliceViewer is shared by the canonical multiplanar flow
- * (AnalysisTimelineView, CanonicalPlaneSeriesItem/CanonicalPlaneMask/CanonicalLandmark)
- * and the legacy single-plane review workspace (StudyReviewView,
- * StudySeries/StudyMask/StudyLandmark). Props accept both shapes explicitly
- * instead of `any`; helper functions below narrow field-by-field since the
- * two shapes are not structurally identical.
+ * Pure presentation component. Knows nothing about either source domain
+ * (multiplanar canonical plane runs or the legacy single-plane study
+ * pipeline) — only MriViewerModel (src/viewModels/mriViewerViewModel.ts).
+ * Domain adapters (canonicalPlaneToMriViewerModel / studyRunToMriViewerModel)
+ * are responsible for producing that model, including resolving and
+ * sanitizing asset URLs.
  */
-export type ViewerSeries = CanonicalPlaneSeriesItem | StudySeries;
-export type ViewerMask = CanonicalPlaneMask | StudyMask;
-export type ViewerLandmark = CanonicalLandmark | StudyLandmark;
 
 type ViewerMode = "pan" | "window";
 type WindowPreset = {
@@ -30,29 +23,23 @@ type Size = {
   width: number;
   height: number;
 };
+type Point = {
+  x: number;
+  y: number;
+};
 
 type Props = {
-  variant: "sagittal" | "axial";
-  planeRunId?: string;
-  series?: ViewerSeries;
-  masks?: ViewerMask[];
-  assets?: CanonicalPlaneAsset[];
-  landmarks?: ViewerLandmark[];
-  maskVisibility?: Record<string, boolean>;
-  sliceIndex?: number;
-  overlayEnabled: boolean;
-  overlayOpacity?: number;
-  editMode: boolean;
-  selectedMask?: string;
-  selectedLandmark: string;
-  onSelectMask: (mask: string) => void;
-  onSelectLandmark: (landmark: string) => void;
-  onSliceChange?: (slice: number) => void;
-  onOverlayAvailableChange?: (available: boolean) => void;
-  landmarkEditMode?: boolean;
-  landmarkAddMode?: boolean;
-  onLandmarkDraftChange?: (landmark: StudyLandmark, detail: string) => void;
+  model: MriViewerModel;
+  selectedLandmarkId: string;
+  onSelectLandmark: (landmarkId: string) => void;
+  onMoveLandmark?: (landmarkId: string, point: Point) => void;
+  onAddLandmark?: (point: Point) => void;
   onLandmarkAddComplete?: () => void;
+  readonly?: boolean;
+  addMode?: boolean;
+  overlayEnabled?: boolean;
+  overlayOpacity?: number;
+  onOverlayAvailableChange?: (available: boolean) => void;
 };
 
 const neutralPreset: WindowPreset = { id: "neutral", label: "Neutral PNG", brightness: 100, contrast: 100 };
@@ -96,105 +83,48 @@ function pointPercent(value: number) {
   return clamp(value, 0, 256) / 256 * 100;
 }
 
-function hasField<T extends string>(value: unknown, field: T): value is Record<T, unknown> {
-  return typeof value === "object" && value !== null && field in value;
-}
-
-function stringField(value: unknown, field: string): string | undefined {
-  return hasField(value, field) && typeof (value as Record<string, unknown>)[field] === "string" ? (value as Record<string, unknown>)[field] as string : undefined;
-}
-
-/** landmark.labelKey is canonical; landmark.label is the legacy StudyLandmark identifier. */
-export function landmarkLabelKey(landmark: ViewerLandmark): string | undefined {
-  return stringField(landmark, "labelKey") ?? stringField(landmark, "label");
-}
-
-function landmarkCoordinateSpace(landmark: ViewerLandmark): string | undefined {
-  return stringField(landmark, "coordinateSpace");
-}
-
-function seriesCoordinateSpace(series: ViewerSeries | undefined): string | undefined {
-  return stringField(series, "coordinateSpace");
-}
-
-function coordinateSpaceFrom(series: ViewerSeries | undefined, landmarks: ViewerLandmark[]) {
-  return seriesCoordinateSpace(series) ?? landmarks.map(landmarkCoordinateSpace).find((value) => value !== undefined);
-}
-
-/** Stable selection/key identifier: landmark.id first, labelKey as controlled fallback, never the render-loop index. */
-export function landmarkKeyOf(landmark: ViewerLandmark, index: number): string {
-  return stringField(landmark, "id") ?? landmarkLabelKey(landmark) ?? `landmark-${index}`;
-}
-
-function safeAssetUrl(value: unknown) {
-  return normalizeAiAssetUrl(value, API_BASE_URL);
-}
-
-function seriesAssetsMap(series: ViewerSeries | undefined): Partial<Record<CanonicalAssetName, string>> | undefined {
-  return hasField(series, "assets") && typeof series.assets === "object" && series.assets ? series.assets as Partial<Record<CanonicalAssetName, string>> : undefined;
-}
-
-function findCanonicalAsset(assets: CanonicalPlaneAsset[] | undefined, assetName: CanonicalAssetName): string | undefined {
-  return assets?.find((asset) => asset.assetName === assetName)?.url;
-}
-
-export function maskLabel(mask: ViewerMask): string {
-  return stringField(mask, "label") ?? stringField(mask, "className") ?? stringField(mask, "role") ?? stringField(mask, "id") ?? "";
-}
-
-export function maskGroupName(mask: ViewerMask) {
-  const raw = maskLabel(mask).toLowerCase();
-  if (raw.includes("vertebra")) return "Grupo vertebral";
-  if (raw.includes("canal")) return "Canal";
-  if (raw.includes("disc")) return "Grupo discal";
-  return maskLabel(mask) || "Clase";
-}
-
-function maskFallbackColor(group: string) {
+function maskFallbackColor(group: string | undefined) {
   if (group === "Grupo vertebral") return "var(--mask-vertebral-body)";
   if (group === "Canal") return "var(--mask-spinal-canal)";
   if (group === "Grupo discal") return "var(--mask-disc)";
   return "var(--mask-foramen-other-soft-tissue)";
 }
 
-function assetStorageMessage(status?: string, hasUrl?: boolean) {
-  if (status === "stored") return "Recurso persistido disponible.";
-  if (status === "upstream_only") return "Recurso temporal disponible desde AI Module.";
-  if (status === "missing") return "El recurso derivado ya no se encuentra disponible.";
-  if (status === "rejected") return "El recurso fue rechazado durante la persistencia.";
-  if (status === "unavailable") return "No existe un recurso visual para esta corrida.";
+export function maskGroups(masks: MriViewerMask[]) {
+  const groups = new Map<string, { id: string; label: string; color: string; technicalName: string }>();
+  masks.forEach((mask) => {
+    const label = mask.groupName ?? mask.labelKey;
+    if (!groups.has(label)) {
+      groups.set(label, {
+        id: mask.id,
+        label,
+        color: mask.color ?? maskFallbackColor(mask.groupName),
+        technicalName: mask.labelKey,
+      });
+    }
+  });
+  return Array.from(groups.values());
+}
+
+function assetStorageMessage(hasUrl: boolean) {
   return hasUrl ? "Recurso visual declarado por backend." : "No existe un recurso visual para esta corrida.";
 }
 
 export function MriSliceViewer({
-  variant,
-  planeRunId,
-  series,
-  masks = [],
-  assets,
-  landmarks = [],
-  overlayEnabled,
-  overlayOpacity = initialOverlayOpacity,
-  landmarkEditMode = false,
-  landmarkAddMode = false,
-  selectedLandmark,
+  model,
+  selectedLandmarkId,
   onSelectLandmark,
-  onOverlayAvailableChange,
-  onLandmarkDraftChange,
+  onMoveLandmark,
+  onAddLandmark,
   onLandmarkAddComplete,
+  readonly = true,
+  addMode = false,
+  overlayEnabled = true,
+  overlayOpacity = initialOverlayOpacity,
+  onOverlayAvailableChange,
 }: Props) {
-  const plane = variant as Plane;
-  const seriesAssets = seriesAssetsMap(series);
-  const declaredUnavailable = hasField(series, "available") && series.available === false
-    || ["missing", "rejected", "unavailable"].includes(stringField(series, "storageStatus") ?? "");
-  const inputUrl = safeAssetUrl((series as { imageUrl?: unknown } | undefined)?.imageUrl)
-    ?? safeAssetUrl(seriesAssets?.["input.png"])
-    ?? safeAssetUrl(findCanonicalAsset(assets, "input.png"))
-    ?? (!declaredUnavailable && planeRunId ? aiAssetUrl(planeRunId, plane, "input.png") : undefined);
-  const overlayUrl = safeAssetUrl((series as { overlayUrl?: unknown } | undefined)?.overlayUrl)
-    ?? safeAssetUrl(seriesAssets?.["overlay.png"])
-    ?? safeAssetUrl(findCanonicalAsset(assets, "overlay.png"))
-    ?? (!declaredUnavailable && planeRunId ? aiAssetUrl(planeRunId, plane, "overlay.png") : undefined);
+  const inputUrl = model.assets.find((asset) => asset.assetName === "input.png")?.url;
+  const overlayUrl = model.assets.find((asset) => asset.assetName === "overlay.png")?.url;
   const inputAsset = useAuthenticatedImageUrl(inputUrl);
   const overlayAsset = useAuthenticatedImageUrl(overlayUrl);
   const inputState = inputAsset.state;
@@ -216,39 +146,15 @@ export function MriSliceViewer({
   const dragRef = useRef<{ x: number; y: number; brightness: number; contrast: number; panX: number; panY: number } | null>(null);
   const landmarkDragRef = useRef<string | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
-  const coordinateSpace = coordinateSpaceFrom(series, landmarks);
-  const realLandmarks = useMemo(
-    () => landmarks.filter((landmark): landmark is ViewerLandmark & { x: number; y: number } => Number.isFinite(landmark.x) && Number.isFinite(landmark.y)),
-    [landmarks],
-  );
-  const landmarkEntries = useMemo(
-    () => realLandmarks.map((landmark, index) => ({ landmark, key: landmarkKeyOf(landmark, index) })),
-    [realLandmarks],
-  );
-  const maskGroups = useMemo(() => {
-    const groups = new Map<string, { id: string; label: string; color: string; technicalName: string }>();
-    masks.forEach((mask, index) => {
-      const label = maskGroupName(mask);
-      if (!groups.has(label)) {
-        groups.set(label, {
-          id: stringField(mask, "id") ?? stringField(mask, "className") ?? `${label}-${index}`,
-          label,
-          color: stringField(mask, "color") ?? maskFallbackColor(label),
-          technicalName: stringField(mask, "className") ?? stringField(mask, "role") ?? maskLabel(mask) ?? label,
-        });
-      }
-    });
-    return Array.from(groups.values());
-  }, [masks]);
+  const landmarks = model.landmarks;
+  const groups = useMemo(() => maskGroups(model.masks), [model.masks]);
   const imageLoaded = inputState === "loaded";
   const overlayLoaded = overlayState === "loaded";
-  const storageMessage = assetStorageMessage(stringField(series, "storageStatus"), Boolean(inputUrl));
-  const canEditLandmarks = Boolean(imageLoaded && coordinateSpace && onLandmarkDraftChange);
+  const storageMessage = assetStorageMessage(Boolean(inputUrl));
+  const canEditLandmarks = Boolean(imageLoaded && model.coordinateSpace && !readonly);
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
   const filter = `brightness(${brightness}%) contrast(${contrast}%)`;
-  const seriesName = stringField(series, "name") ?? (variant === "sagittal" ? "Sagital" : "Axial");
-  const seriesId = stringField(series, "id") ?? `${plane}-asset`;
-  const seriesSelectedSlice = hasField(series, "selectedSlice") && typeof series.selectedSlice === "number" ? series.selectedSlice : 1;
+  const seriesName = model.plane === "sagittal" ? "Sagital" : "Axial";
 
   useEffect(() => {
     setOverlayVisible(overlayEnabled);
@@ -322,8 +228,8 @@ export function MriSliceViewer({
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (!imageLoaded || event.button !== 0) return;
-    if (landmarkAddMode) {
-      createLandmarkDraft(event);
+    if (addMode) {
+      createLandmark(event);
       return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -340,14 +246,7 @@ export function MriSliceViewer({
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
     if (landmarkDragRef.current && canEditLandmarks) {
       const point = pointFromEvent(event);
-      const entry = landmarkEntries.find((item) => item.key === landmarkDragRef.current);
-      if (point && entry) {
-        const { landmark, key } = entry;
-        onLandmarkDraftChange?.(
-          { id: key, label: landmarkLabelKey(landmark) ?? key, seriesId, sliceIndex: seriesSelectedSlice, x: point.x, y: point.y, editable: true },
-          `Landmark ${displayLandmarkLabel(landmarkLabelKey(landmark))} movido por revisor en ${coordinateSpace}`,
-        );
-      }
+      if (point) onMoveLandmark?.(landmarkDragRef.current, point);
       return;
     }
     const drag = dragRef.current;
@@ -373,7 +272,7 @@ export function MriSliceViewer({
     }
   }
 
-  function pointFromEvent(event: { clientX: number; clientY: number }) {
+  function pointFromEvent(event: { clientX: number; clientY: number }): Point | null {
     const image = imageRef.current;
     if (!image) return null;
     const rect = image.getBoundingClientRect();
@@ -384,26 +283,16 @@ export function MriSliceViewer({
     };
   }
 
-  function createLandmarkDraft(event: { clientX: number; clientY: number }) {
-    if (!landmarkAddMode || !canEditLandmarks) return;
+  function createLandmark(event: { clientX: number; clientY: number }) {
+    if (!addMode || !canEditLandmarks) return;
     const point = pointFromEvent(event);
     if (!point) return;
-    const landmark: StudyLandmark = {
-      id: `reviewer-landmark-${Date.now()}`,
-      label: `R${realLandmarks.length + 1}`,
-      seriesId,
-      sliceIndex: seriesSelectedSlice,
-      x: point.x,
-      y: point.y,
-      editable: true,
-    };
-    onLandmarkDraftChange?.(landmark, `Landmark ${landmark.label} agregado por revisor en ${coordinateSpace}`);
-    onSelectLandmark(landmark.id);
+    onAddLandmark?.(point);
     onLandmarkAddComplete?.();
   }
 
   return (
-    <div className={`mri-viewer real-asset-viewer ${variant}`}>
+    <div className={`mri-viewer real-asset-viewer ${model.plane}`}>
       <div className="viewer-caption">
         <div>
           <strong>{seriesName}</strong>
@@ -413,7 +302,7 @@ export function MriSliceViewer({
           <em>PNG servido único</em>
           <em>W/L aprox. {Math.round(contrast)} / {Math.round(brightness)}</em>
           <em>Zoom {formatZoomPercent(zoom, fitZoom)}</em>
-          {coordinateSpace && <em>{coordinateSpace}</em>}
+          {model.coordinateSpace && <em>{model.coordinateSpace}</em>}
         </div>
       </div>
 
@@ -455,7 +344,7 @@ export function MriSliceViewer({
       <div className="segmentation-legend-panel">
         <strong>Leyenda de segmentación</strong>
         <div className="segmentation-legend-list">
-          {maskGroups.length ? maskGroups.map((group) => (
+          {groups.length ? groups.map((group) => (
             <label className="segmentation-class-control" key={group.id} title={`Control por clase pendiente de assets separados. Clase tecnica: ${group.technicalName}`}>
               <input checked disabled type="checkbox" />
               <span className="mask-swatch" style={{ background: group.color }} />
@@ -469,7 +358,7 @@ export function MriSliceViewer({
       <p className="viewer-limit-note">W/L es un filtro aproximado de brillo/contraste sobre un PNG de 8 bits. El ventaneo DICOM y la navegacion multicorte requieren AI-009.</p>
 
       <div
-        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"} ${landmarkAddMode ? "landmark-add-mode" : ""}`}
+        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"} ${addMode ? "landmark-add-mode" : ""}`}
         onPointerCancel={handlePointerUp}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -491,23 +380,23 @@ export function MriSliceViewer({
             {overlayVisible && overlayLoaded && overlayAsset.url && (
               <img alt={`${seriesName} recurso de superposicion IA`} className="mri-overlay-img" draggable={false} src={overlayAsset.url} style={{ opacity: overlayAlpha, transform: "translateZ(0)" }} />
             )}
-            {landmarksVisible && landmarkEntries.map(({ landmark, key }) => {
-              const displayLabel = displayLandmarkLabel(landmarkLabelKey(landmark));
-              const selected = selectedLandmark === key;
+            {landmarksVisible && landmarks.map((landmark) => {
+              const displayLabel = displayLandmarkLabel(landmark.labelKey);
+              const selected = selectedLandmarkId === landmark.id;
               return (
                 <button
                   aria-label={`Punto de referencia ${displayLabel}`}
                   className={`asset-landmark ${selected ? "selected" : ""}`}
-                  key={key}
+                  key={landmark.id}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onSelectLandmark(key);
+                    onSelectLandmark(landmark.id);
                   }}
                   onPointerDown={(event) => {
                     event.stopPropagation();
-                    onSelectLandmark(key);
-                    if (!landmarkEditMode || !canEditLandmarks || event.button !== 0) return;
-                    landmarkDragRef.current = key;
+                    onSelectLandmark(landmark.id);
+                    if (!canEditLandmarks || event.button !== 0) return;
+                    landmarkDragRef.current = landmark.id;
                     event.currentTarget.setPointerCapture(event.pointerId);
                   }}
                   style={{ left: `${pointPercent(landmark.x)}%`, top: `${pointPercent(landmark.y)}%` }}
@@ -530,12 +419,12 @@ export function MriSliceViewer({
       <div className="viewer-footer real-viewer-footer">
         <span>{overlayLoaded ? "overlay.png disponible" : overlayState === "failed" ? "overlay.png no disponible" : "superposición pendiente"}</span>
         <span>{overlayVisible && overlayLoaded ? `${Math.round(overlayAlpha * 100)}% opacidad` : "Segmentación IA deshabilitada si falta el recurso"}</span>
-        <span>{landmarksVisible ? `${realLandmarks.length} puntos visibles` : "Puntos de referencia ocultos"}</span>
-        <span>{landmarkEditMode && canEditLandmarks ? "Edicion de landmarks del revisor" : "Corte unico servido"}</span>
+        <span>{landmarksVisible ? `${landmarks.length} puntos visibles` : "Puntos de referencia ocultos"}</span>
+        <span>{!readonly && canEditLandmarks ? "Edicion de landmarks del revisor" : "Corte unico servido"}</span>
       </div>
       {overlayState === "failed" && <div className="panel-hidden-placeholder">overlay.png no disponible desde backend. Se muestra input.png sin superposición simulada.</div>}
-      {!coordinateSpace && <div className="panel-hidden-placeholder">Espacio de coordenadas no informado por backend; mover/agregar landmarks queda deshabilitado para no inventar model_256/original.</div>}
-      {coordinateSpace && landmarkEditMode && <div className="panel-hidden-placeholder">Correcciones de landmarks en borrador local no persistido. Pendiente BE-008/FE-010 + AI-011.</div>}
+      {!model.coordinateSpace && <div className="panel-hidden-placeholder">Espacio de coordenadas no informado por backend; mover/agregar landmarks queda deshabilitado para no inventar model_256/original.</div>}
+      {model.coordinateSpace && !readonly && <div className="panel-hidden-placeholder">Correcciones de landmarks en borrador local no persistido. Pendiente BE-008/FE-010 + AI-011.</div>}
     </div>
   );
 }

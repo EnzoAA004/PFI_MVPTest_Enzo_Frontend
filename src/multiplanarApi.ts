@@ -4,7 +4,7 @@ import { parseMultiplanarRunResponse } from "./adapters/multiplanarRunAdapter";
 import type { CanonicalMultiplanarRun } from "./contracts/canonicalMultiplanarRun";
 import type { InputResponse } from "./contracts/inputApiTypes";
 import type { RunReviewRequest, RunReviewResponse } from "./contracts/reviewApiTypes";
-import type { AssetName, DiagnosticEndpointResponse, MultiplanarRunPayload } from "./multiplanarRunTypes";
+import type { AssetName, DiagnosticEndpointResponse, MultiplanarRunPayload } from "./contracts/multiplanarHttpTypes";
 import type { MultiplanarContract } from "./multiplanarTypes";
 import type { Plane } from "./appTypes";
 

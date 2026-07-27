@@ -1,6 +1,6 @@
 import { API_BASE_URL } from "./api";
 import { normalizeAiAssetUrl } from "./inferenceReadiness";
-import type { AssetName } from "./multiplanarRunTypes";
+import type { AssetName } from "./contracts/multiplanarHttpTypes";
 import type { AiRunResponse, Measurement, PersistedArtifact, PersistedStudyRun, Plane, PlaneRunId, ReviewStatus, ReviewableRun, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow } from "./appTypes";
 
 export type ContractIssue = {

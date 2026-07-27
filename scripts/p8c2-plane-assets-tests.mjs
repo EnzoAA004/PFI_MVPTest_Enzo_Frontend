@@ -120,18 +120,28 @@ test("H StudyReviewView no selecciona selectedDetail.runs[0]", () => {
 
 test("I StudyReviewView pasa planeRunId al visor", () => {
   const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
-  assert.match(source, /planeRunId=\{activeWorkspace\.planeRunId/);
+  // P9-C.4: planeRunId ya no se pasa como prop JSX directa a MriSliceViewer;
+  // fluye a traves de studyRunToMriViewerModel({ planeRunId, ... }) hacia
+  // MriViewerModel.planeRunId.
+  assert.match(source, /planeRunId:\s*activeWorkspace\.planeRunId/);
 });
 
 test("J MriSliceViewer no expone prop runId para assets", () => {
-  const source = readFileSync(join(root, "src/components/MriSliceViewer.tsx"), "utf8");
-  assert.equal(/runId\?: string/.test(source), false);
-  assert.match(source, /planeRunId\?: string/);
+  // P9-C.4: MriSliceViewer es un componente de presentacion puro; ya no
+  // recibe planeRunId como prop propia (llega dentro de model: MriViewerModel).
+  const viewerSource = readFileSync(join(root, "src/components/MriSliceViewer.tsx"), "utf8");
+  assert.equal(/runId\?: string/.test(viewerSource), false);
+  assert.equal(/planeRunId\?: string/.test(viewerSource), false);
+  const modelSource = readFileSync(join(root, "src/viewModels/mriViewerViewModel.ts"), "utf8");
+  assert.match(modelSource, /planeRunId\?: string/);
 });
 
-test("K MriSliceViewer construye fallback solo con planeRunId", () => {
-  const source = readFileSync(join(root, "src/components/MriSliceViewer.tsx"), "utf8");
-  assert.match(source, /aiAssetUrl\(planeRunId, plane, "input\.png"\)/);
+test("K el adapter del visor construye fallback solo con planeRunId", () => {
+  // P9-C.4: la resolucion de URLs de assets (incluido el fallback via
+  // aiAssetUrl) se concentra en src/viewModels/mriViewerViewModel.ts, no en
+  // el componente de presentacion.
+  const source = readFileSync(join(root, "src/viewModels/mriViewerViewModel.ts"), "utf8");
+  assert.match(source, /aiAssetUrl\(planeRunId, plane, assetName\)/);
   assert.doesNotMatch(source, /aiAssetUrl\(runId/);
 });
 

@@ -5,11 +5,12 @@ import type { Measurement, Plane } from "../appTypes";
 import type { CanonicalAssetName, CanonicalMultiplanarRun, CanonicalPlaneRun } from "../contracts/canonicalMultiplanarRun";
 import type { InputResponse } from "../contracts/inputApiTypes";
 import type { RunReviewStatus } from "../contracts/reviewApiTypes";
-import type { MultiplanarRunPayload } from "../multiplanarRunTypes";
+import type { MultiplanarRunPayload } from "../contracts/multiplanarHttpTypes";
 import type { MultiplanarContract } from "../multiplanarTypes";
 import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, evaluateSagittalReviewReadiness, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveReviewWorkspaceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
-import { getPlane, getPlaneAssets, getPlaneLandmarks, getPlaneMasks, getPlaneMeasurements, getPlaneSeries } from "../selectors/canonicalRunSelectors";
+import { getPlane, getPlaneMasks, getPlaneMeasurements } from "../selectors/canonicalRunSelectors";
 import { canonicalMeasurementToViewMeasurement } from "../viewModels/measurementViewModel";
+import { canonicalPlaneToMriViewerModel } from "../viewModels/mriViewerViewModel";
 import { AgentSummary } from "./AgentSummary";
 import { MeasurementsPanel } from "./MeasurementsPanel";
 import { MriSliceViewer } from "./MriSliceViewer";
@@ -202,7 +203,13 @@ function AssetProvenancePanel({ run }: { run: CanonicalMultiplanarRun | null }) 
   );
 }
 
-export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }) {
+export type AnalysisTimelineViewProps = {
+  reviewerName?: string;
+  onViewSavedStudy?: (caseId: string) => void | Promise<void>;
+  onBackToStudies?: () => void;
+};
+
+export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToStudies }: AnalysisTimelineViewProps) {
   const [activeStep, setActiveStep] = useState<Step>(1);
   const [caseId, setCaseId] = useState("");
   const [studyMetadata, setStudyMetadata] = useState<StudyMetadataDraft>(() => emptyStudyMetadataDraft());
@@ -222,6 +229,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const [evaluationVisited, setEvaluationVisited] = useState(false);
   const [selectedSagittalLandmark, setSelectedSagittalLandmark] = useState("");
   const [sagittalOverlayAvailable, setSagittalOverlayAvailable] = useState(false);
+  const [navigatingToSavedStudy, setNavigatingToSavedStudy] = useState(false);
   const runInFlightRef = useRef(false);
 
   const normalizedCaseId = caseId.trim();
@@ -236,9 +244,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const workspaceMode = resolveReviewWorkspaceMode(run);
   const sagittalRows = getPlaneMeasurements(run, "sagittal");
   const sagittalMasks = getPlaneMasks(run, "sagittal");
-  const sagittalLandmarks = getPlaneLandmarks(run, "sagittal");
-  const sagittalSeries = getPlaneSeries(run, "sagittal");
-  const sagittalAssets = getPlaneAssets(run, "sagittal");
+  const sagittalViewerModel = useMemo(() => (sagittalPlaneRun ? canonicalPlaneToMriViewerModel(sagittalPlaneRun) : null), [sagittalPlaneRun]);
   const sagittalMetadata = readSpiderRuntimeMetadata(sagittalPlaneRun);
   const sagittalArtifactHash = sagittalPlaneRun?.model.artifactHash;
   const foregroundConfidence = percentLabel(sagittalForegroundConfidence(run));
@@ -396,6 +402,20 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
       setMessage(apiErrorMessage(error, "guardar revisión"));
     } finally {
       setSavingReview(false);
+    }
+  }
+
+  async function viewSavedStudy() {
+    if (!onViewSavedStudy || !run?.caseId) return;
+    setNavigatingToSavedStudy(true);
+    try {
+      await onViewSavedStudy(run.caseId);
+    } catch (error) {
+      // La revisión ya fue guardada (reviewSaved permanece true); solo falló
+      // la navegación posterior. No se reintenta el guardado automáticamente.
+      setMessage(apiErrorMessage(error, "abrir el estudio guardado"));
+    } finally {
+      setNavigatingToSavedStudy(false);
     }
   }
 
@@ -589,22 +609,17 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
               <h2>Visor sagital real</h2>
               <StatusBadge tone={sagittalOverlayAvailable ? "green" : "amber"}>{sagittalOverlayAvailable ? "superposición real disponible" : "superposición no disponible"}</StatusBadge>
             </div>
-            <MriSliceViewer
-              variant="sagittal"
-              planeRunId={sagittalPlaneRun?.planeRunId}
-              series={sagittalSeries[0]}
-              masks={sagittalMasks}
-              assets={sagittalAssets}
-              landmarks={sagittalLandmarks}
-              maskVisibility={{}}
-              overlayEnabled
-              overlayOpacity={0.65}
-              editMode={false}
-              selectedLandmark={selectedSagittalLandmark}
-              onSelectMask={() => undefined}
-              onSelectLandmark={setSelectedSagittalLandmark}
-              onOverlayAvailableChange={setSagittalOverlayAvailable}
-            />
+            {sagittalViewerModel && (
+              <MriSliceViewer
+                model={sagittalViewerModel}
+                selectedLandmarkId={selectedSagittalLandmark}
+                onSelectLandmark={setSelectedSagittalLandmark}
+                readonly
+                overlayEnabled
+                overlayOpacity={0.65}
+                onOverlayAvailableChange={setSagittalOverlayAvailable}
+              />
+            )}
           </section>
           <div className="span-all">
             <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(sagittalPlaneRun) ?? resolveWorkspaceInferenceMode(run)} description="Mediciones devueltas por inferencia sagital real. Editables como borrador del revisor." onChange={updateMeasurements} />
@@ -639,7 +654,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           <div className="settings-form-grid">
             <label>
               <span>Estado de revisión</span>
-              <select value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as RunReviewStatus)}>
+              <select value={reviewStatus} onChange={(event) => { setReviewStatus(event.target.value as RunReviewStatus); setReviewSaved(false); }}>
                 {reviewStatuses.map((status) => <option key={status} value={status}>{reviewStatusLabel(status)}</option>)}
               </select>
             </label>
@@ -650,7 +665,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           </div>
           <label className="analysis-notes">
             <span>Notas / comentarios profesionales</span>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={5} placeholder="Editar el preinforme, justificar observaciones o registrar comentarios." />
+            <textarea value={notes} onChange={(event) => { setNotes(event.target.value); setReviewSaved(false); }} rows={5} placeholder="Editar el preinforme, justificar observaciones o registrar comentarios." />
           </label>
           <div className="analysis-actions">
             <button className="ghost-button" onClick={() => setActiveStep(3)} type="button">Volver a evaluación</button>
@@ -662,6 +677,12 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           {reviewSaved && (
             <div className="analysis-actions">
               <button className="ghost-button" onClick={() => setActiveStep(3)} type="button">Volver a evaluación</button>
+              {onViewSavedStudy && (
+                <button className="ghost-button" disabled={navigatingToSavedStudy || !run?.caseId} onClick={() => void viewSavedStudy()} type="button">
+                  {navigatingToSavedStudy ? "Abriendo..." : "Ver estudio guardado"}
+                </button>
+              )}
+              {onBackToStudies && <button className="ghost-button" onClick={onBackToStudies} type="button">Volver a estudios</button>}
               <button className="ghost-button" onClick={startNewAnalysis} type="button">Iniciar nuevo análisis</button>
             </div>
           )}

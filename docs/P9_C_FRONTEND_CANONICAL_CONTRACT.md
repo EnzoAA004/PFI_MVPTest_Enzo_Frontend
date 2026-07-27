@@ -475,3 +475,186 @@ P9-C puede darse por cerrado cuando:
    `StudyReviewView.tsx` fue migrado o retirado (pendiente, P9-C.4+).
 4. Los 5 scripts `p9c*-*.mjs` sigan en verde en `npm test` sin ninguna rama
    condicional por `schemaVersion` fuera de `multiplanarRunAdapter.ts`.
+
+## 11. P9-C.4 — Cierre definitivo de la migración canónica
+
+Commit base de P9-C.4: `0cf4cda3755067097a447ec1365ff2bf4b61c125`.
+
+### 11.1 Modelo visual independiente: `MriViewerModel`
+
+`MriSliceViewer.tsx` dejó de aceptar la unión `ViewerSeries | ViewerMask |
+ViewerLandmark` (`CanonicalPlane* | Study*`) introducida como paso
+intermedio en P9-C.3. Ahora su única prop de dominio es:
+
+```ts
+model: MriViewerModel
+```
+
+definido en `src/viewModels/mriViewerViewModel.ts` — un tipo puramente
+visual (`MriViewerSeries`, `MriViewerMask`, `MriViewerLandmark`,
+`MriViewerAsset`, `MriViewerCoordinateSpace`) que contiene exclusivamente
+los campos que el componente efectivamente renderiza. `MriSliceViewer` ya
+no importa `CanonicalPlaneRun`, `StudySeries`, `StudyMask` ni
+`StudyLandmark`, no contiene `any`, y no tiene helpers de *narrowing* entre
+dominios (`stringField`/`hasField` fueron eliminados junto con la unión).
+
+Dos adapters puros, cada uno concentrando la compatibilidad de **un solo**
+dominio de origen, producen ese modelo:
+
+- `canonicalPlaneToMriViewerModel(plane: CanonicalPlaneRun)` — dominio
+  canónico multiplanar (`AnalysisTimelineView.tsx`, vía `useMemo`). Mapea
+  `plane.series`, `plane.masks`, `plane.landmarks`, `plane.assets`,
+  `plane.coordinateSpace`, `plane.input.selectedSliceIndex`,
+  `plane.input.sliceCount` directamente. No interpreta `schemaVersion` (esa
+  interpretación ya sucedió en `multiplanarRunAdapter.ts` antes de llegar
+  acá). No traduce `labelKey`.
+- `studyRunToMriViewerModel(input)` — dominio del pipeline de plano único
+  anterior (`StudyReviewView.tsx`). Solo acepta
+  `StudySeries`/`StudyMask`/`StudyLandmark`, nunca `AiRunResponse` completo
+  ni finge que es `CanonicalMultiplanarRun`. Toda la compatibilidad de ese
+  dominio con el visor compartido queda concentrada acá.
+
+Ninguna de las dos funciones tiene condicionales estructurales ambiguos
+mezclando ambos dominios: son dos funciones separadas, cada una tipada
+exclusivamente con los tipos de su propio dominio de entrada.
+
+### 11.2 Eliminación de las uniones de dominio
+
+`ViewerSeries`, `ViewerMask`, `ViewerLandmark` (y sus helpers
+`landmarkLabelKey`/`landmarkKeyOf`/`maskGroupName`/`maskLabel` internos a
+`MriSliceViewer.tsx`) fueron eliminados por completo. La resolución de
+identidad de landmarks (`id` real → `labelKey` → sintético estable) y el
+agrupamiento de máscaras (`groupNameForLabel`, sin mapear `raw_*` axial a
+anatomía) ahora viven exclusivamente en `mriViewerViewModel.ts`, ejecutados
+una vez por el adapter — no recalculados en cada render dentro del
+componente de presentación.
+
+Los landmarks agregados por el revisor en `StudyReviewView.tsx` conservan
+su `id` existente al pasar por `studyRunToMriViewerModel`; el componente ya
+no genera identificadores nuevos en el camino de renderizado.
+
+### 11.3 Renombrado de tipos HTTP multiplanares
+
+`src/multiplanarRunTypes.ts` fue eliminado. `src/contracts/multiplanarHttpTypes.ts`
+lo reemplaza, con `AssetName`, `DiagnosticEndpointResponse`,
+`MultiplanarRunRequest` y `MultiplanarRunPayload`. Auditoría de
+`LegacyMultiplanarRunRequest` (la variante con `sagittalInputPath`/
+`axialInputPath`): **cero consumidores reales** en todo el árbol (`grep`
+confirmado antes de eliminar) — se retiró por completo y
+`MultiplanarRunPayload = MultiplanarRunRequest` directamente. El frontend
+opera exclusivamente con `inputId` (devuelto por `POST /api/ai/inputs`);
+nunca con rutas de archivo locales.
+
+### 11.4 Navegación segura post-guardado
+
+`AnalysisTimelineViewProps` se amplió:
+
+```ts
+type AnalysisTimelineViewProps = {
+  reviewerName?: string;
+  onViewSavedStudy?: (caseId: string) => void | Promise<void>;
+  onBackToStudies?: () => void;
+};
+```
+
+Cuando `reviewSaved === true`, el paso 4 muestra un bloque de acciones
+secundarias: "Volver a evaluación" (siempre), "Ver estudio guardado" (solo
+si `onViewSavedStudy` fue provisto), "Volver a estudios" (solo si
+`onBackToStudies` fue provisto) e "Iniciar nuevo análisis" (siempre). Nunca
+hay redirección automática, `window.location.href`,
+`window.location.reload()` ni URLs hardcodeadas — verificado en
+`scripts/p9c4-canonical-closure-tests.mjs` (D1).
+
+`App.tsx` implementa `handleViewSavedAnalysis(caseId)`: llama
+`refreshStudiesFromPostgres()`, busca el estudio en el `response.items`
+**recién devuelto** por ese refresh (nunca en un estado de React
+potencialmente desactualizado), y si lo encuentra abre la revisión con
+`handleOpenReview(study)`; si todavía no aparece en la lista, muestra un
+mensaje honesto y navega a "studies" sin fingir que la revisión falló (la
+revisión sí se guardó — `reviewSaved` no se toca).
+
+`viewSavedStudy()` en `AnalysisTimelineView.tsx` usa siempre `run.caseId`
+(el `caseId` de la corrida canónica ya persistida), nunca el contenido del
+campo editable `caseId` del formulario del paso 1 (que pudo haber sido
+modificado o vaciado sin afectar la corrida ya guardada).
+
+Modificar una medición, el estado de revisión o las notas **después** de
+guardar vuelve a poner `reviewSaved = false`, ocultando las acciones de
+"estudio guardado" hasta la próxima persistencia exitosa — evita mostrar
+esas acciones cuando hay cambios locales todavía no enviados al backend.
+
+Si `onViewSavedStudy` falla (por ejemplo, error de red al refrescar
+estudios), el `catch` en `viewSavedStudy()` solo llama `setMessage(...)`
+con un mensaje honesto; no toca `run`, `measurements` ni `reviewSaved`
+(que permanece `true`, porque la revisión sí se guardó — solo falló la
+navegación posterior) y no reintenta el guardado automáticamente.
+
+### 11.5 E2E de cierre
+
+- `scripts/p9c4-canonical-closure-tests.mjs` (`npm run test:p9c4-closure`,
+  incluido en `npm test`): 24 pruebas estructurales y funcionales —
+  ausencia de tipos legacy/uniones/`any` en `MriSliceViewer.tsx`, modelo
+  canónico → visor (1 serie, 3 máscaras, 3 landmarks, assets, `labelKey`
+  estable), pipeline anterior → visor (landmark de revisor conserva
+  identidad), seguridad de assets (incluida la frontera real del adapter
+  HTTP para `trycloudflare.com`/`localhost`/`/tmp`/`/app`/rutas Windows),
+  post-guardado (sin navegación automática, `reviewSaved` se resetea al
+  editar, callback ausente oculta el botón), e independencia de
+  `schemaVersion` (fixtures v1 y v2 producen el mismo camino de código).
+- `scripts/playwright-p9c-e2e.mjs` (`npm run test:e2e:p9c`, **no** incluido
+  en `npm test` — requiere Chromium y sirve `dist/`, igual que
+  `test:e2e:contract`): E2E de navegador real con backend íntegramente
+  mockeado (sin túnel Cloudflare, sin datos personales, determinístico).
+  Cubre login → nuevo análisis → carga sagital → corrida canónica v2 → 9
+  mediciones → edición → guardar como observado → permanencia en paso 4 →
+  "Ver estudio guardado" → reapertura de la revisión persistida →
+  conservación de before/after → ausencia de `ContractError` y de errores
+  de JavaScript en consola.
+
+### 11.6 Compatibilidad histórica v1
+
+Sin cambios de comportamiento: `parseMultiplanarRunResponse()` sigue siendo
+el único lugar que distingue v1 de v2 (vía `schemaVersion`). Una vez que
+produce `CanonicalMultiplanarRun`, todo lo demás —`inferenceReadiness.ts`,
+los selectores, los view models (`measurementViewModel.ts`,
+`mriViewerViewModel.ts`) y los componentes— es ciego a la versión del
+contrato. Un estudio v1 sin `synthetic`/`degradedMode` informado se
+renderiza (mediciones, imagen, landmarks) pero `evaluateSagittalReviewReadiness`
+lo mantiene no evaluable con motivos explícitos, tal como exige la sección
+14 de este documento desde P9-C.2.
+
+### 11.7 Estado final de la deuda legacy
+
+| Elemento | Estado |
+| --- | --- |
+| `MultiplanarRunResponse`/`MultiplanarPlaneRun`/`MultiplanarMeasurementValue` | Eliminados (P9-C.3) |
+| `canonicalRunToLegacyViewModel` | Eliminado (P9-C.3) |
+| `ViewerSeries`/`ViewerMask`/`ViewerLandmark` | Eliminados (P9-C.4) |
+| `src/multiplanarRunTypes.ts` | Eliminado; reemplazado por `src/contracts/multiplanarHttpTypes.ts` (P9-C.4) |
+| `LegacyMultiplanarRunRequest` | Eliminado, sin consumidores reales (P9-C.4) |
+| Navegación post-guardado | Implementada con callbacks explícitos opcionales (P9-C.4) |
+| `MriSliceViewer.tsx` compartido con `StudyReviewView.tsx` | **Deuda intencional restante**: dos adapters (`canonicalPlaneToMriViewerModel` / `studyRunToMriViewerModel`) alimentan el mismo `MriViewerModel`; el componente de presentación ya no conoce ningún dominio de origen. Retirar el pipeline de plano único (`StudyReviewView.tsx`, `AiRunResponse`) queda fuera del alcance de P9-C — es un endpoint/flujo distinto (`/api/ai/pipeline/run`, `/api/studies/{caseId}`) que P9-C nunca tuvo mandato de migrar. |
+| `AgentSummary`/`Header.tsx`/`StudyReviewView.tsx` usando `aiOutput`/`modelArtifact` de `AiRunResponse` | Intencionalmente sin tocar: DTO HTTP legítimo de un endpoint distinto al corredor multiplanar (ver auditoría 10.1). |
+
+### 11.8 Criterio de cierre cumplido
+
+Los cuatro criterios de la sección 10.10 quedan satisfechos:
+
+1. Ningún componente importa tipos de corrida legacy — confirmado
+   estructuralmente (`p9c4-canonical-closure-tests.mjs`), y el archivo que
+   los contenía ya no existe.
+2. `canonicalRunToLegacyViewModel` no existe en ningún archivo de `src/`.
+3. `MriSliceViewer.tsx` ya no necesita la unión `Viewer*`: recibe
+   `MriViewerModel` puro; `StudyReviewView.tsx` sigue existiendo (fuera de
+   alcance retirarlo) pero ya no exporta su forma interna al visor
+   compartido — la traduce explícitamente vía `studyRunToMriViewerModel`.
+4. Los 6 scripts `p9c*-*.mjs` (`p9c1`…`p9c4`) están en verde en `npm test`,
+   sin ninguna rama condicional por `schemaVersion` fuera de
+   `multiplanarRunAdapter.ts` (verificado explícitamente por el test
+   estructural correspondiente en P9-C.4).
+
+P9-C se da por cerrado. Trabajo futuro (retirar `StudyReviewView.tsx` /
+migrar el pipeline de plano único a un contrato canónico propio, agregar
+"Ver estudio guardado" con datos 100% fieles al reabrir vía
+`/api/studies/{caseId}`) queda fuera de este alcance y no bloquea el
+cierre — ver `docs/P9_C_FINAL_EVIDENCE.md` para limitaciones registradas.

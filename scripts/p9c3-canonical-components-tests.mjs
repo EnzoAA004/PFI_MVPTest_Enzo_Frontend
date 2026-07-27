@@ -92,11 +92,33 @@ exports.canonicalMeasurementToViewMeasurement = canonicalMeasurementToViewMeasur
   return sandbox.exports;
 }
 
+function loadMriViewerViewModel() {
+  const js = transpile("src/viewModels/mriViewerViewModel.ts");
+  const sandbox = {
+    exports: {},
+    console,
+    API_BASE_URL: "https://backend.example",
+    normalizeAiAssetUrl: (value, apiBaseUrl = "") => {
+      const url = typeof value === "string" ? value.trim() : undefined;
+      if (!url || url.includes("mask.npy") || url.includes("confidence.npy")) return undefined;
+      if (/^https?:\/\//i.test(url)) return url;
+      if (url.startsWith("/api/")) return `${apiBaseUrl}${url}`;
+      return undefined;
+    },
+    aiAssetUrl: (planeRunId, plane, assetName) => `/api/ai/assets/${planeRunId}/${plane}/${assetName}`,
+  };
+  vm.runInNewContext(`${js}
+exports.canonicalPlaneToMriViewerModel = canonicalPlaneToMriViewerModel;
+exports.studyRunToMriViewerModel = studyRunToMriViewerModel;`, sandbox);
+  return sandbox.exports;
+}
+
 const adapter = loadAdapter();
 const fixtures = loadFixtures();
 const display = loadClinicalDisplay();
 const readiness = loadInferenceReadiness();
 const measurementViewModel = loadMeasurementViewModel();
+const mriViewerViewModel = loadMriViewerViewModel();
 const mriSliceViewer = loadComponentModule("src/components/MriSliceViewer.tsx");
 const analysisTimelineView = loadComponentModule("src/components/AnalysisTimelineView.tsx");
 
@@ -154,27 +176,36 @@ test("A4 sagittalLandmarksForViewer no existe en ningun archivo de src", () => {
 
 // B. MriSliceViewer
 test("B1 props de series/masks/landmarks/assets no usan any", () => {
+  // P9-C.3 introdujo la union ViewerSeries/ViewerMask/ViewerLandmark como
+  // paso intermedio; P9-C.4 la retira por completo a favor de un unico
+  // MriViewerModel puro (ver scripts/p9c4-canonical-closure-tests.mjs).
   const source = readSource("src/components/MriSliceViewer.tsx");
   assert.ok(!/series\?:\s*any/.test(source));
   assert.ok(!/masks\?:\s*any/.test(source));
   assert.ok(!/landmarks\?:\s*any/.test(source));
   assert.ok(!/assets\?:\s*any/.test(source));
-  assert.ok(source.includes("ViewerSeries"));
-  assert.ok(source.includes("ViewerMask"));
-  assert.ok(source.includes("ViewerLandmark"));
-  assert.ok(source.includes("CanonicalPlaneAsset"));
+  assert.ok(!source.includes("CanonicalPlaneSeriesItem | StudySeries"));
+  assert.ok(!source.includes("CanonicalPlaneMask | StudyMask"));
+  assert.ok(!source.includes("CanonicalLandmark | StudyLandmark"));
+  assert.ok(source.includes("MriViewerModel"));
 });
 
-test("B2 landmarks con labelKey se renderizan sin necesitar label", () => {
-  assert.equal(mriSliceViewer.landmarkLabelKey({ id: "lm-1", labelKey: "canal_centroid", x: 1, y: 2 }), "canal_centroid");
-  assert.equal(mriSliceViewer.landmarkLabelKey({ id: "lm-2", label: "R1", x: 1, y: 2, seriesId: "s", sliceIndex: 1 }), "R1");
-  assert.equal(mriSliceViewer.landmarkLabelKey({ id: "lm-3", x: 1, y: 2 }), undefined);
+test("B2 landmarks con labelKey se renderizan sin necesitar label (resuelto por el adapter, no por MriSliceViewer)", () => {
+  const plane = {
+    plane: "sagittal", planeRunId: "run-1", model: {}, input: {}, assets: [], masks: [],
+    landmarks: [{ id: "lm-1", labelKey: "canal_centroid", x: 1, y: 2 }],
+    measurements: [],
+  };
+  const model = mriViewerViewModel.canonicalPlaneToMriViewerModel(plane);
+  assert.equal(model.landmarks[0].labelKey, "canal_centroid");
+  assert.equal(model.landmarks[0].id, "lm-1");
 });
 
-test("B3 seleccion estable: id primero, labelKey como fallback controlado, nunca el indice cuando hay alternativa", () => {
-  assert.equal(mriSliceViewer.landmarkKeyOf({ id: "lm-1", labelKey: "canal_centroid" }, 5), "lm-1");
-  assert.equal(mriSliceViewer.landmarkKeyOf({ labelKey: "canal_centroid" }, 5), "canal_centroid");
-  assert.equal(mriSliceViewer.landmarkKeyOf({}, 5), "landmark-5");
+test("B3 seleccion estable: id real primero, labelKey como fallback controlado, nunca el indice cuando hay alternativa", () => {
+  const planeWithId = { plane: "sagittal", model: {}, input: {}, assets: [], masks: [], measurements: [], landmarks: [{ id: "lm-1", labelKey: "canal_centroid", x: 1, y: 2 }] };
+  assert.equal(mriViewerViewModel.canonicalPlaneToMriViewerModel(planeWithId).landmarks[0].id, "lm-1");
+  const planeWithoutId = { plane: "sagittal", model: {}, input: {}, assets: [], masks: [], measurements: [], landmarks: [{ labelKey: "canal_centroid", x: 1, y: 2 }] };
+  assert.equal(mriViewerViewModel.canonicalPlaneToMriViewerModel(planeWithoutId).landmarks[0].id, "canal_centroid");
 });
 
 test("B4 landmark desconocido se muestra de forma legible, no como fallback generico opaco", () => {
@@ -185,16 +216,18 @@ test("B4 landmark desconocido se muestra de forma legible, no como fallback gene
 });
 
 test("B5 no identifica raw_* axial como anatomia", () => {
-  assert.equal(mriSliceViewer.maskGroupName({ label: "raw_axial_segment" }), "raw_axial_segment");
-  assert.notEqual(mriSliceViewer.maskGroupName({ label: "raw_axial_segment" }), "Grupo vertebral");
-  assert.notEqual(mriSliceViewer.maskGroupName({ label: "raw_axial_segment" }), "Canal");
-  assert.notEqual(mriSliceViewer.maskGroupName({ label: "raw_axial_segment" }), "Grupo discal");
+  const plane = { plane: "axial", model: {}, input: {}, assets: [], landmarks: [], measurements: [], masks: [{ id: "m1", label: "raw_axial_segment" }] };
+  const model = mriViewerViewModel.canonicalPlaneToMriViewerModel(plane);
+  assert.equal(model.masks[0].groupName, "raw_axial_segment");
+  assert.notEqual(model.masks[0].groupName, "Grupo vertebral");
+  assert.notEqual(model.masks[0].groupName, "Canal");
+  assert.notEqual(model.masks[0].groupName, "Grupo discal");
 });
 
 test("B6 array vacio de landmarks/masks no rompe (defaults declarados en props)", () => {
   const source = readSource("src/components/MriSliceViewer.tsx");
-  assert.match(source, /masks = \[\]/);
-  assert.match(source, /landmarks = \[\]/);
+  assert.match(source, /model\.landmarks/);
+  assert.match(source, /model\.masks/);
 });
 
 // C. Mediciones

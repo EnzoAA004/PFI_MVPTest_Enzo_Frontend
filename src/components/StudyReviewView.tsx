@@ -7,6 +7,7 @@ import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyS
 import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { emptyStudyMetadataDraft, normalizeStudyMetadataInput, priorityToBackend, subjectRefErrorMessage, validateSubjectRef, type StudyMetadataDraft } from "../studyMetadata";
+import { studyRunToMriViewerModel } from "../viewModels/mriViewerViewModel";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
 import { MriSliceViewer } from "./MriSliceViewer";
@@ -331,6 +332,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const activeWorkspace = activePlano === "axial" ? axialWorkspace : sagittalWorkspace;
   const overlayAvailable = overlayAvailableByPlano[activePlano] === true;
   const activeCoordinateSpace = coordinateSpaceFrom(currentSeries, displayLandmarks);
+  const viewerModel = useMemo(
+    () => studyRunToMriViewerModel({
+      plane: activePlano,
+      planeRunId: activeWorkspace.planeRunId ?? undefined,
+      series: currentSeries ?? undefined,
+      masks,
+      landmarks: displayLandmarks,
+    }),
+    [activePlano, activeWorkspace.planeRunId, currentSeries, masks, displayLandmarks],
+  );
 
   const studyMeasurements: MeasurementRow[] = hasPipelineVisualContract && pipelineMeasurements.length
     ? pipelineMeasurements.map((item) => normalizeRow({ ...item, aiValue: item.aiValue ?? item.value, reviewerValue: item.reviewerValue ?? null, confidence: item.confidence ?? 0.72 }))
@@ -810,22 +821,30 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           ) : (
             <div className="viewer-stack compact-viewer-stack">
               <MriSliceViewer
-                variant={currentSeries?.plane === "axial" ? "axial" : "sagittal"}
-                series={currentSeries}
-                planeRunId={activeWorkspace.planeRunId ?? undefined}
-                masks={masks}
-                landmarks={displayLandmarks}
-                maskVisibility={maskVisibility}
-                selectedMask={selectedMask}
-                overlayEnabled
-                editMode={editMode}
-                selectedLandmark={selectedLandmark}
-                onSelectMask={setSelectedMask}
+                model={viewerModel}
+                selectedLandmarkId={selectedLandmark}
                 onSelectLandmark={setSelectedLandmark}
-                landmarkEditMode={editMode}
-                landmarkAddMode={landmarkAddMode}
-                onLandmarkDraftChange={updateLandmarkDraft}
+                readonly={!editMode}
+                addMode={landmarkAddMode}
+                onMoveLandmark={(landmarkId, point) => {
+                  const landmark = displayLandmarks.find((item) => item.id === landmarkId);
+                  if (!landmark) return;
+                  updateLandmarkDraft({ ...landmark, x: point.x, y: point.y, editable: true });
+                }}
+                onAddLandmark={(point) => {
+                  const landmark: StudyLandmark = {
+                    id: `reviewer-landmark-${Date.now()}`,
+                    label: `R${displayLandmarks.length + 1}`,
+                    seriesId: currentSeries?.id ?? `${activePlano}-asset`,
+                    sliceIndex: currentSeries?.selectedSlice ?? 1,
+                    x: point.x,
+                    y: point.y,
+                    editable: true,
+                  };
+                  updateLandmarkDraft(landmark);
+                }}
                 onLandmarkAddComplete={() => setLandmarkAddMode(false)}
+                overlayEnabled
                 onOverlayAvailableChange={(available) => setOverlayAvailableByPlano((current) => ({ ...current, [activePlano]: available }))}
               />
               <article className="panel-card compact-card legend-card">

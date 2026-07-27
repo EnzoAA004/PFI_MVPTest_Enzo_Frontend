@@ -384,6 +384,17 @@ function App() {
     recordAudit("medicion editada", detail);
   }
 
+  async function handleViewSavedAnalysis(caseId: string) {
+    const response = await refreshStudiesFromPostgres();
+    const study = response.items.find((item) => item.caseId === caseId);
+    if (!study) {
+      setInfo("La revisión fue guardada, pero el estudio todavía no aparece en la lista.");
+      changeView("studies");
+      return;
+    }
+    handleOpenReview(study);
+  }
+
   async function refreshStudiesFromPostgres() {
     const studyResponse = await getStudies();
     setStudiesBackendAvailable(studyResponse.status !== "demo");
@@ -491,7 +502,7 @@ function App() {
       {reviewSnapshotStatus === "error" && <div className="toast warning">No se pudo consultar el snapshot de revisión; no bloquea la lista de trabajo.</div>}
       {info && <div className="toast info">{info}</div>}
       {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando estudios" detail="Consultando estudios deidentificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={aiModuleStatus !== "error"} degradedMode={safeRun?.degradedMode ?? false} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
-      {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} />}
+      {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} onViewSavedStudy={handleViewSavedAnalysis} onBackToStudies={() => changeView("studies")} />}
       {activeView === "studies" && <StudiesView studies={realStudyRows} mode="all" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
       {activeView === "queue" && <StudiesView studies={realStudyRows} mode="queue" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
       {activeView === "review" && (reviewLoading ? <LoadingState title="Cargando corrida" detail={`Consultando corridas persistidas para ${selectedStudy?.caseId ?? "el estudio seleccionado"}.`} /> : contractIssue ? <ContractErrorState detail={`${contractIssue.message}${contractIssue.path ? ` (${contractIssue.path})` : ""}${contractIssue.traceId ? ` · trace ${contractIssue.traceId}` : ""}`} onBackToStudies={() => changeView(lastStudyNavView)} /> : reviewError ? <ContractErrorState detail={reviewError} onBackToStudies={() => changeView(lastStudyNavView)} /> : safeRun ? <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} onStudyMetadataUpdated={handleStudyMetadataUpdated} /> : <EmptyReviewState onBackToStudies={() => changeView(lastStudyNavView)} />)}
