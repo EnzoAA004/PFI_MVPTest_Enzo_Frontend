@@ -99,6 +99,8 @@ export type RawMeasurements = {
 export type Measurement = {
   id: string;
   label: string;
+  /** Canonical, untranslated identifier (CanonicalMeasurement.labelKey). Spanish text is resolved only at render time via displayMeasurementLabel(). */
+  labelKey?: string;
   level?: string;
   value: number | string;
   aiValue?: number | string;

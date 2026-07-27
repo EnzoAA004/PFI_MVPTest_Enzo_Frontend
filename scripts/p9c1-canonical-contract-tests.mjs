@@ -30,8 +30,7 @@ function loadAdapter() {
   const js = transpile("src/adapters/multiplanarRunAdapter.ts");
   const sandbox = { exports: {}, console, ContractError, MULTIPLANAR_CONTRACT_V2 };
   vm.runInNewContext(`${js}
-exports.parseMultiplanarRunResponse = parseMultiplanarRunResponse;
-exports.canonicalRunToLegacyViewModel = canonicalRunToLegacyViewModel;`, sandbox);
+exports.parseMultiplanarRunResponse = parseMultiplanarRunResponse;`, sandbox);
   return sandbox.exports;
 }
 
@@ -61,8 +60,10 @@ function loadInferenceReadiness() {
   const js = transpile("src/inferenceReadiness.ts");
   const sandbox = { exports: {}, console };
   vm.runInNewContext(`${js}
+exports.evaluateSagittalReadiness = evaluateSagittalReadiness;
 exports.evaluateSagittalReviewReadiness = evaluateSagittalReviewReadiness;
-exports.resolveReviewWorkspaceMode = resolveReviewWorkspaceMode;`, sandbox);
+exports.resolveReviewWorkspaceMode = resolveReviewWorkspaceMode;
+exports.isRealPlaneRun = isRealPlaneRun;`, sandbox);
   return sandbox.exports;
 }
 
@@ -195,8 +196,7 @@ test("J synthetic=true no puede aparecer como real disponible", () => {
   raw.planes.sagittal.synthetic = true;
   const canonical = adapter.parseMultiplanarRunResponse(raw);
   assert.equal(canonical.planes.sagittal.synthetic, true);
-  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
-  assert.equal(legacy.planes.sagittal.synthetic, true);
+  assert.equal(readiness.isRealPlaneRun(canonical.planes.sagittal), false);
 });
 
 test("K fallbackReason no se pierde", () => {
@@ -218,16 +218,14 @@ test("L rutas internas y assets privados no llegan al modelo publico", () => {
   assert.equal(canonical.planes.sagittal.assets.length, 2);
 });
 
-test("M conversion temporal al view model conserva las 9 mediciones", () => {
+test("M el modelo canonico conserva las 9 mediciones", () => {
   const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2Fixture);
-  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
-  assert.equal(legacy.planes.sagittal.measurements.length, 9);
+  assert.equal(canonical.planes.sagittal.measurements.length, 9);
 });
 
-test("N nombres espanoles siguen resolviendose mediante clinicalDisplay.ts", () => {
+test("N nombres espanoles siguen resolviendose mediante clinicalDisplay.ts a partir de labelKey canonica", () => {
   const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2Fixture);
-  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
-  const spanishLabels = legacy.planes.sagittal.measurements.map((m) => display.displayMeasurementLabel(m.label));
+  const spanishLabels = canonical.planes.sagittal.measurements.map((m) => display.displayMeasurementLabel(m.labelKey));
   assert.ok(spanishLabels.includes("Área del canal espinal"));
   assert.ok(spanishLabels.includes("Altura del grupo vertebral"));
   assert.equal(new Set(spanishLabels).size, 9);
@@ -255,26 +253,23 @@ test("P9-C.1.1 B respuesta v2 sin synthetic ni degradedMode en ninguna fuente la
   });
 });
 
-test("P9-C.1.1 C respuesta fallback conserva synthetic/fallbackReason y bloquea inferencia real en el legacy view model", () => {
+test("P9-C.1.1 C respuesta fallback conserva synthetic/fallbackReason y bloquea inferencia real", () => {
   const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2FallbackPresenterFixture);
   assert.equal(canonical.synthetic, true);
   assert.equal(canonical.planes.sagittal.synthetic, true);
   assert.equal(canonical.planes.sagittal.fallbackReason, "sagittal_model_unavailable_switched_to_synthetic");
   assert.equal(canonical.fallbackReason, "sagittal_model_unavailable_switched_to_synthetic");
+  assert.equal(canonical.degradedMode, true);
 
-  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
-  assert.equal(legacy.planes.sagittal.allowContractFallback, true);
-  assert.equal(legacy.planes.sagittal.aiOutput.realInferenceAvailable, false);
-  assert.equal(legacy.degradedMode, true);
+  assert.equal(readiness.isRealPlaneRun(canonical.planes.sagittal), false);
+  assert.equal(readiness.evaluateSagittalReviewReadiness(canonical).ready, false);
 });
 
-test("P9-C.1.1 D respuesta real_baseline limpia habilita allowContractFallback=false y realInferenceAvailable=true", () => {
+test("P9-C.1.1 D respuesta real_baseline limpia habilita isRealPlaneRun y evaluateSagittalReviewReadiness", () => {
   const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2PublicPresenterFixture);
-  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
-  assert.equal(legacy.planes.sagittal.allowContractFallback, false);
-  assert.equal(legacy.planes.sagittal.aiOutput.realInferenceAvailable, true);
-  assert.equal(legacy.degradedMode, false);
-  assert.equal(legacy.planes.sagittal.requestedInferenceMode, "real_baseline");
+  assert.equal(canonical.degradedMode, false);
+  assert.equal(readiness.isRealPlaneRun(canonical.planes.sagittal), true);
+  assert.equal(canonical.requestedInferenceMode, "real_baseline");
 });
 
 test("P9-C.1.1 E readiness integrado: presenter publico real habilita evaluateSagittalReviewReadiness (modelo canonico directo, P9-C.2)", () => {

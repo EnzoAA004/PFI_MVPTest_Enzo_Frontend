@@ -320,3 +320,158 @@ mapeo puntual puede eliminarse.
 
 Hasta entonces permanece exportada como compatibilidad temporal, tal como
 anticipa la sección 5.
+
+## 10. P9-C.3 — Componentes visuales canónicos y retiro de la conversión legacy
+
+Commit base de P9-C.3: `c88a18b81a5824a70aa2717b0b0aa2e1ac0a7b9f`.
+
+### 10.1 Auditoría estructural (resultado)
+
+| Símbolo | Consumidores fuera de `multiplanarRunTypes.ts` antes de P9-C.3 | Clasificación | Acción |
+| --- | --- | --- | --- |
+| `MultiplanarRunResponse` | solo `multiplanarRunAdapter.ts` (`canonicalRunToLegacyViewModel`) | D. Deuda legacy | Eliminado |
+| `MultiplanarPlaneRun` | solo `multiplanarRunAdapter.ts` | D. Deuda legacy | Eliminado |
+| `MultiplanarMeasurementValue` | ninguno | D. Deuda legacy | Eliminado |
+| `RuntimeStatus`, `MultiplanarLandmark`, `MultiplanarMeasurements`, `MultiplanarReview`, `WorkspaceAssetRefs`, `AssetRef`, `PlaneAssetRefs`, `ModelPoint`, `DiagnosticEndpointName`, `DiagnosticEndpointResult` | ninguno (solo se usaban entre sí o desde los tipos ya eliminados) | D. Deuda legacy | Eliminados |
+| `InputResponse` | `multiplanarApi.ts`, `AnalysisTimelineView.tsx` | A. DTO HTTP legítimo | Movido a `src/contracts/inputApiTypes.ts` |
+| `RunReviewStatus`, `RunReviewRequest`, `RunReviewResponse`, `ReviewMeasurementCorrection` | `multiplanarApi.ts`, `AnalysisTimelineView.tsx` | A. DTO HTTP legítimo | Movidos a `src/contracts/reviewApiTypes.ts` (`ReviewMeasurementCorrection` renombrado a `RunReviewCorrection`, con `labelKey` agregado) |
+| `AssetName`, `DiagnosticEndpointResponse`, `MultiplanarRunRequest`, `LegacyMultiplanarRunRequest`, `MultiplanarRunPayload` | `multiplanarApi.ts`, `appDataGuards.ts` | A. DTO HTTP legítimo | Se mantienen en `multiplanarRunTypes.ts` (el archivo ya no tipa *respuestas* de corrida, solo request/diagnóstico) |
+| `aiOutput` / `modelArtifact` en `StudyReviewView.tsx` / `Header.tsx` | — | A. DTO HTTP legítimo de **otro** pipeline (`AiRunResponse` de `appTypes.ts`, endpoint `/api/ai/pipeline/run`, fuera del alcance P9-C) | Sin cambios — no es deuda del corredor multiplanar |
+| `canonicalRunToLegacyViewModel`, `canonicalPlaneToLegacy`, `legacyAssetsFromCanonical` | ningún componente (confirmado por grep antes de eliminar) | D. Deuda legacy | Eliminados de `multiplanarRunAdapter.ts` |
+
+`StudyReviewView.tsx` y `Header.tsx` siguen usando `aiOutput`/`modelArtifact`
+porque pertenecen al flujo de revisión de plano único (`/api/ai/pipeline/run`,
+`studyApi.ts`), una superficie distinta y anterior a P9-C que nunca usó
+`MultiplanarRunResponse`/`CanonicalMultiplanarRun`. No se tocó: no es deuda
+del corredor multiplanar, es un DTO HTTP legítimo de otro endpoint.
+
+### 10.2 `MriSliceViewer.tsx` migrado, pero sigue siendo compartido
+
+`MriSliceViewer` es usado por **dos** flujos: `AnalysisTimelineView.tsx`
+(corredor canónico multiplanar) y `StudyReviewView.tsx` (flujo legacy de
+plano único, con sus propios tipos `StudySeries`/`StudyMask`/`StudyLandmark`
+de `appTypes.ts`). Como ambos consumidores son reales y ninguno está en
+alcance para desaparecer en P9-C.3, sus props se tipan como una unión
+explícita en vez de `any`:
+
+```ts
+export type ViewerSeries = CanonicalPlaneSeriesItem | StudySeries;
+export type ViewerMask = CanonicalPlaneMask | StudyMask;
+export type ViewerLandmark = CanonicalLandmark | StudyLandmark;
+```
+
+Helpers internos (`stringField`, `hasField`, `landmarkLabelKey`,
+`landmarkKeyOf`, `maskLabel`, `maskGroupName`) narrowean campo por campo en
+vez de castear a `any`. `landmark.labelKey` es el nombre lógico canónico;
+`landmark.label` sigue siendo válido únicamente para el `StudyLandmark`
+legacy que todavía produce `StudyReviewView.tsx` al agregar un landmark de
+revisor. El texto mostrado siempre pasa por `displayLandmarkLabel()`
+(`clinicalDisplay.ts`), que nunca se guarda en el estado — solo se calcula al
+renderizar.
+
+Se agregó un prop nuevo, `assets?: CanonicalPlaneAsset[]`, para que el
+corredor canónico declare sus assets sin depender de `series.assets` (un
+campo que solo existe en `StudySeries`). Esto es aditivo: no cambia el
+comportamiento de `StudyReviewView.tsx`, que no pasa ese prop.
+
+### 10.3 Selección estable de landmarks
+
+`AnalysisTimelineView.tsx` ya no transforma `labelKey → label`
+(`sagittalLandmarksForViewer()` fue eliminada). Pasa
+`run.planes.sagittal.landmarks` (`CanonicalLandmark[]`) directamente a
+`MriSliceViewer`. La identidad de selección/renderizado (`key`, comparación
+`selectedLandmark`, drag) se calcula dentro de `MriSliceViewer` vía
+`landmarkKeyOf(landmark, index)`: `landmark.id` primero, `labelKey` como
+fallback controlado, y solo como último recurso un identificador sintético
+`landmark-{index}` — nunca el índice como mecanismo primario de selección.
+
+### 10.4 Selectores y view models
+
+- `src/selectors/canonicalRunSelectors.ts`: `getSagittalPlane`,
+  `getAxialPlane`, `getPlane`, `getPlaneMeasurements`, `getPlaneLandmarks`,
+  `getPlaneSeries`, `getPlaneMasks`, `getPlaneAssets`, `getPublicAssetUrl`,
+  `getPlaneModelProvenance`, `getPlaneInputProvenance`. Puros, sin alias, sin
+  interpretar `schemaVersion`. `AnalysisTimelineView.tsx` los usa para
+  reemplazar accesos repetidos como `run?.planes?.sagittal` /
+  `run?.planes?.[plane]`.
+- `src/viewModels/measurementViewModel.ts`:
+  `canonicalMeasurementToViewMeasurement(measurement, plane, index)`. Mapea
+  `CanonicalMeasurement → Measurement` conservando `labelKey` como campo
+  explícito (nuevo campo opcional en `appTypes.Measurement`) además de
+  `label` (que sigue guardando la clave canónica sin traducir — la
+  traducción a español ocurre exclusivamente en `clinicalDisplay.ts` al
+  renderizar).
+
+### 10.5 Correcciones de revisor con identidad estable
+
+`reviewCorrectionsFrom()` en `AnalysisTimelineView.tsx` ahora envía
+`measurementId` (id canónico) y `labelKey` (clave canónica) en cada
+corrección. El campo `label` del DTO legacy (`RunReviewCorrection`, antes
+`ReviewMeasurementCorrection`) se sigue completando por compatibilidad hacia
+atrás con el backend de revisión, pero con el mismo valor de `labelKey` —
+nunca con el texto traducido al español. `beforeValue`/`afterValue` siguen
+usando `aiValue`/`reviewerValue` sin cambios.
+
+### 10.6 DTO HTTP separados del dominio de corrida
+
+- `src/contracts/reviewApiTypes.ts`: `RunReviewStatus`, `RunReviewRequest`,
+  `RunReviewResponse`, `RunReviewCorrection`, `ReviewCorrectionValue`.
+- `src/contracts/inputApiTypes.ts`: `InputResponse`.
+- `src/multiplanarRunTypes.ts` quedó reducido a lo que sigue siendo un DTO
+  HTTP legítimo y no tipa respuestas de corrida: `AssetName`,
+  `DiagnosticEndpointResponse`, `MultiplanarRunRequest`,
+  `LegacyMultiplanarRunRequest`, `MultiplanarRunPayload` (el payload de
+  `POST /api/ai/multiplanar/run`).
+
+### 10.7 `canonicalRunToLegacyViewModel` eliminado
+
+Se eliminaron `canonicalRunToLegacyViewModel()`, `canonicalPlaneToLegacy()` y
+`legacyAssetsFromCanonical()` de `multiplanarRunAdapter.ts`. La arquitectura
+final del corredor multiplanar es:
+
+```
+HTTP (unknown) → parseMultiplanarRunResponse → CanonicalMultiplanarRun → selectores/view models → props visuales
+```
+
+Nunca más `Canonical → respuesta legacy → componente`. `parseMultiplanarRunResponse`
+y toda la compatibilidad de entrada v1/v2 permanecen intactas.
+
+### 10.8 UX posterior a guardar revisión
+
+Paso 4 sigue sin redirigir automáticamente. Cuando `reviewSaved === true` se
+agrega un bloque de acciones secundarias con "Volver a evaluación" e "Iniciar
+nuevo análisis" (`startNewAnalysis()`, que reinicia el estado local del
+componente — caseId, uploads, run, mediciones, revisión — sin recargar la
+página ni usar `window.location`). No se agregó "Ver estudio guardado" /
+"Volver a estudios": `AnalysisTimelineView` solo recibe `{ reviewerName }` y
+no tiene ningún callback de navegación disponible; inventar una navegación
+sin ese contrato habría violado la regla de no usar `window.location.href` /
+`window.location.reload` / URLs hardcodeadas. Pendiente para P9-C.4: el
+componente padre debe pasar un callback de navegación explícito
+(`onViewSavedStudy?: (caseId: string) => void`) para habilitar esa acción.
+
+### 10.9 Deuda restante para P9-C.4
+
+- `MriSliceViewer.tsx` sigue aceptando la unión `ViewerSeries`/`ViewerMask`/`ViewerLandmark`
+  en vez de tipos puramente canónicos, porque `StudyReviewView.tsx` (fuera de
+  alcance de P9-C) todavía depende de `StudySeries`/`StudyMask`/`StudyLandmark`.
+  Migrar `StudyReviewView.tsx` a su propio dominio canónico (si el backend
+  del pipeline de plano único llega a tener un contrato equivalente) permitiría
+  reducir la unión a solo tipos canónicos.
+- Navegación post-guardado (ver 10.8).
+- `multiplanarRunTypes.ts` podría renombrarse (p. ej. `multiplanarHttpTypes.ts`)
+  para reflejar que ya no tipa respuestas de corrida; no se hizo en P9-C.3 para
+  no ampliar el diff más allá de lo pedido.
+
+### 10.10 Criterio de cierre definitivo de P9-C
+
+P9-C puede darse por cerrado cuando:
+
+1. Ningún componente de `src/components/` importe tipos de
+   `multiplanarRunTypes.ts` para tipar una respuesta de corrida (verificado:
+   ya es el caso desde P9-C.3).
+2. `canonicalRunToLegacyViewModel` no exista en el árbol (verificado: P9-C.3).
+3. `MriSliceViewer.tsx` no necesite la unión `Viewer*` porque
+   `StudyReviewView.tsx` fue migrado o retirado (pendiente, P9-C.4+).
+4. Los 5 scripts `p9c*-*.mjs` sigan en verde en `npm test` sin ninguna rama
+   condicional por `schemaVersion` fuera de `multiplanarRunAdapter.ts`.

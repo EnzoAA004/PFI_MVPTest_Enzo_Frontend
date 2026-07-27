@@ -2,7 +2,9 @@ import { API_BASE_URL } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
 import { parseMultiplanarRunResponse } from "./adapters/multiplanarRunAdapter";
 import type { CanonicalMultiplanarRun } from "./contracts/canonicalMultiplanarRun";
-import type { AssetName, DiagnosticEndpointResponse, InputResponse, MultiplanarRunPayload, RunReviewRequest, RunReviewResponse } from "./multiplanarRunTypes";
+import type { InputResponse } from "./contracts/inputApiTypes";
+import type { RunReviewRequest, RunReviewResponse } from "./contracts/reviewApiTypes";
+import type { AssetName, DiagnosticEndpointResponse, MultiplanarRunPayload } from "./multiplanarRunTypes";
 import type { MultiplanarContract } from "./multiplanarTypes";
 import type { Plane } from "./appTypes";
 

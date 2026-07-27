@@ -1,11 +1,15 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { API_BASE_URL } from "../api";
 import { BackendApiError, aiAssetUrl, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
-import type { Measurement, Plane, StudyLandmark } from "../appTypes";
-import type { CanonicalAssetName, CanonicalMeasurement, CanonicalMultiplanarRun, CanonicalPlaneRun } from "../contracts/canonicalMultiplanarRun";
-import type { InputResponse, MultiplanarRunPayload, RunReviewStatus } from "../multiplanarRunTypes";
+import type { Measurement, Plane } from "../appTypes";
+import type { CanonicalAssetName, CanonicalMultiplanarRun, CanonicalPlaneRun } from "../contracts/canonicalMultiplanarRun";
+import type { InputResponse } from "../contracts/inputApiTypes";
+import type { RunReviewStatus } from "../contracts/reviewApiTypes";
+import type { MultiplanarRunPayload } from "../multiplanarRunTypes";
 import type { MultiplanarContract } from "../multiplanarTypes";
-import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, evaluateSagittalReviewReadiness, extractMeasurementRows, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveReviewWorkspaceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
+import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, evaluateSagittalReviewReadiness, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveReviewWorkspaceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
+import { getPlane, getPlaneAssets, getPlaneLandmarks, getPlaneMasks, getPlaneMeasurements, getPlaneSeries } from "../selectors/canonicalRunSelectors";
+import { canonicalMeasurementToViewMeasurement } from "../viewModels/measurementViewModel";
 import { AgentSummary } from "./AgentSummary";
 import { MeasurementsPanel } from "./MeasurementsPanel";
 import { MriSliceViewer } from "./MriSliceViewer";
@@ -58,32 +62,9 @@ function apiErrorMessage(error: unknown, action: string) {
   return `No se pudo ${action}.`;
 }
 
-function measurementRows(planeRun?: CanonicalPlaneRun): CanonicalMeasurement[] {
-  return extractMeasurementRows(planeRun);
-}
-
-function toMeasurement(row: CanonicalMeasurement, plane: Plane, index: number): Measurement {
-  const id = row.id || `${plane}-measurement-${index}`;
-  return {
-    id,
-    label: row.labelKey || `Medición ${index + 1}`,
-    level: row.level ?? undefined,
-    value: row.value ?? "",
-    aiValue: row.value ?? "",
-    reviewerValue: row.reviewerValue ?? undefined,
-    unit: row.unit ?? "",
-    confidence: row.confidence,
-    plane,
-    source: "AI",
-    status: "pendiente",
-    outlier: false,
-    placeholder: Boolean(row.placeholder),
-  };
-}
-
 function measurementsFromRun(run: CanonicalMultiplanarRun | null): Measurement[] {
   if (!run?.planes) return [];
-  return uploadPlanes.flatMap((plane) => measurementRows(run.planes?.[plane]).map((row, index) => toMeasurement(row, plane, index)));
+  return uploadPlanes.flatMap((plane) => getPlaneMeasurements(run, plane).map((row, index) => canonicalMeasurementToViewMeasurement(row, plane, index)));
 }
 
 function percentLabel(value: unknown) {
@@ -91,19 +72,24 @@ function percentLabel(value: unknown) {
 }
 
 function sagittalForegroundConfidence(run: CanonicalMultiplanarRun | null) {
-  const quality = run?.planes?.sagittal?.quality as Record<string, unknown> | undefined;
+  const quality = getPlane(run, "sagittal")?.quality as Record<string, unknown> | undefined;
   return quality?.meanForegroundConfidence ?? quality?.foregroundMeanConfidence ?? quality?.foregroundConfidence ?? quality?.meanMaskConfidence;
 }
 
-function reviewCorrectionsFrom(measurements: Measurement[]) {
+export function reviewCorrectionsFrom(measurements: Measurement[]) {
   return measurements
     .filter((measurement) => measurement.source === "Reviewer" || measurement.status === "editado")
     .map((measurement) => {
       const aiValue = measurement.aiValue ?? measurement.value;
       const reviewerValue = measurement.reviewerValue ?? measurement.value;
+      const labelKey = measurement.labelKey ?? measurement.label;
       return {
         measurementId: measurement.id,
-        label: measurement.label,
+        labelKey,
+        // El DTO legacy de revisión todavía solo admite "label"; se envía la
+        // clave canónica (labelKey) en ese campo temporalmente, nunca el
+        // texto traducido al español.
+        label: labelKey,
         beforeValue: { value: aiValue, unit: measurement.unit },
         afterValue: { value: reviewerValue, unit: measurement.unit },
         comment: "Corrección desde timeline FE-P5",
@@ -126,20 +112,8 @@ function planeRunStatus(run: CanonicalMultiplanarRun | null, plane: Plane) {
   const result = plane === "sagittal" ? evaluateSagittalReadiness(run) : evaluateAxialReadiness(run);
   return {
     result,
-    mode: resolvePlaneInferenceMode(run?.planes?.[plane]) ?? "no informado",
+    mode: resolvePlaneInferenceMode(getPlane(run, plane)) ?? "no informado",
   };
-}
-
-function sagittalLandmarksForViewer(landmarks: CanonicalPlaneRun["landmarks"] | undefined): StudyLandmark[] {
-  return (landmarks ?? []).map((landmark) => ({
-    id: landmark.id,
-    label: landmark.labelKey,
-    x: landmark.x,
-    y: landmark.y,
-    centroid: landmark.centroid,
-    center: landmark.center,
-    coordinateSpace: landmark.coordinateSpace,
-  })) as unknown as StudyLandmark[];
 }
 
 function allowedAssetValue(url: string | undefined) {
@@ -157,7 +131,7 @@ function assetRows(planeRun: CanonicalPlaneRun | undefined, plane: Plane) {
 }
 
 function ProvenancePanel({ run }: { run: CanonicalMultiplanarRun | null }) {
-  const sagittal = run?.planes?.sagittal;
+  const sagittal = getPlane(run, "sagittal");
   const metadata = readSpiderRuntimeMetadata(sagittal);
   const sagittalReadiness = evaluateSagittalReadiness(run);
   const artifactHash = sagittal?.model.artifactHash;
@@ -220,7 +194,7 @@ function AssetProvenancePanel({ run }: { run: CanonicalMultiplanarRun | null }) 
     <section className="panel-card compact-card analysis-panel">
       <div className="section-title"><h2>Assets proxy del Backend</h2><StatusBadge tone="blue">sin rutas internas</StatusBadge></div>
       <dl className="settings-details">
-        {uploadPlanes.flatMap((plane) => assetRows(run.planes?.[plane], plane).map((asset) => (
+        {uploadPlanes.flatMap((plane) => assetRows(getPlane(run, plane), plane).map((asset) => (
           <div key={`${plane}-${asset.assetName}`}><dt>{planeLabel(plane)} {asset.assetName}</dt><dd>{asset.url}</dd></div>
         )))}
       </dl>
@@ -251,7 +225,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const runInFlightRef = useRef(false);
 
   const normalizedCaseId = caseId.trim();
-  const sagittalPlaneRun = run?.planes?.sagittal;
+  const sagittalPlaneRun = getPlane(run, "sagittal");
   const sagittalUploadReady = Boolean(normalizedCaseId && uploads.sagittal.input?.inputId);
   const axialUploadReady = Boolean(uploads.axial.input?.inputId);
   const sagittalRunReady = evaluateSagittalReadiness(run);
@@ -260,8 +234,11 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const dualRunReady = evaluateDualReadiness(run);
   const realInferenceReady = sagittalReviewReady.ready;
   const workspaceMode = resolveReviewWorkspaceMode(run);
-  const sagittalRows = measurementRows(sagittalPlaneRun);
-  const sagittalMasks = sagittalPlaneRun?.masks ?? [];
+  const sagittalRows = getPlaneMeasurements(run, "sagittal");
+  const sagittalMasks = getPlaneMasks(run, "sagittal");
+  const sagittalLandmarks = getPlaneLandmarks(run, "sagittal");
+  const sagittalSeries = getPlaneSeries(run, "sagittal");
+  const sagittalAssets = getPlaneAssets(run, "sagittal");
   const sagittalMetadata = readSpiderRuntimeMetadata(sagittalPlaneRun);
   const sagittalArtifactHash = sagittalPlaneRun?.model.artifactHash;
   const foregroundConfidence = percentLabel(sagittalForegroundConfidence(run));
@@ -422,6 +399,23 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
     }
   }
 
+  function startNewAnalysis() {
+    setCaseId("");
+    setStudyMetadata(emptyStudyMetadataDraft());
+    setStudyMetadataError("");
+    setUploads(emptyUploads);
+    setRun(null);
+    setMeasurements([]);
+    setReviewStatus("edited");
+    setNotes("");
+    setReviewSaved(false);
+    setEvaluationVisited(false);
+    setSelectedSagittalLandmark("");
+    setSagittalOverlayAvailable(false);
+    setActiveStep(1);
+    setMessage("Nuevo análisis iniciado.");
+  }
+
   return (
     <div className="view-stack analysis-timeline-view">
       <section className="page-heading compact-heading">
@@ -550,7 +544,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
               <div><dt>Entrada axial</dt><dd>{uploads.axial.input?.inputId ?? "opcional no cargada"}</dd></div>
               <div><dt>Modo solicitado</dt><dd>real_baseline</dd></div>
             <div><dt>Corrida</dt><dd>{run?.runId ?? "sin ejecutar"}</dd></div>
-              {run && <div><dt>Mediciones sagitales reales</dt><dd>{measurementRows(sagittalPlaneRun).length}</dd></div>}
+              {run && <div><dt>Mediciones sagitales reales</dt><dd>{sagittalRows.length}</dd></div>}
             </dl>
             {running && <div className="clinical-loading-state inline-loading"><span className="clinical-spinner" /><div><h2>Procesando</h2><p>Esperando respuesta del modelo.</p></div></div>}
             {run && !realInferenceReady && <div className="panel-hidden-placeholder"><strong>El modelo sagital aún no tiene inferencia real disponible.</strong><span>{fallbackReason(run, contract)}</span><span>No se habilita evaluación con mediciones de marcador.</span></div>}
@@ -598,9 +592,10 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
             <MriSliceViewer
               variant="sagittal"
               planeRunId={sagittalPlaneRun?.planeRunId}
-              series={sagittalPlaneRun?.series?.[0]}
-              masks={sagittalPlaneRun?.masks}
-              landmarks={sagittalLandmarksForViewer(sagittalPlaneRun?.landmarks)}
+              series={sagittalSeries[0]}
+              masks={sagittalMasks}
+              assets={sagittalAssets}
+              landmarks={sagittalLandmarks}
               maskVisibility={{}}
               overlayEnabled
               overlayOpacity={0.65}
@@ -612,7 +607,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
             />
           </section>
           <div className="span-all">
-            <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(run?.planes?.sagittal) ?? resolveWorkspaceInferenceMode(run)} description="Mediciones devueltas por inferencia sagital real. Editables como borrador del revisor." onChange={updateMeasurements} />
+            <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(sagittalPlaneRun) ?? resolveWorkspaceInferenceMode(run)} description="Mediciones devueltas por inferencia sagital real. Editables como borrador del revisor." onChange={updateMeasurements} />
           </div>
 
           <div className="span-all">
@@ -664,6 +659,12 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
           <p className="settings-persistence-note">La revisión se persiste con `submitRunReview` sobre la corrida real generada. Las correcciones de mediciones editadas se envían como `corrections` con valores before/after.</p>
           {!sagittalReviewReady.ready && <div className="panel-hidden-placeholder">No se puede guardar revisión sin corrida sagital real: {sagittalReviewReady.reasons.join(" ")}</div>}
           <div className="settings-persistence-note">Capacidades preparadas: sagital {sagittalRunReady.ready ? "listo" : "bloqueado"}, axial {axialRunReady.ready ? "experimental disponible" : "candidate_below_quality_gate"}, dual {dualRunReady.ready ? "listo" : "bloqueado"}.</div>
+          {reviewSaved && (
+            <div className="analysis-actions">
+              <button className="ghost-button" onClick={() => setActiveStep(3)} type="button">Volver a evaluación</button>
+              <button className="ghost-button" onClick={startNewAnalysis} type="button">Iniciar nuevo análisis</button>
+            </div>
+          )}
         </section>
       )}
     </div>

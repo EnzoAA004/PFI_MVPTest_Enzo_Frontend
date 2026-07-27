@@ -94,6 +94,11 @@ export function displayMeasurementLabel(value: string | null | undefined) {
   return measurementLabels[value] ?? readableFallback(value);
 }
 
+export function displayLandmarkLabel(value: string | null | undefined) {
+  if (!value) return "Punto de referencia";
+  return readableFallback(value);
+}
+
 export function displayMeasurementLevel(value: string | null | undefined) {
   if (!value || value === "Nivel no informado") return "Nivel no informado";
   return readableFallback(value);

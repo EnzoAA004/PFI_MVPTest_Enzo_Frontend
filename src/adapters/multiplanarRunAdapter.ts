@@ -1,9 +1,5 @@
 import { ContractError } from "../api";
 import type { Plane } from "../appTypes";
-import type {
-  MultiplanarPlaneRun,
-  MultiplanarRunResponse,
-} from "../multiplanarRunTypes";
 import {
   MULTIPLANAR_CONTRACT_V2,
   type CanonicalAssetName,
@@ -373,104 +369,5 @@ export function parseMultiplanarRunResponse(raw: unknown): CanonicalMultiplanarR
     synthetic,
     fallbackReason,
     degradedMode,
-  };
-}
-
-function legacyAssetsFromCanonical(assets: CanonicalPlaneAsset[]): MultiplanarPlaneRun["assets"] {
-  if (!assets.length) return undefined;
-  return assets.reduce<Record<string, string>>((map, asset) => {
-    map[asset.assetName] = asset.url;
-    return map;
-  }, {});
-}
-
-function canonicalPlaneToLegacy(plane: CanonicalPlaneRun, root: CanonicalMultiplanarRun): MultiplanarPlaneRun {
-  const cleanRealBaseline = plane.effectiveInferenceMode === "real_baseline" && plane.synthetic === false && !plane.fallbackReason;
-  const realInferenceAvailable = plane.model.availableForRealInference === true
-    && plane.effectiveInferenceMode === "real_baseline"
-    && plane.synthetic === false
-    && !plane.fallbackReason;
-  return {
-    runId: plane.planeRunId ?? "",
-    plane: plane.plane as Plane,
-    status: plane.status,
-    effectiveInferenceMode: plane.effectiveInferenceMode,
-    requestedInferenceMode: root.requestedInferenceMode,
-    synthetic: plane.synthetic ?? undefined,
-    fallbackReason: plane.fallbackReason ?? undefined,
-    modelKey: plane.model.key,
-    modelVersion: plane.model.version,
-    artifactHash: plane.model.artifactHash,
-    allowContractFallback: !cleanRealBaseline,
-    inputId: plane.input.inputId,
-    aiOutput: {
-      status: plane.status,
-      inferenceMode: plane.effectiveInferenceMode,
-      requestedInferenceMode: root.requestedInferenceMode,
-      artifactHash: plane.model.artifactHash,
-      realInferenceAvailable,
-      synthetic: plane.synthetic ?? undefined,
-      fallbackReason: plane.fallbackReason ?? undefined,
-      humanReviewRequired: plane.humanReviewRequired ?? undefined,
-      notClinicalDiagnosis: plane.notClinicalDiagnosis ?? undefined,
-    },
-    modelArtifact: {
-      baselineReady: plane.model.baselineReady,
-      availableForRealInference: plane.model.availableForRealInference,
-    },
-    metadata: {
-      inputId: plane.input.inputId,
-      inputShapeNative: plane.input.nativeShape,
-      inputShapeCanonical: plane.input.canonicalShape,
-      inputOrientationTransform: plane.input.orientationTransform,
-      selectedSlice: plane.input.selectedSliceIndex,
-      sliceCount: plane.input.sliceCount,
-      selectedAxis: plane.input.selectedAxis,
-      inPlaneSpacing: plane.input.inPlaneSpacingMm,
-    },
-    quality: plane.quality as Record<string, unknown> | undefined,
-    humanReviewRequired: plane.humanReviewRequired ?? undefined,
-    notClinicalDiagnosis: plane.notClinicalDiagnosis ?? undefined,
-    degradedMode: plane.synthetic ?? undefined,
-    assets: legacyAssetsFromCanonical(plane.assets),
-    landmarks: plane.landmarks.map((landmark) => ({
-      id: landmark.id,
-      label: landmark.labelKey,
-      x: landmark.x,
-      y: landmark.y,
-      centroid: landmark.centroid,
-      center: landmark.center,
-      coordinateSpace: landmark.coordinateSpace,
-    })),
-    measurements: plane.measurements.map((measurement) => ({
-      id: measurement.id,
-      label: measurement.labelKey,
-      value: measurement.value ?? undefined,
-      unit: measurement.unit,
-      level: measurement.level ?? undefined,
-      confidence: measurement.confidence,
-      placeholder: measurement.placeholder,
-      plane: typeof measurement.plane === "string" ? (measurement.plane as Plane) : undefined,
-    })),
-    coordinateSpace: plane.coordinateSpace,
-  } as MultiplanarPlaneRun;
-}
-
-export function canonicalRunToLegacyViewModel(run: CanonicalMultiplanarRun): MultiplanarRunResponse {
-  return {
-    status: run.status,
-    runId: run.runId,
-    traceId: run.traceId,
-    caseId: run.caseId,
-    workspaceMode: run.workspaceMode,
-    requestedInferenceMode: run.requestedInferenceMode,
-    effectiveInferenceMode: run.effectiveInferenceMode,
-    planes: {
-      sagittal: canonicalPlaneToLegacy(run.planes.sagittal, run),
-      axial: run.planes.axial ? canonicalPlaneToLegacy(run.planes.axial, run) : undefined,
-    },
-    humanReviewRequired: run.humanReviewRequired ?? undefined,
-    notClinicalDiagnosis: run.notClinicalDiagnosis ?? undefined,
-    degradedMode: run.degradedMode ?? (run.synthetic === null ? undefined : run.synthetic),
   };
 }
