@@ -1,5 +1,11 @@
-import type { AssetName, MultiplanarMeasurementValue, MultiplanarPlaneRun, MultiplanarRunResponse } from "./multiplanarRunTypes";
 import type { Plane } from "./appTypes";
+import type {
+  CanonicalAssetName,
+  CanonicalMeasurement,
+  CanonicalMultiplanarRun,
+  CanonicalPlaneAsset,
+  CanonicalPlaneRun,
+} from "./contracts/canonicalMultiplanarRun";
 
 export const SAGITTAL_FINAL_MODEL_KEY = "sagittal_spider";
 export const SAGITTAL_FINAL_MODEL_VERSION = "sagittal-spider-final-v1";
@@ -21,7 +27,6 @@ export type SpiderRuntimeMetadata = {
   inputShapeCanonical?: number[];
   inputOrientationTransform?: string;
   inPlaneSpacing?: number[];
-  inPlaneSpacingUnit?: string;
   selectedSliceOutOfRange: boolean;
   canonicalShapeValid: boolean;
   selectedAxisValid: boolean;
@@ -33,57 +38,39 @@ export type SpiderRuntimeMetadata = {
   orientationExpected: boolean;
 };
 
-export type PlaneAssetUrls = Partial<Record<AssetName, string>>;
+export type PlaneAssetUrls = Partial<Record<CanonicalAssetName, string>>;
 
 const realModes = new Set(["real", "real_baseline"]);
-const blockedModes = new Set(["contract", "mock", "fallback", "mixed"]);
 const supportedSagittalTransforms = new Set(["none", "move_axis_0_to_last"]);
 
 function normalizedString(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : undefined;
 }
 
-function metadataString(metadata: Record<string, unknown> | undefined, key: string) {
-  return normalizedString(metadata?.[key]);
-}
-
-function metadataNumber(metadata: Record<string, unknown> | undefined, key: string) {
-  const value = metadata?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function metadataNumberArray(metadata: Record<string, unknown> | undefined, key: string) {
-  const value = metadata?.[key];
-  return Array.isArray(value) && value.every((item) => typeof item === "number" && Number.isFinite(item)) ? value : undefined;
-}
-
 function hasFallbackStatus(status: unknown) {
   return typeof status === "string" && status.trim().toLowerCase().includes("fallback");
 }
 
-export function resolvePlaneInferenceMode(planeRun?: MultiplanarPlaneRun | null) {
-  return normalizedString(planeRun?.effectiveInferenceMode)
-    ?? normalizedString(planeRun?.inferenceMode)
-    ?? normalizedString(planeRun?.aiOutput?.inferenceMode)
-    ?? (normalizedString(planeRun?.aiOutput?.status) === "real_baseline_ready" ? "real_baseline" : undefined)
-    ?? metadataString(planeRun?.metadata, "inferenceMode");
+export function resolvePlaneInferenceMode(planeRun?: CanonicalPlaneRun | null) {
+  return normalizedString(planeRun?.effectiveInferenceMode);
 }
 
 export function isRealInferenceMode(mode?: string) {
   return Boolean(mode && realModes.has(mode));
 }
 
-export function isRealPlaneRun(planeRun?: MultiplanarPlaneRun | null) {
+export function isRealPlaneRun(planeRun?: CanonicalPlaneRun | null): boolean {
+  if (!planeRun) return false;
   const mode = resolvePlaneInferenceMode(planeRun);
-  if (!planeRun || !isRealInferenceMode(mode) || blockedModes.has(mode ?? "")) return false;
-  if (planeRun.aiOutput?.realInferenceAvailable === false) return false;
-  if (planeRun.degradedMode === true) return false;
+  if (!isRealInferenceMode(mode)) return false;
+  if (planeRun.synthetic !== false) return false;
+  if (planeRun.fallbackReason) return false;
   if (hasFallbackStatus(planeRun.status)) return false;
-  if (planeRun.metadata && "realInferenceFailure" in planeRun.metadata) return false;
+  if (planeRun.model?.availableForRealInference !== true) return false;
   return true;
 }
 
-export function resolveWorkspaceInferenceMode(run?: MultiplanarRunResponse | null): WorkspaceInferenceMode {
+export function resolveWorkspaceInferenceMode(run?: CanonicalMultiplanarRun | null): WorkspaceInferenceMode {
   const effective = normalizedString(run?.effectiveInferenceMode);
   if (isRealInferenceMode(effective)) return effective as WorkspaceInferenceMode;
   const sagittalMode = resolvePlaneInferenceMode(run?.planes?.sagittal);
@@ -93,38 +80,32 @@ export function resolveWorkspaceInferenceMode(run?: MultiplanarRunResponse | nul
   return undefined;
 }
 
-export function extractMeasurementRows(planeRun?: MultiplanarPlaneRun): MultiplanarMeasurementValue[] {
-  if (!planeRun) return [];
-  if (Array.isArray(planeRun.measurements)) return planeRun.measurements;
-  if (Array.isArray(planeRun.measurements?.values)) return planeRun.measurements.values;
-  if (planeRun.measurements && typeof planeRun.measurements === "object") {
-    return Object.entries(planeRun.measurements).reduce<MultiplanarMeasurementValue[]>((rows, [key, value]) => {
-      if (typeof value === "number" || typeof value === "string") rows.push({ id: key, label: key, value, unit: key.toLowerCase().includes("area") ? "mm2" : "mm" });
-      return rows;
-    }, []);
-  }
-  return [];
+export function extractMeasurementRows(planeRun?: CanonicalPlaneRun | null): CanonicalMeasurement[] {
+  return planeRun?.measurements ?? [];
 }
 
-export function hasRealMeasurements(run?: MultiplanarRunResponse | null) {
+function isRealMeasurementRow(row: CanonicalMeasurement) {
+  return row.placeholder !== true && row.value !== null && row.value !== undefined && row.value !== "";
+}
+
+export function hasRealMeasurements(run?: CanonicalMultiplanarRun | null) {
   const rows = (["sagittal", "axial"] as Plane[]).flatMap((plane) => extractMeasurementRows(run?.planes?.[plane]));
-  return rows.some((row) => !row.placeholder && row.value !== undefined && row.value !== null && row.value !== "");
+  return rows.some(isRealMeasurementRow);
 }
 
-export function hasRealPlaneMeasurements(run: MultiplanarRunResponse | null | undefined, plane: Plane) {
-  return extractMeasurementRows(run?.planes?.[plane]).some((row) => !row.placeholder && row.value !== undefined && row.value !== null && row.value !== "");
+export function hasRealPlaneMeasurements(run: CanonicalMultiplanarRun | null | undefined, plane: Plane) {
+  return extractMeasurementRows(run?.planes?.[plane]).some(isRealMeasurementRow);
 }
 
-export function readSpiderRuntimeMetadata(planeRun?: MultiplanarPlaneRun | null): SpiderRuntimeMetadata {
-  const metadata = planeRun?.metadata;
-  const inputShapeNative = metadataNumberArray(metadata, "inputShapeNative");
-  const inputShapeCanonical = metadataNumberArray(metadata, "inputShapeCanonical");
-  const selectedSlice = metadataNumber(metadata, "selectedSlice");
-  const selectedAxis = metadataNumber(metadata, "selectedAxis");
-  const sliceCount = metadataNumber(metadata, "sliceCount");
-  const inputOrientationTransform = typeof metadata?.inputOrientationTransform === "string" ? metadata.inputOrientationTransform : undefined;
-  const inPlaneSpacing = metadataNumberArray(metadata, "inPlaneSpacing");
-  const inPlaneSpacingUnit = typeof metadata?.inPlaneSpacingUnit === "string" ? metadata.inPlaneSpacingUnit : undefined;
+export function readSpiderRuntimeMetadata(planeRun?: CanonicalPlaneRun | null): SpiderRuntimeMetadata {
+  const input = planeRun?.input;
+  const inputShapeNative = input?.nativeShape;
+  const inputShapeCanonical = input?.canonicalShape;
+  const selectedSlice = input?.selectedSliceIndex;
+  const selectedAxis = input?.selectedAxis;
+  const sliceCount = input?.sliceCount;
+  const inputOrientationTransform = input?.orientationTransform;
+  const inPlaneSpacing = input?.inPlaneSpacingMm;
   const canonicalShapeValid = Boolean(inputShapeCanonical?.length === 3);
   const selectedAxisValid = typeof selectedAxis === "number" && Number.isInteger(selectedAxis) && selectedAxis >= 0 && Boolean(inputShapeCanonical && selectedAxis < inputShapeCanonical.length);
   const sliceCountValid = typeof sliceCount === "number" && Number.isInteger(sliceCount) && sliceCount > 0;
@@ -140,7 +121,6 @@ export function readSpiderRuntimeMetadata(planeRun?: MultiplanarPlaneRun | null)
     inputShapeCanonical,
     inputOrientationTransform,
     inPlaneSpacing,
-    inPlaneSpacingUnit,
     selectedSliceOutOfRange,
     canonicalShapeValid,
     selectedAxisValid,
@@ -153,23 +133,23 @@ export function readSpiderRuntimeMetadata(planeRun?: MultiplanarPlaneRun | null)
   };
 }
 
-export function evaluateSagittalReadiness(run?: MultiplanarRunResponse | null, requireFinalSpider = true): ReadinessResult {
+export function evaluateSagittalReadiness(run?: CanonicalMultiplanarRun | null, requireFinalSpider = true): ReadinessResult {
   const reasons: string[] = [];
   const sagittal = run?.planes?.sagittal;
   if (!sagittal) reasons.push("Plano sagital ausente.");
   if (sagittal && !isRealPlaneRun(sagittal)) reasons.push("Plano sagital no volvió en real_baseline.");
   if (sagittal && requireFinalSpider) {
-    if (sagittal.modelKey !== SAGITTAL_FINAL_MODEL_KEY) reasons.push("El modelo sagital no es sagittal_spider.");
+    if (sagittal.model.key !== SAGITTAL_FINAL_MODEL_KEY) reasons.push("El modelo sagital no es sagittal_spider.");
     if (resolvePlaneInferenceMode(sagittal) !== "real_baseline") reasons.push("El modo sagital efectivo no es real_baseline.");
-    if (sagittal.modelVersion !== SAGITTAL_FINAL_MODEL_VERSION) reasons.push("La versión del modelo sagital no coincide.");
-    const artifactHash = sagittal.artifactHash ?? sagittal.aiOutput?.artifactHash;
-    if (artifactHash !== SAGITTAL_FINAL_ARTIFACT_HASH) reasons.push("La huella del modelo sagital no coincide.");
-    if (sagittal.allowContractFallback !== false) reasons.push("El fallback contractual sagital no está deshabilitado.");
-    if (sagittal.aiOutput?.realInferenceAvailable !== true) reasons.push("El modelo sagital no devolvió inferencia real disponible.");
-    if (sagittal.modelArtifact?.baselineReady !== true) reasons.push("El artifact sagital no informa baselineReady=true.");
-    if (sagittal.modelArtifact?.availableForRealInference !== true) reasons.push("El artifact sagital no informa availableForRealInference=true.");
-    if ((sagittal.humanReviewRequired ?? sagittal.aiOutput?.humanReviewRequired) !== true) reasons.push("La revisión humana requerida sagital no está confirmada.");
-    if ((sagittal.notClinicalDiagnosis ?? sagittal.aiOutput?.notClinicalDiagnosis) !== true) reasons.push("La restricción de no diagnóstico clínico sagital no está confirmada.");
+    if (sagittal.model.version !== SAGITTAL_FINAL_MODEL_VERSION) reasons.push("La versión del modelo sagital no coincide.");
+    if (sagittal.model.artifactHash !== SAGITTAL_FINAL_ARTIFACT_HASH) reasons.push("La huella del modelo sagital no coincide.");
+    if (sagittal.synthetic !== false) reasons.push("El modo sintético sagital no está deshabilitado.");
+    if (sagittal.fallbackReason) reasons.push("La corrida sagital informa un motivo de fallback.");
+    if (sagittal.model.baselineReady !== true) reasons.push("El artifact sagital no informa baselineReady=true.");
+    if (sagittal.model.availableForRealInference !== true) reasons.push("El artifact sagital no informa availableForRealInference=true.");
+    if (sagittal.model.manifestValid === false) reasons.push("El manifest sagital no es válido.");
+    if (sagittal.humanReviewRequired !== true) reasons.push("La revisión humana requerida sagital no está confirmada.");
+    if (sagittal.notClinicalDiagnosis !== true) reasons.push("La restricción de no diagnóstico clínico sagital no está confirmada.");
     const metadata = readSpiderRuntimeMetadata(sagittal);
     if (!metadata.canonicalShapeValid) reasons.push("La forma canónica sagital no informa 3 dimensiones.");
     if (!metadata.selectedAxisValid) reasons.push("El eje sagital seleccionado no es válido.");
@@ -181,7 +161,7 @@ export function evaluateSagittalReadiness(run?: MultiplanarRunResponse | null, r
   return { ready: reasons.length === 0, reasons };
 }
 
-export function evaluateAxialReadiness(run?: MultiplanarRunResponse | null): ReadinessResult {
+export function evaluateAxialReadiness(run?: CanonicalMultiplanarRun | null): ReadinessResult {
   const axial = run?.planes?.axial;
   const reasons: string[] = [];
   if (!axial) reasons.push("Plano axial no se encuentra disponible para inferencia real.");
@@ -189,35 +169,40 @@ export function evaluateAxialReadiness(run?: MultiplanarRunResponse | null): Rea
   return { ready: reasons.length === 0, reasons };
 }
 
-export function evaluateSagittalReviewReadiness(run?: MultiplanarRunResponse | null): ReadinessResult {
+export function evaluateSagittalReviewReadiness(run?: CanonicalMultiplanarRun | null): ReadinessResult {
   const reasons: string[] = [];
   if (!run) reasons.push("No hay corrida sagital.");
+  if (run && run.synthetic !== false) reasons.push("La corrida no confirma synthetic=false.");
   if (run?.degradedMode === true) reasons.push("La corrida está en modo degradado.");
-  if (run?.humanReviewRequired === false) reasons.push("La revisión humana requerida no está confirmada.");
-  if (run?.notClinicalDiagnosis === false) reasons.push("La restricción de no diagnóstico clínico no está confirmada.");
+  if (run && run.fallbackReason) reasons.push("La corrida informa un motivo de fallback.");
+  if (run && run.humanReviewRequired !== true) reasons.push("La revisión humana requerida no está confirmada.");
+  if (run && run.notClinicalDiagnosis !== true) reasons.push("La restricción de no diagnóstico clínico no está confirmada.");
   reasons.push(...evaluateSagittalReadiness(run).reasons);
   if (!hasRealPlaneMeasurements(run, "sagittal")) reasons.push("La corrida sagital no devolvió mediciones reales.");
   return { ready: reasons.length === 0, reasons };
 }
 
-export function evaluateDualReadiness(run?: MultiplanarRunResponse | null): ReadinessResult {
+export function evaluateDualReadiness(run?: CanonicalMultiplanarRun | null): ReadinessResult {
   const reasons: string[] = [];
   if (!run) reasons.push("No hay corrida multiplanar.");
+  if (run && run.synthetic !== false) reasons.push("La corrida no confirma synthetic=false.");
   if (run?.degradedMode === true) reasons.push("La corrida está en modo degradado.");
-  if (run?.humanReviewRequired === false) reasons.push("La revisión humana requerida no está confirmada.");
-  if (run?.notClinicalDiagnosis === false) reasons.push("La restricción de no diagnóstico clínico no está confirmada.");
+  if (run && run.fallbackReason) reasons.push("La corrida informa un motivo de fallback.");
+  if (run && run.humanReviewRequired !== true) reasons.push("La revisión humana requerida no está confirmada.");
+  if (run && run.notClinicalDiagnosis !== true) reasons.push("La restricción de no diagnóstico clínico no está confirmada.");
   reasons.push(...evaluateSagittalReadiness(run).reasons, ...evaluateAxialReadiness(run).reasons);
   const workspaceMode = resolveWorkspaceInferenceMode(run);
   if (!isRealInferenceMode(workspaceMode)) reasons.push(`Workspace dual bloqueado por modo efectivo ${workspaceMode ?? "no informado"}.`);
   if (!hasRealMeasurements(run)) reasons.push("La corrida no devolvió mediciones reales.");
+  if (!hasRealPlaneMeasurements(run, "axial")) reasons.push("El plano axial no devolvió mediciones reales.");
   return { ready: reasons.length === 0, reasons };
 }
 
-export function evaluateRealInferenceReadiness(run?: MultiplanarRunResponse | null): ReadinessResult {
+export function evaluateRealInferenceReadiness(run?: CanonicalMultiplanarRun | null): ReadinessResult {
   return evaluateSagittalReviewReadiness(run);
 }
 
-export function resolveReviewWorkspaceMode(run?: MultiplanarRunResponse | null): ReviewWorkspaceMode {
+export function resolveReviewWorkspaceMode(run?: CanonicalMultiplanarRun | null): ReviewWorkspaceMode {
   const sagittalReady = evaluateSagittalReviewReadiness(run).ready;
   const axialReady = evaluateAxialReadiness(run).ready && hasRealPlaneMeasurements(run, "axial");
   if (sagittalReady && axialReady) return "dual_plane";
@@ -240,12 +225,20 @@ export function normalizeAiAssetUrl(value: unknown, apiBaseUrl = "") {
   return undefined;
 }
 
-export function resolvePlaneAssetUrls(planeRun: MultiplanarPlaneRun | undefined, plane: Plane, fallbackUrl: (runId: string, plane: Plane, assetName: AssetName) => string, apiBaseUrl = ""): PlaneAssetUrls {
-  const runId = planeRun?.runId;
-  const series = planeRun?.series?.find((item) => item.plane === plane);
-  const declaredInput = normalizeAiAssetUrl(series?.imageUrl, apiBaseUrl) ?? normalizeAiAssetUrl(planeRun?.assets?.["input.png"], apiBaseUrl);
-  const declaredOverlay = normalizeAiAssetUrl(series?.overlayUrl, apiBaseUrl) ?? normalizeAiAssetUrl(planeRun?.assets?.["overlay.png"], apiBaseUrl);
-  const declaredMaskPreview = normalizeAiAssetUrl(planeRun?.assets?.["mask-preview.png"], apiBaseUrl);
+function findAsset(assets: CanonicalPlaneAsset[] | undefined, assetName: CanonicalAssetName): string | undefined {
+  return assets?.find((asset) => asset.assetName === assetName)?.url;
+}
+
+export function resolvePlaneAssetUrls(
+  planeRun: CanonicalPlaneRun | null | undefined,
+  plane: Plane,
+  fallbackUrl: (runId: string, plane: Plane, assetName: CanonicalAssetName) => string,
+  apiBaseUrl = "",
+): PlaneAssetUrls {
+  const runId = planeRun?.planeRunId;
+  const declaredInput = normalizeAiAssetUrl(findAsset(planeRun?.assets, "input.png"), apiBaseUrl);
+  const declaredOverlay = normalizeAiAssetUrl(findAsset(planeRun?.assets, "overlay.png"), apiBaseUrl);
+  const declaredMaskPreview = normalizeAiAssetUrl(findAsset(planeRun?.assets, "mask-preview.png"), apiBaseUrl);
   return {
     "input.png": declaredInput ?? (runId ? fallbackUrl(runId, plane, "input.png") : undefined),
     "overlay.png": declaredOverlay ?? (runId ? fallbackUrl(runId, plane, "overlay.png") : undefined),

@@ -3,12 +3,30 @@ import fs from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
 
-const source = fs.readFileSync("src/inferenceReadiness.ts", "utf8");
+const source = fs.readFileSync("src/inferenceReadiness.ts", "utf8")
+  .replace(/^import[\s\S]*?from\s+["'][^"']+["'];?\s*$/gm, "")
+  .replace(/export /g, "");
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-const exports = {};
-vm.runInNewContext(compiled, { exports, require: () => ({}) }, { filename: "inferenceReadiness.js" });
+const sandbox = { exports: {}, console, require: () => ({}) };
+vm.runInNewContext(`${compiled}
+exports.SAGITTAL_FINAL_ARTIFACT_HASH = SAGITTAL_FINAL_ARTIFACT_HASH;
+exports.SAGITTAL_FINAL_MODEL_KEY = SAGITTAL_FINAL_MODEL_KEY;
+exports.SAGITTAL_FINAL_MODEL_VERSION = SAGITTAL_FINAL_MODEL_VERSION;
+exports.evaluateAxialReadiness = evaluateAxialReadiness;
+exports.evaluateDualReadiness = evaluateDualReadiness;
+exports.evaluateRealInferenceReadiness = evaluateRealInferenceReadiness;
+exports.evaluateSagittalReadiness = evaluateSagittalReadiness;
+exports.evaluateSagittalReviewReadiness = evaluateSagittalReviewReadiness;
+exports.extractMeasurementRows = extractMeasurementRows;
+exports.isRealPlaneRun = isRealPlaneRun;
+exports.normalizeAiAssetUrl = normalizeAiAssetUrl;
+exports.readSpiderRuntimeMetadata = readSpiderRuntimeMetadata;
+exports.resolvePlaneAssetUrls = resolvePlaneAssetUrls;
+exports.resolvePlaneInferenceMode = resolvePlaneInferenceMode;
+exports.resolveWorkspaceInferenceMode = resolveWorkspaceInferenceMode;`, sandbox);
+const exports = sandbox.exports;
 
 const {
   SAGITTAL_FINAL_ARTIFACT_HASH,
@@ -35,84 +53,81 @@ function test(name, fn) {
   console.log(`ok ${count} - ${name}`);
 }
 
-const legacySpiderMetadata = {
-  inferenceMode: "real_baseline",
-  selectedSlice: 8,
+// P9-C.2: inferenceReadiness.ts now consumes CanonicalPlaneRun / CanonicalMultiplanarRun
+// exclusively. Fixtures below are canonical-shaped (model/input/assets as lists, no
+// aiOutput/modelArtifact/metadata aliases) — the raw-payload alias resolution now lives
+// only in src/adapters/multiplanarRunAdapter.ts and is covered by its own test suite.
+
+const realRuntimeInput = {
+  inputId: "inp-sag",
+  nativeShape: [352, 384, 17],
+  canonicalShape: [352, 384, 17],
+  orientationTransform: "none",
   selectedAxis: 2,
   sliceCount: 17,
-  inputShapeNative: [17, 512, 512],
-  inputShapeCanonical: [512, 512, 17],
-  inputOrientationTransform: "move_axis_0_to_last",
-  inPlaneSpacing: [0.8, 0.8],
-  inPlaneSpacingUnit: "mm",
+  selectedSliceIndex: 7,
 };
 
-const realRuntimeMetadata = {
-  inferenceMode: "real_baseline",
-  inputShapeNative: [352, 384, 17],
-  inputShapeCanonical: [352, 384, 17],
+const legacySpiderInput = {
+  inputId: "inp-sag",
+  nativeShape: [17, 512, 512],
+  canonicalShape: [512, 512, 17],
+  orientationTransform: "move_axis_0_to_last",
   selectedAxis: 2,
   sliceCount: 17,
-  selectedSlice: 7,
-  inputOrientationTransform: "none",
-  processedShape: [256, 256],
+  selectedSliceIndex: 8,
+  inPlaneSpacingMm: [0.8, 0.8],
 };
 
-const nineMeasurements = Object.fromEntries(Array.from({ length: 9 }, (_, index) => [`measurement${index + 1}Mm`, 10 + index]));
-const measurement = { id: "m1", label: "Canal", value: 12, unit: "mm" };
-const placeholderMeasurement = { id: "p1", label: "Placeholder", value: "", unit: "mm", placeholder: true };
+const measurement = { id: "m1", labelKey: "canal width", value: 12, unit: "mm" };
+const nineMeasurements = Array.from({ length: 9 }, (_, index) => ({ id: `m${index + 1}`, labelKey: `measurement${index + 1}`, value: 10 + index, unit: "mm" }));
 
 function sagittalFinal(overrides = {}) {
   return {
-    runId: "sag-run",
+    planeRunId: "sag-run",
     plane: "sagittal",
-    modelKey: SAGITTAL_FINAL_MODEL_KEY,
-    modelVersion: SAGITTAL_FINAL_MODEL_VERSION,
-    artifactHash: SAGITTAL_FINAL_ARTIFACT_HASH,
-    allowContractFallback: false,
-    inputId: "inp-sag",
+    status: null,
     effectiveInferenceMode: "real_baseline",
-    aiOutput: {
-      status: "real_baseline_ready",
-      inferenceMode: "real_baseline",
-      realInferenceAvailable: true,
-      humanReviewRequired: true,
-      notClinicalDiagnosis: true,
+    synthetic: false,
+    fallbackReason: null,
+    model: {
+      key: SAGITTAL_FINAL_MODEL_KEY,
+      version: SAGITTAL_FINAL_MODEL_VERSION,
+      artifactHash: SAGITTAL_FINAL_ARTIFACT_HASH,
+      baselineReady: true,
+      availableForRealInference: true,
     },
-    modelArtifact: { baselineReady: true, availableForRealInference: true },
+    input: realRuntimeInput,
+    assets: [
+      { assetName: "input.png", url: "/api/ai/assets/sag-run/sagittal/input.png" },
+      { assetName: "overlay.png", url: "/api/ai/assets/sag-run/sagittal/overlay.png" },
+    ],
+    series: [{ plane: "sagittal", imageUrl: "/api/ai/assets/sag-run/sagittal/input.png", overlayUrl: "/api/ai/assets/sag-run/sagittal/overlay.png" }],
+    masks: [],
+    landmarks: [],
+    measurements: [measurement],
     humanReviewRequired: true,
     notClinicalDiagnosis: true,
-    degradedMode: false,
-    status: null,
-    metadata: realRuntimeMetadata,
-    measurements: { values: [measurement] },
-    assets: {
-      "input.png": { runId: "sag-run", plane: "sagittal", assetName: "input.png", url: "/api/ai/assets/sag-run/sagittal/input.png" },
-      "overlay.png": { runId: "sag-run", plane: "sagittal", assetName: "overlay.png", url: "/api/ai/assets/sag-run/sagittal/overlay.png" },
-    },
-    series: [{
-      id: "sag-series",
-      plane: "sagittal",
-      name: "Sagital real",
-      sliceCount: 17,
-      selectedSlice: 7,
-      assets: {
-        "input.png": { runId: "sag-run", plane: "sagittal", assetName: "input.png", url: "/api/ai/assets/sag-run/sagittal/input.png" },
-        "overlay.png": { runId: "sag-run", plane: "sagittal", assetName: "overlay.png", url: "/api/ai/assets/sag-run/sagittal/overlay.png" },
-      },
-    }],
     ...overrides,
   };
 }
 
 function axialReal(overrides = {}) {
   return {
-    runId: "ax-run",
+    planeRunId: "ax-run",
     plane: "axial",
+    status: null,
     effectiveInferenceMode: "real_baseline",
-    inputId: "inp-ax",
-    aiOutput: { inferenceMode: "real_baseline", realInferenceAvailable: true },
-    measurements: { values: [measurement] },
+    synthetic: false,
+    fallbackReason: null,
+    model: { availableForRealInference: true },
+    input: { inputId: "inp-ax" },
+    assets: [],
+    masks: [],
+    landmarks: [],
+    measurements: [measurement],
+    humanReviewRequired: true,
+    notClinicalDiagnosis: true,
     ...overrides,
   };
 }
@@ -123,25 +138,27 @@ function realRun({ sagittal = sagittalFinal(), axial = axialReal(), rootMode = "
     effectiveInferenceMode: rootMode,
     humanReviewRequired: true,
     notClinicalDiagnosis: true,
+    synthetic: false,
+    fallbackReason: null,
     degradedMode: false,
-    planes: { sagittal, ...(axial === null ? { axial: null } : { axial }) },
-    threeD: axial === null ? { status: "blocked_missing_axial" } : undefined,
+    planes: { sagittal, ...(axial === null ? { axial: undefined } : { axial }) },
   };
 }
 
 test("effectiveInferenceMode real_baseline", () => assert.equal(resolvePlaneInferenceMode({ effectiveInferenceMode: " real_baseline " }), "real_baseline"));
-test("fallback a inferenceMode", () => assert.equal(resolvePlaneInferenceMode({ inferenceMode: "REAL" }), "real"));
-test("fallback a aiOutput.inferenceMode", () => assert.equal(resolvePlaneInferenceMode({ aiOutput: { inferenceMode: "real_baseline" } }), "real_baseline"));
-test("fallback a aiOutput.status real_baseline_ready", () => assert.equal(resolvePlaneInferenceMode({ aiOutput: { status: "real_baseline_ready" } }), "real_baseline"));
-test("fallback a metadata.inferenceMode", () => assert.equal(resolvePlaneInferenceMode({ metadata: { inferenceMode: "real" } }), "real"));
-test("contract no es real", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "contract" }), false));
-test("mixed no es real", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "mixed" }), false));
-test("degradedMode true no es real", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "real", degradedMode: true }), false));
-test("realInferenceFailure bloquea", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "real", metadata: { realInferenceFailure: "missing" } }), false));
-test("realInferenceAvailable=false bloquea", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "real", aiOutput: { realInferenceAvailable: false } }), false));
+test("no busca alias inferenceMode", () => assert.equal(resolvePlaneInferenceMode({ inferenceMode: "REAL" }), undefined));
+test("no busca alias aiOutput.inferenceMode", () => assert.equal(resolvePlaneInferenceMode({ aiOutput: { inferenceMode: "real_baseline" } }), undefined));
+test("no busca alias aiOutput.status real_baseline_ready", () => assert.equal(resolvePlaneInferenceMode({ aiOutput: { status: "real_baseline_ready" } }), undefined));
+test("no busca alias metadata.inferenceMode", () => assert.equal(resolvePlaneInferenceMode({ metadata: { inferenceMode: "real" } }), undefined));
+test("contract no es real", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "contract", model: {} }), false));
+test("mixed no es real", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "mixed", model: {} }), false));
+test("synthetic distinto de false no es real", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "real", synthetic: true, model: { availableForRealInference: true } }), false));
+test("synthetic null no es real", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "real", synthetic: null, model: { availableForRealInference: true } }), false));
+test("fallbackReason informado bloquea", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "real", synthetic: false, fallbackReason: "modelo no disponible", model: { availableForRealInference: true } }), false));
+test("availableForRealInference=false bloquea", () => assert.equal(isRealPlaneRun({ effectiveInferenceMode: "real", synthetic: false, fallbackReason: null, model: { availableForRealInference: false } }), false));
 
 test("A native [17,512,512] canonical [512,512,17] move_axis_0_to_last habilita", () => {
-  const run = realRun({ sagittal: sagittalFinal({ metadata: legacySpiderMetadata }) });
+  const run = realRun({ sagittal: sagittalFinal({ input: legacySpiderInput }) });
   assert.equal(readSpiderRuntimeMetadata(run.planes.sagittal).orientationExpected, true);
   assert.equal(evaluateSagittalReadiness(run).ready, true);
 });
@@ -152,33 +169,33 @@ test("B native/canonical [352,384,17] axis 2 transform none habilita", () => {
   assert.equal(evaluateSagittalReadiness(run).ready, true);
 });
 
-test("C selectedSlice fuera de rango bloquea", () => {
-  const run = realRun({ sagittal: sagittalFinal({ metadata: { ...realRuntimeMetadata, selectedSlice: 17 } }) });
+test("C selectedSliceIndex fuera de rango bloquea", () => {
+  const run = realRun({ sagittal: sagittalFinal({ input: { ...realRuntimeInput, selectedSliceIndex: 17 } }) });
   assert.equal(readSpiderRuntimeMetadata(run.planes.sagittal).selectedSliceOutOfRange, true);
   assert.equal(evaluateSagittalReadiness(run).ready, false);
 });
 
 test("D selectedAxis invalido bloquea", () => {
-  const run = realRun({ sagittal: sagittalFinal({ metadata: { ...realRuntimeMetadata, selectedAxis: 3 } }) });
+  const run = realRun({ sagittal: sagittalFinal({ input: { ...realRuntimeInput, selectedAxis: 3 } }) });
   assert.equal(evaluateSagittalReadiness(run).ready, false);
 });
 
-test("E canonical[selectedAxis] distinto de sliceCount bloquea", () => {
-  const run = realRun({ sagittal: sagittalFinal({ metadata: { ...realRuntimeMetadata, inputShapeCanonical: [352, 384, 16] } }) });
+test("E canonicalShape[selectedAxis] distinto de sliceCount bloquea", () => {
+  const run = realRun({ sagittal: sagittalFinal({ input: { ...realRuntimeInput, canonicalShape: [352, 384, 16] } }) });
   assert.equal(evaluateSagittalReadiness(run).ready, false);
 });
 
 test("F hash incorrecto bloquea", () => {
-  assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ artifactHash: "bad" }) })).ready, false);
+  assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ model: { ...sagittalFinal().model, artifactHash: "bad" } }) })).ready, false);
 });
 
 test("G contract/mock/fallback bloquean", () => {
-  assert.equal(evaluateSagittalReviewReadiness(realRun({ sagittal: sagittalFinal({ effectiveInferenceMode: "contract", aiOutput: { ...sagittalFinal().aiOutput, inferenceMode: "contract" } }), rootMode: "mixed" })).ready, false);
+  assert.equal(evaluateSagittalReviewReadiness(realRun({ sagittal: sagittalFinal({ effectiveInferenceMode: "contract" }), rootMode: "mixed" })).ready, false);
   assert.equal(evaluateSagittalReviewReadiness(realRun({ sagittal: sagittalFinal({ effectiveInferenceMode: "mock" }), rootMode: "mixed" })).ready, false);
   assert.equal(evaluateSagittalReviewReadiness(realRun({ sagittal: sagittalFinal({ status: "fallback" }), rootMode: "mixed" })).ready, false);
 });
 
-test("H planes.axial=null no bloquea evaluacion sagital", () => {
+test("H planes.axial ausente no bloquea evaluacion sagital", () => {
   const run = realRun({ axial: null, rootMode: "mixed" });
   assert.equal(evaluateDualReadiness(run).ready, false);
   assert.equal(evaluateRealInferenceReadiness(run).ready, true);
@@ -201,22 +218,23 @@ test("K visor usa input.png y overlay.png reales declarados", () => {
   assert.equal(urls["mask-preview.png"], undefined);
 });
 
-test("allowContractFallback ausente bloquea modo estricto", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ allowContractFallback: undefined }) })).ready, false));
-test("modelVersion incorrecta bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ modelVersion: "other" }) })).ready, false));
-test("modelKey incorrecto bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ modelKey: "other" }) })).ready, false));
+test("synthetic distinto de false bloquea modo estricto", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ synthetic: true }) })).ready, false));
+test("fallbackReason informado bloquea modo estricto", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ fallbackReason: "motivo" }) })).ready, false));
+test("modelVersion incorrecta bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ model: { ...sagittalFinal().model, version: "other" } }) })).ready, false));
+test("modelKey incorrecto bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ model: { ...sagittalFinal().model, key: "other" } }) })).ready, false));
 test("humanReviewRequired false bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ humanReviewRequired: false }) })).ready, false));
 test("notClinicalDiagnosis false bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ notClinicalDiagnosis: false }) })).ready, false));
-test("baselineReady false bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ modelArtifact: { baselineReady: false, availableForRealInference: true } }) })).ready, false));
-test("availableForRealInference false bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ modelArtifact: { baselineReady: true, availableForRealInference: false } }) })).ready, false));
-test("mask-preview no se sintetiza sin declaracion", () => assert.equal(resolvePlaneAssetUrls({ runId: "r1" }, "sagittal", (runId, plane, asset) => `/api/ai/assets/${runId}/${plane}/${asset}`)["mask-preview.png"], undefined));
+test("baselineReady false bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ model: { ...sagittalFinal().model, baselineReady: false } }) })).ready, false));
+test("availableForRealInference false bloquea", () => assert.equal(evaluateSagittalReadiness(realRun({ sagittal: sagittalFinal({ model: { ...sagittalFinal().model, availableForRealInference: false } }) })).ready, false));
+test("mask-preview no se sintetiza sin declaracion", () => assert.equal(resolvePlaneAssetUrls({ planeRunId: "r1", assets: [] }, "sagittal", (runId, plane, asset) => `/api/ai/assets/${runId}/${plane}/${asset}`)["mask-preview.png"], undefined));
 test("input y overlay si usan fallback backend", () => {
-  const urls = resolvePlaneAssetUrls({ runId: "r1" }, "sagittal", (runId, plane, asset) => `/api/ai/assets/${runId}/${plane}/${asset}`);
+  const urls = resolvePlaneAssetUrls({ planeRunId: "r1", assets: [] }, "sagittal", (runId, plane, asset) => `/api/ai/assets/${runId}/${plane}/${asset}`);
   assert.equal(urls["input.png"], "/api/ai/assets/r1/sagittal/input.png");
   assert.equal(urls["overlay.png"], "/api/ai/assets/r1/sagittal/overlay.png");
 });
 test("URL relativa no /api no se acepta", () => assert.equal(normalizeAiAssetUrl("assets/output.png", "https://backend.example"), undefined));
 test("no usa mask.npy", () => assert.equal(normalizeAiAssetUrl("/api/ai/assets/r1/sagittal/mask.npy", "https://backend.example"), undefined));
 test("no usa confidence.npy", () => assert.equal(normalizeAiAssetUrl("/api/ai/assets/r1/sagittal/confidence.npy", "https://backend.example"), undefined));
-test("workspace deriva mixed cuando solo requestedInferenceMode es real", () => assert.equal(resolveWorkspaceInferenceMode({ runId: "r", requestedInferenceMode: "real_baseline" }), "mixed"));
+test("workspace deriva mixed cuando solo requestedInferenceMode es real", () => assert.equal(resolveWorkspaceInferenceMode({ runId: "r", requestedInferenceMode: "real_baseline", planes: {} }), "mixed"));
 
 console.log(`Contract helper tests passed: ${count}`);

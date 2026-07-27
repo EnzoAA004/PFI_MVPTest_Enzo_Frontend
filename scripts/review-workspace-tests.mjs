@@ -37,36 +37,46 @@ const finalVersion = readiness.SAGITTAL_FINAL_MODEL_VERSION;
 
 function sagittalPlane(overrides = {}) {
   return {
-    runId: "sag-run",
+    planeRunId: "sag-run",
     plane: "sagittal",
-    modelKey: "sagittal_spider",
-    modelVersion: finalVersion,
-    artifactHash: finalHash,
-    allowContractFallback: false,
+    status: null,
     effectiveInferenceMode: "real_baseline",
-    aiOutput: { inferenceMode: "real_baseline", realInferenceAvailable: true, humanReviewRequired: true, notClinicalDiagnosis: true },
-    modelArtifact: { baselineReady: true, availableForRealInference: true },
+    synthetic: false,
+    fallbackReason: null,
+    model: { key: "sagittal_spider", version: finalVersion, artifactHash: finalHash, baselineReady: true, availableForRealInference: true },
+    input: { canonicalShape: [352, 384, 17], selectedAxis: 2, sliceCount: 17, selectedSliceIndex: 7, orientationTransform: "none" },
+    assets: [],
+    masks: [],
+    landmarks: [],
     humanReviewRequired: true,
     notClinicalDiagnosis: true,
-    metadata: { inputShapeCanonical: [352, 384, 17], selectedAxis: 2, sliceCount: 17, selectedSlice: 7, inputOrientationTransform: "none" },
-    measurements: { values: [{ id: "vertebra_group area", label: "vertebra_group area", value: 10, unit: "mm2" }] },
+    measurements: [{ id: "vertebra_group area", labelKey: "vertebra_group area", value: 10, unit: "mm2" }],
     ...overrides,
   };
 }
 
 function axialPlane(overrides = {}) {
   return {
-    runId: "ax-run",
+    planeRunId: "ax-run",
     plane: "axial",
+    status: null,
     effectiveInferenceMode: "real_baseline",
-    aiOutput: { inferenceMode: "real_baseline", realInferenceAvailable: true },
-    measurements: { values: [{ id: "axial-width", label: "Axial width", value: 8, unit: "mm" }] },
+    synthetic: false,
+    fallbackReason: null,
+    model: { availableForRealInference: true },
+    input: {},
+    assets: [],
+    masks: [],
+    landmarks: [],
+    humanReviewRequired: true,
+    notClinicalDiagnosis: true,
+    measurements: [{ id: "axial-width", labelKey: "Axial width", value: 8, unit: "mm" }],
     ...overrides,
   };
 }
 
 function run(planes) {
-  return { runId: "run", effectiveInferenceMode: "mixed", humanReviewRequired: true, notClinicalDiagnosis: true, planes };
+  return { runId: "run", effectiveInferenceMode: "mixed", humanReviewRequired: true, notClinicalDiagnosis: true, synthetic: false, fallbackReason: null, planes };
 }
 
 test("A el visor calcula auto-fit al cargar", () => {
@@ -123,10 +133,11 @@ test("12.11 B sagital real + axial candidate => sagittal_only", () => assert.equ
 test("12.11 C sagital null + axial candidate => unavailable", () => assert.equal(readiness.resolveReviewWorkspaceMode(run({ sagittal: null, axial: axialPlane({ effectiveInferenceMode: "contract" }) })), "unavailable"));
 test("12.11 D sagital null + axial real futuro => axial_only", () => assert.equal(readiness.resolveReviewWorkspaceMode(run({ sagittal: null, axial: axialPlane() })), "axial_only"));
 test("12.11 E sagital real + axial real => dual_plane", () => assert.equal(readiness.resolveReviewWorkspaceMode(run({ sagittal: sagittalPlane(), axial: axialPlane() })), "dual_plane"));
-test("12.11 H mediciones conservan plane/runId conceptualmente", () => {
-  const rows = readiness.extractMeasurementRows({ ...sagittalPlane(), measurements: { values: [{ id: "m", value: 1, unit: "mm", plane: "sagittal", runId: "sag-run" }] } });
+test("12.11 H mediciones conservan plane/planeRunId conceptualmente", () => {
+  const plane = { ...sagittalPlane(), measurements: [{ id: "m", value: 1, unit: "mm", plane: "sagittal" }] };
+  const rows = readiness.extractMeasurementRows(plane);
   assert.equal(rows[0].plane, "sagittal");
-  assert.equal(rows[0].runId, "sag-run");
+  assert.equal(plane.planeRunId, "sag-run");
 });
 test("12.11 I axial contract/mock nunca se presenta como real", () => assert.equal(readiness.evaluateAxialReadiness(run({ sagittal: null, axial: axialPlane({ effectiveInferenceMode: "mock" }) })).ready, false));
 test("12.11 J 3D permanece bloqueado si falta slice_index_mapping", () => assert.equal(run({ sagittal: sagittalPlane(), axial: null }).threeD?.status ?? "blocked_missing_axial", "blocked_missing_axial"));

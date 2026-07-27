@@ -1,9 +1,9 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { API_BASE_URL } from "../api";
 import { BackendApiError, aiAssetUrl, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
-import { canonicalRunToLegacyViewModel } from "../adapters/multiplanarRunAdapter";
 import type { Measurement, Plane, StudyLandmark } from "../appTypes";
-import type { AssetName, InputResponse, MultiplanarMeasurementValue, MultiplanarPlaneRun, MultiplanarRunPayload, MultiplanarRunResponse, RunReviewStatus } from "../multiplanarRunTypes";
+import type { CanonicalAssetName, CanonicalMeasurement, CanonicalMultiplanarRun, CanonicalPlaneRun } from "../contracts/canonicalMultiplanarRun";
+import type { InputResponse, MultiplanarRunPayload, RunReviewStatus } from "../multiplanarRunTypes";
 import type { MultiplanarContract } from "../multiplanarTypes";
 import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, evaluateRealInferenceReadiness, evaluateSagittalReadiness, evaluateSagittalReviewReadiness, extractMeasurementRows, readSpiderRuntimeMetadata, resolvePlaneAssetUrls, resolvePlaneInferenceMode, resolveReviewWorkspaceMode, resolveWorkspaceInferenceMode, SAGITTAL_FINAL_ARTIFACT_HASH, SAGITTAL_FINAL_MODEL_VERSION } from "../inferenceReadiness";
 import { AgentSummary } from "./AgentSummary";
@@ -58,29 +58,30 @@ function apiErrorMessage(error: unknown, action: string) {
   return `No se pudo ${action}.`;
 }
 
-function measurementRows(planeRun?: MultiplanarPlaneRun): MultiplanarMeasurementValue[] {
+function measurementRows(planeRun?: CanonicalPlaneRun): CanonicalMeasurement[] {
   return extractMeasurementRows(planeRun);
 }
 
-function toMeasurement(row: MultiplanarMeasurementValue, plane: Plane, index: number): Measurement {
-  const id = String(row.id ?? `${plane}-${row.label ?? "measurement"}-${index}`);
+function toMeasurement(row: CanonicalMeasurement, plane: Plane, index: number): Measurement {
+  const id = row.id || `${plane}-measurement-${index}`;
   return {
     id,
-    label: String(row.label ?? row.classLabel ?? row.className ?? `Medición ${index + 1}`),
-    level: typeof row.level === "string" ? row.level : undefined,
+    label: row.labelKey || `Medición ${index + 1}`,
+    level: row.level ?? undefined,
     value: row.value ?? "",
     aiValue: row.value ?? "",
-    unit: String(row.unit ?? ""),
-    confidence: typeof row.confidence === "number" ? row.confidence : undefined,
+    reviewerValue: row.reviewerValue ?? undefined,
+    unit: row.unit ?? "",
+    confidence: row.confidence,
     plane,
     source: "AI",
     status: "pendiente",
-    outlier: Boolean(row.outlier),
+    outlier: false,
     placeholder: Boolean(row.placeholder),
   };
 }
 
-function measurementsFromRun(run: MultiplanarRunResponse | null): Measurement[] {
+function measurementsFromRun(run: CanonicalMultiplanarRun | null): Measurement[] {
   if (!run?.planes) return [];
   return uploadPlanes.flatMap((plane) => measurementRows(run.planes?.[plane]).map((row, index) => toMeasurement(row, plane, index)));
 }
@@ -89,8 +90,8 @@ function percentLabel(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(2).replace(".", ",")} %` : "no informado";
 }
 
-function sagittalForegroundConfidence(run: MultiplanarRunResponse | null) {
-  const quality = (run?.planes?.sagittal?.quality ?? run?.quality) as Record<string, unknown> | undefined;
+function sagittalForegroundConfidence(run: CanonicalMultiplanarRun | null) {
+  const quality = run?.planes?.sagittal?.quality as Record<string, unknown> | undefined;
   return quality?.meanForegroundConfidence ?? quality?.foregroundMeanConfidence ?? quality?.foregroundConfidence ?? quality?.meanMaskConfidence;
 }
 
@@ -110,23 +111,35 @@ function reviewCorrectionsFrom(measurements: Measurement[]) {
     });
 }
 
-export function reviewPayloadReady(run: MultiplanarRunResponse | null, reviewer: string) {
+export function reviewPayloadReady(run: CanonicalMultiplanarRun | null, reviewer: string) {
   return Boolean(run && evaluateSagittalReviewReadiness(run).ready && reviewer.trim());
 }
 
-function fallbackReason(run: MultiplanarRunResponse | null, contract: MultiplanarContract | null) {
+function fallbackReason(run: CanonicalMultiplanarRun | null, contract: MultiplanarContract | null) {
   if (!run) return "";
   const readiness = evaluateRealInferenceReadiness(run);
   const contractReadiness = uploadPlanes.map((plane) => `${plane}: ${contract?.planes?.[plane]?.readiness ?? "sin contrato"}`).join(" · ");
   return readiness.reasons.length ? `${readiness.reasons.join(" ")} Preparación: ${contractReadiness}.` : `Preparación insuficiente. ${contractReadiness}.`;
 }
 
-function planeRunStatus(run: MultiplanarRunResponse | null, plane: Plane) {
+function planeRunStatus(run: CanonicalMultiplanarRun | null, plane: Plane) {
   const result = plane === "sagittal" ? evaluateSagittalReadiness(run) : evaluateAxialReadiness(run);
   return {
     result,
     mode: resolvePlaneInferenceMode(run?.planes?.[plane]) ?? "no informado",
   };
+}
+
+function sagittalLandmarksForViewer(landmarks: CanonicalPlaneRun["landmarks"] | undefined): StudyLandmark[] {
+  return (landmarks ?? []).map((landmark) => ({
+    id: landmark.id,
+    label: landmark.labelKey,
+    x: landmark.x,
+    y: landmark.y,
+    centroid: landmark.centroid,
+    center: landmark.center,
+    coordinateSpace: landmark.coordinateSpace,
+  })) as unknown as StudyLandmark[];
 }
 
 function allowedAssetValue(url: string | undefined) {
@@ -135,20 +148,20 @@ function allowedAssetValue(url: string | undefined) {
   return url;
 }
 
-function assetRows(planeRun: MultiplanarPlaneRun | undefined, plane: Plane) {
+function assetRows(planeRun: CanonicalPlaneRun | undefined, plane: Plane) {
   const urls = resolvePlaneAssetUrls(planeRun, plane, aiAssetUrl, API_BASE_URL);
-  return (["input.png", "overlay.png", "mask-preview.png"] as AssetName[]).map((assetName) => ({
+  return (["input.png", "overlay.png", "mask-preview.png"] as CanonicalAssetName[]).map((assetName) => ({
     assetName,
     url: allowedAssetValue(urls[assetName]),
   }));
 }
 
-function ProvenancePanel({ run }: { run: MultiplanarRunResponse | null }) {
+function ProvenancePanel({ run }: { run: CanonicalMultiplanarRun | null }) {
   const sagittal = run?.planes?.sagittal;
   const metadata = readSpiderRuntimeMetadata(sagittal);
   const sagittalReadiness = evaluateSagittalReadiness(run);
-  const artifactHash = sagittal?.artifactHash ?? sagittal?.aiOutput?.artifactHash;
-  const spacing = metadata.inPlaneSpacing?.length ? `${metadata.inPlaneSpacing.join(" x ")} ${metadata.inPlaneSpacingUnit ?? ""}`.trim() : "no informado";
+  const artifactHash = sagittal?.model.artifactHash;
+  const spacing = metadata.inPlaneSpacing?.length ? `${metadata.inPlaneSpacing.join(" x ")} mm` : "no informado";
   const nativeShape = metadata.inputShapeNative?.length ? `[${metadata.inputShapeNative.join(",")}]` : "no informado";
   const canonicalShape = metadata.inputShapeCanonical?.length ? `[${metadata.inputShapeCanonical.join(",")}]` : "no informado";
   return (
@@ -159,27 +172,27 @@ function ProvenancePanel({ run }: { run: MultiplanarRunResponse | null }) {
       </div>
       <p className="muted compact-copy">Evaluación técnica del runtime; no es validación clínica.</p>
       <dl className="settings-details">
-        <div><dt>Modelo</dt><dd>{sagittal?.modelKey ?? "no informado"}</dd></div>
-        <div><dt>Versión</dt><dd>{sagittal?.modelVersion ?? "no informado"}</dd></div>
+        <div><dt>Modelo</dt><dd>{sagittal?.model.key ?? "no informado"}</dd></div>
+        <div><dt>Versión</dt><dd>{sagittal?.model.version ?? "no informado"}</dd></div>
         <div><dt>Huella</dt><dd title={artifactHash}>{abbreviateArtifactHash(artifactHash)}</dd></div>
         <div><dt>Modo efectivo</dt><dd>{resolvePlaneInferenceMode(sagittal) ?? "no informado"}</dd></div>
-        <div><dt>inputId</dt><dd>{sagittal?.inputId ?? "no informado"}</dd></div>
+        <div><dt>inputId</dt><dd>{sagittal?.input.inputId ?? "no informado"}</dd></div>
         <div><dt>Corte</dt><dd>{metadata.selectedSlice ?? "no informado"}</dd></div>
         <div><dt>Eje</dt><dd>{metadata.selectedAxis ?? "no informado"}</dd></div>
         <div><dt>Slices</dt><dd>{metadata.sliceCount ?? "no informado"}</dd></div>
         <div><dt>Transformación</dt><dd>{metadata.inputOrientationTransform ?? "no informado"}</dd></div>
         <div><dt>Spacing</dt><dd>{spacing}</dd></div>
-        <div><dt>Revisión humana</dt><dd>{String(sagittal?.humanReviewRequired ?? sagittal?.aiOutput?.humanReviewRequired ?? run?.humanReviewRequired ?? "no informado")}</dd></div>
-        <div><dt>No diagnóstico clínico</dt><dd>{String(sagittal?.notClinicalDiagnosis ?? sagittal?.aiOutput?.notClinicalDiagnosis ?? run?.notClinicalDiagnosis ?? "no informado")}</dd></div>
+        <div><dt>Revisión humana</dt><dd>{String(sagittal?.humanReviewRequired ?? run?.humanReviewRequired ?? "no informado")}</dd></div>
+        <div><dt>No diagnóstico clínico</dt><dd>{String(sagittal?.notClinicalDiagnosis ?? run?.notClinicalDiagnosis ?? "no informado")}</dd></div>
       </dl>
       {metadata.spiderShapeDetected && <p className="settings-persistence-note">Runtime SPIDER: forma nativa {nativeShape}, forma canónica {canonicalShape}, eje {metadata.selectedAxis}, {metadata.sliceCount} cortes, transformación {metadata.inputOrientationTransform}.</p>}
-      {sagittal?.modelVersion && sagittal.modelVersion !== SAGITTAL_FINAL_MODEL_VERSION && <p className="delta-alert">La versión o huella del modelo sagital no coincide.</p>}
+      {sagittal?.model.version && sagittal.model.version !== SAGITTAL_FINAL_MODEL_VERSION && <p className="delta-alert">La versión o huella del modelo sagital no coincide.</p>}
       {artifactHash && artifactHash !== SAGITTAL_FINAL_ARTIFACT_HASH && <p className="delta-alert">La versión o huella del modelo sagital no coincide.</p>}
     </section>
   );
 }
 
-function TechnicalStatusPanel({ run }: { run: MultiplanarRunResponse | null }) {
+function TechnicalStatusPanel({ run }: { run: CanonicalMultiplanarRun | null }) {
   const sagittal = planeRunStatus(run, "sagittal");
   const axial = planeRunStatus(run, "axial");
   const dual = evaluateDualReadiness(run);
@@ -201,7 +214,7 @@ function TechnicalStatusPanel({ run }: { run: MultiplanarRunResponse | null }) {
   );
 }
 
-function AssetProvenancePanel({ run }: { run: MultiplanarRunResponse | null }) {
+function AssetProvenancePanel({ run }: { run: CanonicalMultiplanarRun | null }) {
   if (!run?.planes) return null;
   return (
     <section className="panel-card compact-card analysis-panel">
@@ -222,7 +235,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const [studyMetadataError, setStudyMetadataError] = useState("");
   const [contract, setContract] = useState<MultiplanarContract | null>(null);
   const [uploads, setUploads] = useState<Record<Plane, UploadState>>(emptyUploads);
-  const [run, setRun] = useState<MultiplanarRunResponse | null>(null);
+  const [run, setRun] = useState<CanonicalMultiplanarRun | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [reviewStatus, setReviewStatus] = useState<RunReviewStatus>("edited");
   const [reviewer, setReviewer] = useState(reviewerName ?? "");
@@ -250,7 +263,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
   const sagittalRows = measurementRows(sagittalPlaneRun);
   const sagittalMasks = sagittalPlaneRun?.masks ?? [];
   const sagittalMetadata = readSpiderRuntimeMetadata(sagittalPlaneRun);
-  const sagittalArtifactHash = sagittalPlaneRun?.artifactHash ?? sagittalPlaneRun?.aiOutput?.artifactHash;
+  const sagittalArtifactHash = sagittalPlaneRun?.model.artifactHash;
   const foregroundConfidence = percentLabel(sagittalForegroundConfidence(run));
   const canOpenStep: Record<Step, boolean> = {
     1: true,
@@ -359,8 +372,7 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
         },
         ...(axialUploadReady ? { axialInputId: uploads.axial.input?.inputId, axialModelKey: "axial_t2_alkafri" } : {}),
       };
-      const canonicalResult = await runMultiplanarAnalysis(payload);
-      const result = canonicalRunToLegacyViewModel(canonicalResult);
+      const result = await runMultiplanarAnalysis(payload);
       const readiness = evaluateRealInferenceReadiness(result);
       setRun(result);
       if (readiness.ready) {
@@ -565,8 +577,8 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
               <StatusBadge tone="green">sagital_only</StatusBadge>
             </div>
             <dl className="settings-details result-summary-strip">
-              <div><dt>Modelo</dt><dd>{sagittalPlaneRun?.modelKey ?? "no informado"}</dd></div>
-              <div><dt>Versión</dt><dd>{sagittalPlaneRun?.modelVersion ?? "no informado"}</dd></div>
+              <div><dt>Modelo</dt><dd>{sagittalPlaneRun?.model.key ?? "no informado"}</dd></div>
+              <div><dt>Versión</dt><dd>{sagittalPlaneRun?.model.version ?? "no informado"}</dd></div>
               <div><dt>Hash</dt><dd title={sagittalArtifactHash}>{abbreviateArtifactHash(sagittalArtifactHash)}</dd></div>
               <div><dt>Modo</dt><dd>{resolvePlaneInferenceMode(sagittalPlaneRun) ?? "no informado"}</dd></div>
               <div><dt>Corte</dt><dd>{sagittalMetadata.selectedSlice ?? "?"}/{sagittalMetadata.sliceCount ?? "?"}</dd></div>
@@ -585,10 +597,10 @@ export function AnalysisTimelineView({ reviewerName }: { reviewerName?: string }
             </div>
             <MriSliceViewer
               variant="sagittal"
-              planeRunId={sagittalPlaneRun?.runId}
+              planeRunId={sagittalPlaneRun?.planeRunId}
               series={sagittalPlaneRun?.series?.[0]}
               masks={sagittalPlaneRun?.masks}
-              landmarks={sagittalPlaneRun?.landmarks as unknown as StudyLandmark[]}
+              landmarks={sagittalLandmarksForViewer(sagittalPlaneRun?.landmarks)}
               maskVisibility={{}}
               overlayEnabled
               overlayOpacity={0.65}

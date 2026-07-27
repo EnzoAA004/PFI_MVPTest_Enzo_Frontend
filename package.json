@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract && npm run test:p8d2-review && npm run test:p8c2-assets && npm run test:p8d3-corrections && npm run test:p8d4-status && npm run test:p8e2-history && npm run test:p8e3-labelkey && npm run test:p9c1-canonical",
+    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract && npm run test:p8d2-review && npm run test:p8c2-assets && npm run test:p8d3-corrections && npm run test:p8d4-status && npm run test:p8e2-history && npm run test:p8e3-labelkey && npm run test:p9c1-canonical && npm run test:p9c2-readiness",
     "build": "vite build",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc -b",
@@ -22,6 +22,7 @@
     "test:p8e2-history": "node scripts/p8e2-subject-history-tests.mjs",
     "test:p8e3-labelkey": "node scripts/p8e3-labelkey-compat-tests.mjs",
     "test:p9c1-canonical": "node scripts/p9c1-canonical-contract-tests.mjs",
+    "test:p9c2-readiness": "node scripts/p9c2-canonical-readiness-tests.mjs",
     "test:e2e:contract": "node scripts/playwright-contract-e2e.mjs",
     "preview": "vite preview"
   },

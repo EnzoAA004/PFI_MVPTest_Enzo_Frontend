@@ -223,3 +223,100 @@ tests de `scripts/p9c1-canonical-contract-tests.mjs`, los alias adicionales
 (`degradedMode`, `aiOutput.synthetic`, `metadata.synthetic`) pueden
 eliminarse de `resolvePlaneSynthetic()` y `requireBooleanAlias()` sin romper
 nada, porque en ese punto el backend ya emite el campo canónico directo.
+
+## 9. P9-C.2 — Readiness y flujo principal migrados al modelo canónico
+
+Commit base de P9-C.2: `2760d039d902ffc4badba3291b83524fda34eb1f`.
+
+### 9.1 `inferenceReadiness.ts` trabaja exclusivamente con el modelo canónico
+
+`src/inferenceReadiness.ts` ya no importa ni acepta `MultiplanarRunResponse`,
+`MultiplanarPlaneRun` ni `MultiplanarMeasurementValue`. Todas sus funciones
+(`resolvePlaneInferenceMode`, `isRealPlaneRun`, `resolveWorkspaceInferenceMode`,
+`extractMeasurementRows`, `hasRealMeasurements`, `hasRealPlaneMeasurements`,
+`readSpiderRuntimeMetadata`, `evaluateSagittalReadiness`,
+`evaluateAxialReadiness`, `evaluateSagittalReviewReadiness`,
+`evaluateDualReadiness`, `evaluateRealInferenceReadiness`,
+`resolveReviewWorkspaceMode`, `resolvePlaneAssetUrls`) reciben y devuelven
+tipos de `src/contracts/canonicalMultiplanarRun.ts` (`CanonicalMultiplanarRun`,
+`CanonicalPlaneRun`, `CanonicalMeasurement`, `CanonicalPlaneAsset`).
+
+No quedan referencias a `aiOutput`, `modelArtifact`, `metadata` legacy,
+`allowContractFallback`, `inputShapeCanonical`/`selectedSlice` como aliases de
+un bolsón `metadata`, ni a ningún nombre de campo suelto (`modelKey`,
+`modelVersion`, `artifactHash`) fuera de `model.key` / `model.version` /
+`model.artifactHash`. La resolución de alias de la respuesta HTTP pública
+sigue viviendo exclusivamente en `src/adapters/multiplanarRunAdapter.ts`;
+`inferenceReadiness.ts` no conoce `schemaVersion` ni distingue v1 de v2 — solo
+conoce campos canónicos, algunos de los cuales pueden ser `null` (gobernanza
+no informada) en vez de `boolean`.
+
+Cambios de comportamiento intencionales respecto a P9-C.1 (más estrictos, no
+más laxos):
+
+- `evaluateSagittalReviewReadiness` y `evaluateDualReadiness` ya no aceptan
+  `null` como gobernanza válida: `humanReviewRequired`/`notClinicalDiagnosis`
+  deben ser exactamente `true`, y `synthetic` exactamente `false`, a nivel de
+  raíz. Antes (P9-C.1) solo se bloqueaba con `false` explícito; `null` pasaba
+  sin bloquear. Esto es deliberado: una corrida v1 histórica sin gobernanza
+  informada ahora queda "no evaluable" en vez de evaluable por omisión.
+- `allowContractFallback` no existe en el modelo canónico. Su equivalencia es
+  `effectiveInferenceMode === "real_baseline" && synthetic === false &&
+  !fallbackReason`, verificada explícitamente en `evaluateSagittalReadiness`
+  (a través de `isRealPlaneRun`) en vez de leer un campo suelto.
+
+### 9.2 `AnalysisTimelineView.tsx` conserva `CanonicalMultiplanarRun`
+
+El estado principal es `useState<CanonicalMultiplanarRun | null>(null)`.
+`executeRun()` llama `runMultiplanarAnalysis()` (que ya devuelve
+`CanonicalMultiplanarRun` desde P9-C.1) y evalúa
+`evaluateRealInferenceReadiness()` directamente sobre ese resultado, sin
+ninguna conversión intermedia. Todos los cálculos de habilitación/bloqueo
+(`sagittalRunReady`, `sagittalReviewReady`, `axialRunReady`, `dualRunReady`,
+`realInferenceReady`, `workspaceMode`, `measurementRows`,
+`measurementsFromRun`, `fallbackReason`, `planeRunStatus`, los paneles
+`ProvenancePanel`/`TechnicalStatusPanel`/`AssetProvenancePanel`,
+`reviewPayloadReady`, `saveReview`) leen directamente
+`run.planes.sagittal.model.key` / `.model.version` / `.model.artifactHash` /
+`.input` / `.assets`, sin aliases locales.
+
+`canonicalRunToLegacyViewModel()` **no se importa** en
+`AnalysisTimelineView.tsx`: ningún componente hijo lo necesitaba. Se revisó
+`AgentSummary` (recibe un objeto `agentDecision` construido localmente, sin
+depender de la forma del run), `MeasurementsPanel` (recibe `Measurement[]`, ya
+mapeado por `toMeasurement()`) y `MriSliceViewer` (sus props `series`/`masks`
+son `any` y aceptan la forma canónica sin cambios; solo `landmarks` requiere
+el campo `label` en vez de `labelKey`, resuelto con un mapeo local puntual
+`sagittalLandmarksForViewer()` — no es una reintroducción de la capa legacy,
+es un renombre de un único campo para un prop de un componente todavía no
+migrado). Si en P9-C.3 se migra `MriSliceViewer` a landmarks canónicos, ese
+mapeo puntual puede eliminarse.
+
+### 9.3 Componentes legacy pendientes para P9-C.3
+
+- `MriSliceViewer.tsx`: sigue tipando `series`/`masks` como `any` y esperando
+  `landmark.label` en vez de `landmark.labelKey`. Candidato principal de
+  P9-C.3.
+- `src/multiplanarRunTypes.ts` (`MultiplanarRunResponse`, `MultiplanarPlaneRun`,
+  `MultiplanarMeasurementValue`) sigue existiendo porque `multiplanarApi.ts`
+  todavía tipa `RunReviewRequest`/`RunReviewResponse`/`InputResponse` con ese
+  archivo, y `canonicalRunToLegacyViewModel()` en el adapter sigue
+  exportado (sin consumidores en el árbol de componentes hoy, pero mantenido
+  por si un componente legacy lo necesita puntualmente — ver criterio de
+  eliminación abajo).
+
+### 9.4 Criterio para eliminar `canonicalRunToLegacyViewModel`
+
+`canonicalRunToLegacyViewModel()` puede eliminarse de
+`src/adapters/multiplanarRunAdapter.ts` cuando:
+
+1. Ningún archivo bajo `src/components/` la importe (verificar con
+   `grep -r canonicalRunToLegacyViewModel src/components/`).
+2. `MriSliceViewer.tsx` consuma `series`/`masks`/`landmarks` canónicos
+   directamente (sin el mapeo puntual `sagittalLandmarksForViewer`).
+3. Los tests de `scripts/p9c1-canonical-contract-tests.mjs` que ejercitan
+   `canonicalRunToLegacyViewModel()` se retiren o se muevan a un test de
+   deprecación explícito.
+
+Hasta entonces permanece exportada como compatibilidad temporal, tal como
+anticipa la sección 5.

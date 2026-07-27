@@ -277,13 +277,12 @@ test("P9-C.1.1 D respuesta real_baseline limpia habilita allowContractFallback=f
   assert.equal(legacy.planes.sagittal.requestedInferenceMode, "real_baseline");
 });
 
-test("P9-C.1.1 E readiness integrado: presenter publico real habilita evaluateSagittalReviewReadiness", () => {
+test("P9-C.1.1 E readiness integrado: presenter publico real habilita evaluateSagittalReviewReadiness (modelo canonico directo, P9-C.2)", () => {
   const canonical = adapter.parseMultiplanarRunResponse(fixtures.rawMultiplanarRunV2PublicPresenterFixture);
-  const legacy = adapter.canonicalRunToLegacyViewModel(canonical);
-  const result = readiness.evaluateSagittalReviewReadiness(legacy);
+  const result = readiness.evaluateSagittalReviewReadiness(canonical);
   assert.equal(result.ready, true, `reasons: ${result.reasons.join(" | ")}`);
   assert.equal(result.reasons.length, 0);
-  assert.equal(readiness.resolveReviewWorkspaceMode(legacy), "sagittal_only");
+  assert.equal(readiness.resolveReviewWorkspaceMode(canonical), "sagittal_only");
 });
 
 test("P9-C.1.1 F v1 sin synthetic ni degradedMode no lanza ContractError al parsear", () => {
