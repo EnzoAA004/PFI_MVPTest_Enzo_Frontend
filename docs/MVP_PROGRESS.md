@@ -34,3 +34,4 @@
 - Persistir historial longitudinal completo por sujeto en tablas dedicadas.
 - Conectar maskContours por clase cuando el AI Module entregue máscaras por clase; los assets visuales se consumen vía `/api/ai/assets/{runId}/{plane}/{assetName}`.
 - Mantener `VITE_USE_MOCK=false` para E2E real; el modo mock queda reservado para demos y no habilita evaluación real.
+- **P10.5-D (visor de stacks navegable, pendiente de P10.5-B/C)**: hoy el workspace muestra un solo corte por plano (`input.png`/`overlay.png`), aunque el `.mha` subido contiene el stack completo (17-24 cortes según `101_t1.mha`/`101_t2.mha`). El contrato ya está cerrado — ver `docs/P10_5_A_VOLUMETRIC_CONTRACT.md` — falta extender `CanonicalPlaneInput`/`multiplanarRunAdapter.ts` con el catálogo de slices y construir el visor de scroll/thumbnails/W-L (nuevo view-model, no toca `MriViewerSeries`/`StudySeries` actuales).
