@@ -1,3 +1,5 @@
+import { frontendLogger } from "./security/frontendLogger";
+
 export type AppDataMode = "real" | "demo";
 export type DataOrigin = "backend" | "ai_module" | "database" | "demo";
 
@@ -11,6 +13,6 @@ export function markDataOrigin<T extends Record<string, unknown>>(value: T, data
 
 export function validateVisibleDataOrigin(label: string, dataOrigin?: DataOrigin | string) {
   if (isRealDataMode && dataOrigin === "demo") {
-    console.error(`[data-origin] ${label} intento renderizar datos demo con VITE_USE_MOCK=false.`);
+    frontendLogger.error(`[data-origin] ${label} intento renderizar datos demo con VITE_USE_MOCK=false.`);
   }
 }

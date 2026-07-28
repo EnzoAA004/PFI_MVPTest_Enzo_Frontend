@@ -55,6 +55,9 @@ const context = {
         currentToken = "token-b";
       },
     };
+    if (id === "./security/originPolicy") return {
+      isAuthorizedBackendUrl: (url) => (typeof url === "string" && url.trim() ? url : undefined),
+    };
     return {};
   },
 };

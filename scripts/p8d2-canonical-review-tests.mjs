@@ -23,6 +23,10 @@ function loadApi() {
     isDemoDataMode: false,
     isRealDataMode: true,
     appDataMode: "real",
+    URL,
+    frontendLogger: { debug() {}, warn() {}, error() {} },
+    toSafeFrontendError: (status, options = {}) => ({ message: options.candidateMessage ?? `status ${status}`, status, code: options.code, traceId: options.traceId }),
+    generateTraceId: (scope = "frontend") => `${scope}-test-trace`,
   };
   vm.runInNewContext(`${js}\nexports.updateReview = updateReview;\nexports.buildReviewCorrections = buildReviewCorrections;\nexports.normalizeStudiesResponse = normalizeStudiesResponse;`, sandbox);
   return { api: sandbox.exports, sandbox };

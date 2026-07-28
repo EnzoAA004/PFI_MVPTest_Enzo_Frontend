@@ -1,5 +1,8 @@
-import { API_BASE_URL } from "../api";
+import { API_BASE_URL, ApiError } from "../api";
 import { authHeaders, refreshDoctorSession } from "../authClient";
+import { isAuthorizedBackendUrl } from "../security/originPolicy";
+import { toSafeFrontendError } from "../security/safeError";
+import { generateTraceId } from "../security/traceId";
 import type { ViewKey } from "../appTypes";
 import { ChevronDown, LogOut, Search, UserCircle, UserCog } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -188,20 +191,22 @@ export function Header({ activeView, onChangeView, currentRunId, onNewAnalysis, 
   }, [profileMenuOpen]);
 
   async function fetchTechnicalReportPayload() {
-    let response = await fetch(technicalReportUrl, {
-      headers: { "Content-Type": "application/json", ...authHeaders() },
-    });
-    if (response.status === 401) {
-      try {
-        await refreshDoctorSession();
-        response = await fetch(technicalReportUrl, {
-          headers: { "Content-Type": "application/json", ...authHeaders() },
-        });
-      } catch {
-        // Preserve final backend response handling below.
-      }
+    if (!isAuthorizedBackendUrl(technicalReportUrl)) {
+      throw new ApiError("Origen del reporte técnico no autorizado.", { path: technicalReportUrl });
     }
-    if (!response.ok) throw new Error(`Backend respondió ${response.status}`);
+    const traceId = generateTraceId("frontend-report");
+    const requestInit = (): RequestInit => ({
+      headers: { "Content-Type": "application/json", "X-Trace-Id": traceId, ...authHeaders() },
+    });
+    let response = await fetch(technicalReportUrl, requestInit());
+    if (response.status === 401) {
+      await refreshDoctorSession();
+      response = await fetch(technicalReportUrl, requestInit());
+    }
+    if (!response.ok) {
+      const safe = toSafeFrontendError(response.status, { traceId });
+      throw new ApiError(safe.message, { status: response.status, path: technicalReportUrl, traceId });
+    }
     return response.json();
   }
 

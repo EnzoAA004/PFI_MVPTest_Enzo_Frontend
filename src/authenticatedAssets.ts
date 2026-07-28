@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { authHeaders, refreshDoctorSession } from "./authClient";
+import { isAuthorizedBackendUrl } from "./security/originPolicy";
 
 export type AuthenticatedImageState = "idle" | "loading" | "loaded" | "failed";
 
@@ -49,6 +50,9 @@ function validateImageResponse(response: Response, url: string) {
 
 export async function fetchAuthenticatedAiAsset(url: string, signal?: AbortSignal): Promise<Blob> {
   const assetName = assetNameFrom(url);
+  if (!isAuthorizedBackendUrl(url)) {
+    throw new AiAssetFetchError(`Asset ${assetName} rechazado: origen no autorizado.`, 0, url, assetName);
+  }
   let response = await requestAsset(url, signal);
   if (response.status === 401) {
     await refreshDoctorSession();

@@ -1,5 +1,8 @@
 import { authHeaders, refreshDoctorSession } from "./authClient";
 import { appDataMode, isDemoDataMode, isRealDataMode, markDataOrigin } from "./dataMode";
+import { frontendLogger } from "./security/frontendLogger";
+import { toSafeFrontendError } from "./security/safeError";
+import { generateTraceId } from "./security/traceId";
 import type { AgentDecision, AiModel, AiRunResponse, CanonicalReviewStatus, DataOrigin, Measurement, PipelineRunRequest, Plane, Priority, RawMeasurements, ReviewExportRequest, ReviewExportResponse, ReviewMeasurementCorrection, ReviewStatus, ReviewStatusResponse, ReviewUpdateRequest, StudiesResponse, StudyRow, SystemDiagnostics } from "./appTypes";
 import { priorityFromBackend } from "./studyMetadata";
 
@@ -13,6 +16,31 @@ declare global {
 
 const runtimeConfig = typeof window !== "undefined" ? window.__PFI_CONFIG__ : undefined;
 export const API_BASE_URL = runtimeConfig?.API_BASE_URL || import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+
+// P10-C.1 §12: fail loudly (but not fatally) if the resolved backend origin
+// looks unsafe. Never throws — a broken build must still be diagnosable.
+function validateApiBaseUrlAtStartup(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password) {
+      frontendLogger.error("[config] API_BASE_URL no debe incluir credenciales embebidas.");
+    }
+    const isLocalHost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    if (import.meta.env.PROD && parsed.protocol !== "https:" && !isLocalHost) {
+      frontendLogger.error("[config] En produccion, API_BASE_URL debe ser HTTPS.");
+    }
+    if (parsed.search) {
+      frontendLogger.error("[config] API_BASE_URL no debe incluir query string.");
+    }
+  } catch {
+    frontendLogger.error("[config] API_BASE_URL no es una URL valida.");
+  }
+}
+try {
+  validateApiBaseUrlAtStartup(API_BASE_URL);
+} catch {
+  // Startup diagnostics must never break module evaluation.
+}
 
 export class ApiError extends Error {
   status?: number;
@@ -51,7 +79,7 @@ export class ContractError extends Error {
 export const isDemoMode = () => isDemoDataMode;
 
 function frontendTraceId() {
-  return `frontend-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return generateTraceId("frontend");
 }
 
 function mapPriority(value?: string): Priority {
@@ -396,16 +424,12 @@ async function readErrorBody(response: Response) {
 }
 
 function buildApiError(path: string, traceId: string, response?: Response, body?: unknown, cause?: unknown) {
+  void cause; // network-failure causes are never rendered directly (P10-C.1 §6) — the safe fallback below covers them.
   const bodyRecord = asRecord(body);
   const code = typeof bodyRecord?.code === "string" ? bodyRecord.code : undefined;
-  const message = typeof bodyRecord?.message === "string"
-    ? bodyRecord.message
-    : response
-      ? `Backend respondio ${response.status}`
-      : cause instanceof Error
-        ? cause.message
-        : "No se pudo consultar el backend.";
-  return new ApiError(message, { status: response?.status, code, traceId, path, body });
+  const candidateMessage = typeof bodyRecord?.message === "string" ? bodyRecord.message : undefined;
+  const safe = toSafeFrontendError(response?.status, { code, traceId, candidateMessage });
+  return new ApiError(safe.message, { status: response?.status, code, traceId, path, body });
 }
 
 async function request<T>(path: string, init?: RequestInit, fallback?: () => T | Promise<T>, includeAuth = true): Promise<T> {

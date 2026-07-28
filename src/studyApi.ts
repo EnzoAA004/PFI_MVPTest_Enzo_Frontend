@@ -1,5 +1,7 @@
 import { API_BASE_URL, ApiError, ContractError } from "./api";
-import { authHeaders } from "./authClient";
+import { authHeaders, refreshDoctorSession } from "./authClient";
+import { toSafeFrontendError } from "./security/safeError";
+import { generateTraceId } from "./security/traceId";
 import type { DataOrigin, Measurement, PersistedArtifact, PersistedReviewCorrection, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyMetadataInput, StudyRow, StudyRun } from "./appTypes";
 import { priorityFromBackend } from "./studyMetadata";
 
@@ -303,8 +305,17 @@ function normalizeRun(value: unknown, study: StudyRow): StudyRun {
 }
 
 async function readJson(path: string) {
-  const response = await fetch(`${API_BASE_URL}${path}`, { headers: protectedHeaders() });
-  if (!response.ok) throw new ApiError(`Backend respondio ${response.status}`, { status: response.status, path });
+  const traceId = generateTraceId("frontend-study");
+  const headers = () => ({ ...protectedHeaders(), "X-Trace-Id": traceId });
+  let response = await fetch(`${API_BASE_URL}${path}`, { headers: headers() });
+  if (response.status === 401) {
+    await refreshDoctorSession();
+    response = await fetch(`${API_BASE_URL}${path}`, { headers: headers() });
+  }
+  if (!response.ok) {
+    const safe = toSafeFrontendError(response.status, { traceId });
+    throw new ApiError(safe.message, { status: response.status, path, traceId });
+  }
   return await response.json() as Record<string, unknown>;
 }
 
@@ -320,17 +331,24 @@ async function readError(response: Response): Promise<Record<string, unknown> | 
 function metadataApiError(path: string, response: Response, body?: Record<string, unknown>) {
   const code = typeof body?.code === "string" ? body.code : typeof body?.errorCode === "string" ? body.errorCode : undefined;
   const traceId = typeof body?.traceId === "string" ? body.traceId : response.headers.get("X-Trace-Id") ?? undefined;
-  const message = code ? metadataErrorMessages[code] ?? `Backend respondió ${response.status}` : `Backend respondió ${response.status}`;
+  const candidateMessage = code ? metadataErrorMessages[code] : undefined;
+  const message = candidateMessage ?? toSafeFrontendError(response.status, { code, traceId }).message;
   return new ApiError(message, { status: response.status, code, path, traceId, body });
 }
 
 export async function updateStudyMetadata(caseId: string, metadata: StudyMetadataInput): Promise<StudyDetailResponse> {
   const path = `/api/studies/${encodeURIComponent(caseId)}/metadata`;
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const traceId = generateTraceId("frontend-study");
+  const requestInit = (): RequestInit => ({
     method: "PUT",
-    headers: protectedHeaders(),
+    headers: { ...protectedHeaders(), "X-Trace-Id": traceId },
     body: JSON.stringify(metadata),
   });
+  let response = await fetch(`${API_BASE_URL}${path}`, requestInit());
+  if (response.status === 401) {
+    await refreshDoctorSession();
+    response = await fetch(`${API_BASE_URL}${path}`, requestInit());
+  }
   if (!response.ok) throw metadataApiError(path, response, await readError(response));
   const payload = await response.json() as Record<string, unknown>;
   if (payload.study || payload.runs) {

@@ -1,13 +1,16 @@
-import { API_BASE_URL } from "./api";
+import { API_BASE_URL, ApiError } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
 import { isRealDataMode } from "./dataMode";
+import { toSafeFrontendError } from "./security/safeError";
+import { generateTraceId } from "./security/traceId";
 import type { AuditEvent, Measurement, ReviewStatusResponse } from "./appTypes";
 
-function requestInit(init?: RequestInit): RequestInit {
+function requestInit(init: RequestInit | undefined, traceId: string): RequestInit {
   return {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      "X-Trace-Id": traceId,
       ...authHeaders(),
       ...init?.headers,
     },
@@ -15,16 +18,19 @@ function requestInit(init?: RequestInit): RequestInit {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response = await fetch(`${API_BASE_URL}${path}`, requestInit(init));
+  const traceId = generateTraceId("frontend-review");
+  let response = await fetch(`${API_BASE_URL}${path}`, requestInit(init, traceId));
   if (response.status === 401) {
-    try {
-      await refreshDoctorSession();
-      response = await fetch(`${API_BASE_URL}${path}`, requestInit(init));
-    } catch {
-      // Keep the original failure behavior below.
-    }
+    // A failed refresh means the session is gone: surface that as the real
+    // failure (401) instead of silently retrying with the stale token, so
+    // callers observe a genuine "session invalid" state.
+    await refreshDoctorSession();
+    response = await fetch(`${API_BASE_URL}${path}`, requestInit(init, traceId));
   }
-  if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
+  if (!response.ok) {
+    const safe = toSafeFrontendError(response.status, { traceId });
+    throw new ApiError(safe.message, { status: response.status, path, traceId });
+  }
   return (await response.json()) as T;
 }
 

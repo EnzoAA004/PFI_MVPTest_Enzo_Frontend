@@ -1,6 +1,8 @@
 import { API_BASE_URL, ApiError, ContractError } from "./api";
-import { authHeaders } from "./authClient";
+import { authHeaders, refreshDoctorSession } from "./authClient";
 import { validateVisibleDataOrigin } from "./dataMode";
+import { toSafeFrontendError } from "./security/safeError";
+import { generateTraceId } from "./security/traceId";
 import type { Measurement, PatientHistoryGovernance, PatientHistoryResponse, PatientHistorySummary, PatientStudy, PersistedReviewCorrection, Plane, Priority, ReviewStatus } from "./appTypes";
 import { applyCorrectionsToMeasurements, normalizePersistedCorrection } from "./studyApi";
 
@@ -202,15 +204,22 @@ const historyErrorMessages: Record<string, string> = {
 export function historyApiError(path: string, response: Response, body?: Record<string, unknown>) {
   const code = typeof body?.code === "string" ? body.code : typeof body?.errorCode === "string" ? body.errorCode : undefined;
   const traceId = typeof body?.traceId === "string" ? body.traceId : response.headers.get("X-Trace-Id") ?? undefined;
-  const message = code ? historyErrorMessages[code] ?? `Backend respondió ${response.status}` : `Backend respondió ${response.status}`;
+  const candidateMessage = code ? historyErrorMessages[code] : undefined;
+  const message = candidateMessage ?? toSafeFrontendError(response.status, { code, traceId }).message;
   return new ApiError(message, { status: response.status, code, path, traceId, body });
 }
 
 export async function fetchSubjectHistory(subjectRef: string): Promise<PatientHistoryResponse> {
   const path = `/api/subjects/${encodeURIComponent(subjectRef)}/history`;
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+  const traceId = generateTraceId("frontend-history");
+  const requestInit = (): RequestInit => ({
+    headers: { "Content-Type": "application/json", "X-Trace-Id": traceId, ...authHeaders() },
   });
+  let response = await fetch(`${API_BASE_URL}${path}`, requestInit());
+  if (response.status === 401) {
+    await refreshDoctorSession();
+    response = await fetch(`${API_BASE_URL}${path}`, requestInit());
+  }
   if (!response.ok) throw historyApiError(path, response, await readError(response));
   return normalizeSubjectHistoryResponse(await response.json(), subjectRef);
 }

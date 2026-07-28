@@ -1,6 +1,8 @@
 import { API_BASE_URL } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
 import { isDurableMeshAssetUrl, parseMultiplanarRunResponse } from "./adapters/multiplanarRunAdapter";
+import { toSafeFrontendError } from "./security/safeError";
+import { generateTraceId } from "./security/traceId";
 import type { CanonicalMultiplanarRun } from "./contracts/canonicalMultiplanarRun";
 import type { InputResponse } from "./contracts/inputApiTypes";
 import type { RunReviewRequest, RunReviewResponse } from "./contracts/reviewApiTypes";
@@ -46,12 +48,12 @@ async function backendErrorFrom(response: Response, path: string, traceId: strin
   const backendMessage = responseString(body?.message) ?? responseString(body?.detail);
   const message = code === "AI_MULTIPLANAR_CONTRACT_VIOLATION" || code === "AI_CONTRACT_VIOLATION"
     ? "El modelo sagital no devolvió el contrato real esperado."
-    : backendMessage ?? `Backend respondió ${response.status}`;
+    : toSafeFrontendError(response.status, { code, traceId, candidateMessage: backendMessage }).message;
   return new BackendApiError(message, response.status, path, traceId, code);
 }
 
 async function multiplanarRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const traceId = `frontend-multiplanar-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const traceId = generateTraceId("frontend-multiplanar");
   const isFormData = init?.body instanceof FormData;
   const requestInit = (): RequestInit => ({
     ...init,
@@ -154,7 +156,7 @@ export function aiAssetUrl(runId: string, plane: Plane, assetName: AssetName): s
 export async function fetchThreeDProxyAsset(url: string): Promise<unknown> {
   const sanitizedUrl = isDurableMeshAssetUrl(url);
   if (!sanitizedUrl) throw new BackendApiError("URL del asset 3D no autorizada.", 0, url);
-  const traceId = `frontend-threed-asset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const traceId = generateTraceId("frontend-threed-asset");
   const target = sanitizedUrl.startsWith("/api/") ? `${API_BASE_URL}${sanitizedUrl}` : sanitizedUrl;
   let response = await fetch(target, { headers: { "X-Trace-Id": traceId, ...authHeaders() } });
   if (response.status === 401) {

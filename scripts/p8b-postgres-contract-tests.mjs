@@ -16,10 +16,14 @@ function loadApiNormalizers() {
     exports: {},
     window: undefined,
     console,
+    URL,
     markDataOrigin: (value, dataOrigin) => ({ ...value, dataOrigin }),
     isDemoDataMode: false,
     isRealDataMode: true,
     appDataMode: "real",
+    frontendLogger: { debug() {}, warn() {}, error() {} },
+    toSafeFrontendError: (status, options = {}) => ({ message: options.candidateMessage ?? `status ${status}`, status, code: options.code, traceId: options.traceId }),
+    generateTraceId: (scope = "frontend") => `${scope}-test-trace`,
   };
   vm.runInNewContext(`${js}\nexports.normalizeStudiesResponse = normalizeStudiesResponse;`, sandbox);
   return sandbox.exports;

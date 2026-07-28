@@ -1,5 +1,7 @@
-import { API_BASE_URL } from "./api";
-import { authHeaders } from "./authClient";
+import { API_BASE_URL, ApiError } from "./api";
+import { authHeaders, refreshDoctorSession } from "./authClient";
+import { toSafeFrontendError } from "./security/safeError";
+import { generateTraceId } from "./security/traceId";
 
 export type PipelineContractSchema = {
   schemaVersion?: string;
@@ -18,12 +20,19 @@ export type PipelineContractSchema = {
 };
 
 export async function getPipelineContractSchema(): Promise<PipelineContractSchema> {
-  const response = await fetch(`${API_BASE_URL}/api/ai/pipeline/schema`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-    },
+  const path = "/api/ai/pipeline/schema";
+  const traceId = generateTraceId("frontend-pipeline");
+  const requestInit = (): RequestInit => ({
+    headers: { "Content-Type": "application/json", "X-Trace-Id": traceId, ...authHeaders() },
   });
-  if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
+  let response = await fetch(`${API_BASE_URL}${path}`, requestInit());
+  if (response.status === 401) {
+    await refreshDoctorSession();
+    response = await fetch(`${API_BASE_URL}${path}`, requestInit());
+  }
+  if (!response.ok) {
+    const safe = toSafeFrontendError(response.status, { traceId });
+    throw new ApiError(safe.message, { status: response.status, path, traceId });
+  }
   return (await response.json()) as PipelineContractSchema;
 }

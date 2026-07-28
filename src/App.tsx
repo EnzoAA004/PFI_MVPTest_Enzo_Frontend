@@ -2,6 +2,8 @@
 import { buildReviewCorrections, getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
 import { logoutDoctor, updateDoctorSettings } from "./authClient";
 import { hydrateAuthSession, loadAuthSession } from "./authStorage";
+import { frontendLogger } from "./security/frontendLogger";
+import { SESSION_INVALIDATED_EVENT, onCrossTabSessionSync } from "./security/sessionCleanup";
 import { AnalysisTimelineView } from "./components/AnalysisTimelineView";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
@@ -251,7 +253,7 @@ function App() {
 
   useEffect(() => {
     if (!contractIssue) return;
-    console.error("[contract] Respuesta incompatible con el contrato", {
+    frontendLogger.error("[contract] Respuesta incompatible con el contrato", {
       message: contractIssue.message,
       code: contractIssue.code,
       path: contractIssue.path,
@@ -305,9 +307,46 @@ function App() {
     if (session) void appendBackendAudit(actor, action, detail).catch(() => undefined);
   }
 
-  function logout() {
-    void logoutDoctor().finally(() => setSession(null));
+  function resetProtectedState() {
+    setBackendStudies([]);
+    setStudiesSummary(undefined);
+    setPatientHistoryResponse(null);
+    setStudyTraceabilityStudies([]);
+    setSelectedRun(null);
+    setStudyReview(null);
+    setMeasurements([]);
+    setAuditTrail([]);
+    setSelectedStudy(null);
+    setHistoryTarget(null);
+    setStudiesError("");
+    setHistoryError("");
+    setReviewError("");
+    setError("");
+    setInfo("");
   }
+
+  function logout() {
+    void logoutDoctor().finally(() => {
+      setSession(null);
+      resetProtectedState();
+    });
+  }
+
+  // A session invalidated in the background (failed refresh) or a logout in
+  // another tab must close this tab's session too — no clinical data may
+  // remain reachable once the session is gone anywhere (P10-C.1 §3/§4).
+  useEffect(() => {
+    function handleSessionLost() {
+      setSession(null);
+      resetProtectedState();
+    }
+    window.addEventListener(SESSION_INVALIDATED_EVENT, handleSessionLost);
+    const unsubscribeCrossTab = onCrossTabSessionSync(handleSessionLost);
+    return () => {
+      window.removeEventListener(SESSION_INVALIDATED_EVENT, handleSessionLost);
+      unsubscribeCrossTab();
+    };
+  }, []);
 
   function changeView(view: ViewKey) {
     if (view === "studies" || view === "queue") setLastStudyNavView(view);

@@ -1,11 +1,15 @@
 import { API_BASE_URL } from "./api";
-import { clearAuthSession, getCachedAuthSession, saveAuthSession } from "./authStorage";
-import type { AuthLoginResponse, AuthPendingResponse, AuthSettingsRequest, AuthTokenResponse, AuthUser, RegisterRequest } from "./appTypes";
+import { getCachedAuthSession, saveAuthSession } from "./authStorage";
+import { coordinateRefresh } from "./security/refreshCoordinator";
+import { clearAllProtectedData, notifySessionInvalidated } from "./security/sessionCleanup";
+import { generateTraceId } from "./security/traceId";
+import type { AuthLoginResponse, AuthPendingResponse, AuthSession, AuthSettingsRequest, AuthTokenResponse, AuthUser, RegisterRequest } from "./appTypes";
 
 async function authRequest<T>(path: string, body?: unknown, method = "POST", includeAuth = false): Promise<T> {
+  const traceId = generateTraceId("frontend-auth");
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
-    headers: { "Content-Type": "application/json", ...(includeAuth ? authHeaders() : {}) },
+    headers: { "Content-Type": "application/json", "X-Trace-Id": traceId, ...(includeAuth ? authHeaders() : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`Backend respondio ${response.status}`);
@@ -46,11 +50,24 @@ export async function createDemoDoctorSession() {
   return saveAuthSession(tokens);
 }
 
-export async function refreshDoctorSession() {
-  const session = getCachedAuthSession();
-  if (!session?.refreshToken) throw new Error("No hay refresh token disponible");
-  const tokens = await authRequest<AuthTokenResponse>("/api/auth/refresh", { refreshToken: session.refreshToken });
-  return saveAuthSession(tokens);
+export function refreshDoctorSession(): Promise<AuthSession> {
+  return coordinateRefresh(async () => {
+    const session = getCachedAuthSession();
+    if (!session?.refreshToken) {
+      notifySessionInvalidated();
+      throw new Error("No hay refresh token disponible");
+    }
+    try {
+      const tokens = await authRequest<AuthTokenResponse>("/api/auth/refresh", { refreshToken: session.refreshToken });
+      return saveAuthSession(tokens);
+    } catch (error) {
+      // A failed refresh means the session is gone (expired/revoked refresh
+      // token) — clear it here so every call site, not just the one that
+      // happened to trigger the refresh, observes a logged-out state.
+      notifySessionInvalidated();
+      throw error;
+    }
+  });
 }
 
 export async function getCurrentDoctor() {
@@ -77,5 +94,5 @@ export async function logoutDoctor() {
   if (session?.refreshToken) {
     await authRequest<{ status: string }>("/api/auth/logout", { refreshToken: session.refreshToken }).catch(() => ({ status: "local" }));
   }
-  clearAuthSession();
+  await clearAllProtectedData();
 }
