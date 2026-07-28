@@ -34,6 +34,8 @@ export type CanonicalPlaneModel = {
   trainingStatus?: string;
   baselineReady?: boolean;
   availableForRealInference?: boolean;
+  runtimeQualification?: string;
+  qualityGatePassed?: boolean;
   manifestStatus?: string;
   manifestValid?: boolean;
 };
@@ -106,6 +108,47 @@ export type CanonicalPlaneRun = CanonicalGovernance & {
   quality?: CanonicalPlaneQuality;
 };
 
+/**
+ * Recognized statuses for the experimental 3D geometric proxy (see AI Module
+ * P9-A.3.1/P9-A.3.1.1). `pending_registered_reconstruction` was retired by the
+ * AI Module and must never be reintroduced here or interpreted specially — any
+ * status outside this set is treated as unavailable by the view model layer,
+ * never as a hidden "ready" state.
+ */
+export type CanonicalThreeDStatus =
+  | "blocked_missing_axial"
+  | "blocked_missing_sagittal"
+  | "experimental_ready"
+  | "experimental_blocked_insufficient_geometry"
+  | "experimental_blocked_missing_anatomical_mapping";
+
+export type CanonicalThreeDAsset = {
+  assetName: string;
+  url: string;
+};
+
+export type CanonicalThreeDReconstruction = {
+  kind?: string;
+  method?: string;
+  anatomicalReconstruction?: boolean;
+  volumetricReconstruction?: boolean;
+  coordinateSystem?: string;
+  mappingSource?: string;
+  mappingValidated?: boolean;
+  available?: boolean;
+  experimental?: boolean;
+};
+
+export type CanonicalThreeD = {
+  enabled: boolean;
+  status: CanonicalThreeDStatus | string;
+  sourcePlaneRunIds: { sagittal: string | null; axial: string | null };
+  requiredInputs: string[];
+  assets: CanonicalThreeDAsset[];
+  reconstruction?: CanonicalThreeDReconstruction;
+  warnings: string[];
+};
+
 export type CanonicalMultiplanarRun = CanonicalGovernance & {
   status?: string;
   schemaVersion?: string;
@@ -119,5 +162,6 @@ export type CanonicalMultiplanarRun = CanonicalGovernance & {
     sagittal: CanonicalPlaneRun;
     axial?: CanonicalPlaneRun;
   };
+  threeD?: CanonicalThreeD;
   degradedMode?: boolean;
 };

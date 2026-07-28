@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { API_BASE_URL } from "../api";
-import { BackendApiError, aiAssetUrl, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
+import { BackendApiError, aiAssetUrl, fetchThreeDProxyAsset, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
 import type { Measurement, Plane } from "../appTypes";
 import type { CanonicalAssetName, CanonicalMultiplanarRun, CanonicalPlaneRun } from "../contracts/canonicalMultiplanarRun";
 import type { InputResponse } from "../contracts/inputApiTypes";
@@ -11,6 +11,8 @@ import { abbreviateArtifactHash, evaluateAxialReadiness, evaluateDualReadiness, 
 import { getPlane, getPlaneMasks, getPlaneMeasurements } from "../selectors/canonicalRunSelectors";
 import { canonicalMeasurementToViewMeasurement } from "../viewModels/measurementViewModel";
 import { canonicalPlaneToMriViewerModel } from "../viewModels/mriViewerViewModel";
+import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
+import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
 import { AgentSummary } from "./AgentSummary";
 import { MeasurementsPanel } from "./MeasurementsPanel";
 import { MriSliceViewer } from "./MriSliceViewer";
@@ -228,8 +230,10 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
   const [reviewSaved, setReviewSaved] = useState(false);
   const [evaluationVisited, setEvaluationVisited] = useState(false);
   const [selectedSagittalLandmark, setSelectedSagittalLandmark] = useState("");
+  const [selectedAxialLandmark, setSelectedAxialLandmark] = useState("");
   const [sagittalOverlayAvailable, setSagittalOverlayAvailable] = useState(false);
   const [navigatingToSavedStudy, setNavigatingToSavedStudy] = useState(false);
+  const [threeDAssetState, setThreeDAssetState] = useState<ThreeDProxyAssetFetchState>({ status: "idle" });
   const runInFlightRef = useRef(false);
 
   const normalizedCaseId = caseId.trim();
@@ -247,6 +251,13 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
   const sagittalViewerModel = useMemo(() => (sagittalPlaneRun ? canonicalPlaneToMriViewerModel(sagittalPlaneRun) : null), [sagittalPlaneRun]);
   const sagittalMetadata = readSpiderRuntimeMetadata(sagittalPlaneRun);
   const sagittalArtifactHash = sagittalPlaneRun?.model.artifactHash;
+  const axialPlaneRun = getPlane(run, "axial");
+  const axialViewerModel = useMemo(() => (axialPlaneRun ? canonicalPlaneToMriViewerModel(axialPlaneRun) : null), [axialPlaneRun]);
+  const axialRows = getPlaneMeasurements(run, "axial");
+  const threeDProxyViewModel = useMemo(
+    () => canonicalThreeDToProxyViewModel(run?.threeD, threeDAssetState, run?.humanReviewRequired ?? null),
+    [run?.threeD, run?.humanReviewRequired, threeDAssetState],
+  );
   const foregroundConfidence = percentLabel(sagittalForegroundConfidence(run));
   const canOpenStep: Record<Step, boolean> = {
     1: true,
@@ -291,6 +302,37 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
   useEffect(() => {
     if (run) setMeasurements(measurementsFromRun(run));
   }, [run]);
+
+  const threeDMeshAssetUrl = run?.threeD?.enabled ? run.threeD.assets.find((asset) => asset.assetName.endsWith(".json"))?.url : undefined;
+
+  async function loadThreeDAsset(url: string) {
+    setThreeDAssetState({ status: "loading" });
+    try {
+      const raw = await fetchThreeDProxyAsset(url);
+      const asset = parseThreeDProxyMeshAsset(raw);
+      setThreeDAssetState({ status: "loaded", asset });
+    } catch (error) {
+      if (error instanceof ThreeDProxyAssetError) {
+        setThreeDAssetState({ status: "invalid" });
+      } else if (error instanceof BackendApiError) {
+        setThreeDAssetState({ status: "error", traceId: error.traceId });
+      } else {
+        setThreeDAssetState({ status: "error" });
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!threeDMeshAssetUrl) {
+      setThreeDAssetState({ status: "idle" });
+      return;
+    }
+    void loadThreeDAsset(threeDMeshAssetUrl);
+  }, [threeDMeshAssetUrl]);
+
+  function retryThreeDAsset() {
+    if (threeDMeshAssetUrl) void loadThreeDAsset(threeDMeshAssetUrl);
+  }
 
   function openStep(step: Step) {
     if (!canOpenStep[step]) return;
@@ -621,8 +663,32 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
               />
             )}
           </section>
+          {axialViewerModel && (
+            <section className="panel-card span-all">
+              <div className="section-title">
+                <h2>Visor axial (modelo candidato)</h2>
+                <StatusBadge tone="amber">no baseline aprobado</StatusBadge>
+              </div>
+              <div className="ai-honesty-row">
+                <StatusBadge tone="amber">baselineReady: {String(axialPlaneRun?.model.baselineReady ?? false)}</StatusBadge>
+                <StatusBadge tone="blue">availableForRealInference: {String(axialPlaneRun?.model.availableForRealInference ?? false)}</StatusBadge>
+                <StatusBadge tone="blue">readiness: {axialPlaneRun?.model.readiness ?? "no informado"}</StatusBadge>
+                <StatusBadge tone="blue">runtimeQualification: {axialPlaneRun?.model.runtimeQualification ?? "no informado"}</StatusBadge>
+                <StatusBadge tone="amber">qualityGatePassed: {String(axialPlaneRun?.model.qualityGatePassed ?? false)}</StatusBadge>
+              </div>
+              <p className="muted compact-copy">Las clases raw_* del modelo axial se muestran sin interpretación anatómica; su semántica todavía no está resuelta.</p>
+              <MriSliceViewer
+                model={axialViewerModel}
+                selectedLandmarkId={selectedAxialLandmark}
+                onSelectLandmark={setSelectedAxialLandmark}
+                readonly
+                overlayEnabled
+                overlayOpacity={0.65}
+              />
+            </section>
+          )}
           <div className="span-all">
-            <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(sagittalPlaneRun) ?? resolveWorkspaceInferenceMode(run)} description="Mediciones devueltas por inferencia sagital real. Editables como borrador del revisor." onChange={updateMeasurements} />
+            <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(sagittalPlaneRun) ?? resolveWorkspaceInferenceMode(run)} description={`Mediciones sagitales reales${axialRows.length > 0 ? " y axiales experimentales (sin interpretación anatómica de raw_*)" : ""}. Editables como borrador del revisor.`} onChange={updateMeasurements} />
           </div>
 
           <div className="span-all">
@@ -634,10 +700,16 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
             <TechnicalStatusPanel run={run} />
           </details>
           <details className="panel-card compact-card analysis-panel review-accordion span-all">
-            <summary>Funcionalidad 3D futura</summary>
-            <div className="section-title"><h2>Referencia anatómica genérica — no paciente-específica</h2><StatusBadge tone="blue">atlas genérico</StatusBadge></div>
-            <SpineReconstructionPreview />
-            <p className="preview-meta">La reconstrucción 3D paciente-específica permanece bloqueada porque falta axial real, spacing, mapping de cortes y threeD.enabled=true.</p>
+            <summary>Funcionalidad 3D — proxy geométrico experimental</summary>
+            <div className="section-title">
+              <h2>{threeDProxyViewModel.title}</h2>
+              <StatusBadge tone={threeDProxyViewModel.state === "available" ? "green" : "amber"}>{threeDProxyViewModel.state}</StatusBadge>
+            </div>
+            <SpineReconstructionPreview proxy={threeDProxyViewModel} />
+            {threeDProxyViewModel.state === "asset_error" && (
+              <button className="ghost-button" onClick={retryThreeDAsset} type="button">Reintentar carga del proxy 3D</button>
+            )}
+            <p className="preview-meta">No representa una reconstrucción anatómica ni volumétrica. Deriva de bounding boxes 2D por plano con mapping explícito provisto por configuración.</p>
           </details>
           <section className="panel-card compact-card analysis-panel span-all">
             <div className="analysis-actions">

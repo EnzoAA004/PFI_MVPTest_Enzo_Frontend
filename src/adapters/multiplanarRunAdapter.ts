@@ -13,6 +13,9 @@ import {
   type CanonicalPlaneQuality,
   type CanonicalPlaneRun,
   type CanonicalPlaneSeriesItem,
+  type CanonicalThreeD,
+  type CanonicalThreeDAsset,
+  type CanonicalThreeDReconstruction,
 } from "../contracts/canonicalMultiplanarRun";
 
 const ALLOWED_ASSET_NAMES: CanonicalAssetName[] = ["input.png", "overlay.png", "mask-preview.png"];
@@ -264,8 +267,75 @@ function parseModel(rawPlane: Record<string, unknown>): CanonicalPlaneModel {
     trainingStatus: asString(modelArtifact?.trainingStatus),
     baselineReady: asBoolean(modelArtifact?.baselineReady),
     availableForRealInference: pickFirst(asBoolean(modelArtifact?.availableForRealInference), asBoolean(aiOutput?.realInferenceAvailable)),
+    runtimeQualification: asString(modelArtifact?.runtimeQualification),
+    qualityGatePassed: asBoolean(modelArtifact?.qualityGatePassed),
     manifestStatus: asString(modelArtifact?.manifestStatus),
     manifestValid: asBoolean(modelArtifact?.manifestValid),
+  };
+}
+
+const ALLOWED_THREE_D_STATUSES = new Set<string>([
+  "blocked_missing_axial",
+  "blocked_missing_sagittal",
+  "experimental_ready",
+  "experimental_blocked_insufficient_geometry",
+  "experimental_blocked_missing_anatomical_mapping",
+]);
+
+function parseThreeDAssets(rawAssets: unknown): CanonicalThreeDAsset[] {
+  if (!Array.isArray(rawAssets)) return [];
+  return rawAssets.reduce<CanonicalThreeDAsset[]>((assets, item) => {
+    const record = asRecord(item);
+    if (!record) return assets;
+    const assetName = asString(record.assetName);
+    const url = isSanitizedPublicUrl(record.url) ?? isSanitizedPublicUrl(record.relativePath);
+    if (!assetName || !url) return assets;
+    assets.push({ assetName, url });
+    return assets;
+  }, []);
+}
+
+function parseThreeDReconstruction(rawReconstruction: unknown): CanonicalThreeDReconstruction | undefined {
+  const record = asRecord(rawReconstruction);
+  if (!record) return undefined;
+  return {
+    kind: asString(record.kind),
+    method: asString(record.method),
+    anatomicalReconstruction: asBoolean(record.anatomicalReconstruction),
+    volumetricReconstruction: asBoolean(record.volumetricReconstruction),
+    coordinateSystem: asString(record.coordinateSystem),
+    mappingSource: pickFirst(asString(record.mappingSource), asString((asRecord(record.parameters))?.mappingSource)),
+    mappingValidated: pickFirst(asBoolean(record.mappingValidated), asBoolean((asRecord(record.parameters))?.mappingValidated)),
+    available: asBoolean(record.available),
+    experimental: asBoolean(record.experimental),
+  };
+}
+
+/**
+ * `threeD` is optional on purpose: legacy/sagittal-only responses never carry
+ * it, and this must never be fabricated. Unknown or missing `status` values
+ * are preserved as-is (never coerced into `experimental_ready` or a retired
+ * status like `pending_registered_reconstruction`) — display-state
+ * interpretation belongs to threeDProxyViewModel.ts, not this adapter.
+ */
+function parseThreeD(rawThreeD: unknown): CanonicalThreeD | undefined {
+  const record = asRecord(rawThreeD);
+  if (!record) return undefined;
+  const sourcePlaneRunIds = asRecord(record.sourcePlaneRunIds);
+  const warnings = Array.isArray(record.warnings) ? record.warnings.filter((item): item is string => typeof item === "string") : [];
+  const requiredInputs = Array.isArray(record.requiredInputs) ? record.requiredInputs.filter((item): item is string => typeof item === "string") : [];
+  const status = asString(record.status) ?? "blocked_missing_axial";
+  return {
+    enabled: asBoolean(record.enabled) ?? false,
+    status: ALLOWED_THREE_D_STATUSES.has(status) ? (status as CanonicalThreeD["status"]) : status,
+    sourcePlaneRunIds: {
+      sagittal: asString(sourcePlaneRunIds?.sagittal) ?? null,
+      axial: asString(sourcePlaneRunIds?.axial) ?? null,
+    },
+    requiredInputs,
+    assets: parseThreeDAssets(record.assets),
+    reconstruction: parseThreeDReconstruction(record.reconstruction),
+    warnings,
   };
 }
 
@@ -364,6 +434,7 @@ export function parseMultiplanarRunResponse(raw: unknown): CanonicalMultiplanarR
     requestedInferenceMode: asString(record.requestedInferenceMode),
     effectiveInferenceMode: asString(record.effectiveInferenceMode),
     planes: { sagittal, axial },
+    threeD: parseThreeD(record.threeD),
     humanReviewRequired: requireGovernanceField(record, "humanReviewRequired", REQUEST_PATH, isV2, raw, traceId),
     notClinicalDiagnosis: requireGovernanceField(record, "notClinicalDiagnosis", REQUEST_PATH, isV2, raw, traceId),
     synthetic,

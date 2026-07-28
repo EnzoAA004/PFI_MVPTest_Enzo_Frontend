@@ -121,7 +121,12 @@ test("L delta se calcula correctamente", () => {
 test("M mm2 se muestra como mm²", () => assert.equal(measurements.displayMeasurementUnit("mm2"), "mm²"));
 test("N confianza 0.9656 se muestra como 96,6 %, no certeza clinica", () => assert.equal(measurements.formatTechnicalConfidence(0.9656), "96,6 %"));
 test("O axial=null no bloquea la vista", () => assert.equal(readiness.resolveReviewWorkspaceMode(run({ sagittal: sagittalPlane(), axial: null })), "sagittal_only"));
-test("P el atlas 3D queda colapsado fuera de la zona principal", () => assert.match(fs.readFileSync("src/components/AnalysisTimelineView.tsx", "utf8"), /<details className="panel-card compact-card analysis-panel review-accordion span-all">[\s\S]*Funcionalidad 3D futura/));
+// P9-C.5: el atlas 3D genérico ("Funcionalidad 3D futura") fue reemplazado por el
+// proxy geométrico experimental real (SpineReconstructionPreview con `proxy`,
+// ver ExperimentalProxyViewer). El requisito de layout que este test protege —
+// que el panel 3D quede colapsado fuera de la zona principal de revisión —
+// sigue vigente y sigue cumplido por el mismo <details> wrapper.
+test("P el panel 3D (ahora proxy experimental real) queda colapsado fuera de la zona principal", () => assert.match(fs.readFileSync("src/components/AnalysisTimelineView.tsx", "utf8"), /<details className="panel-card compact-card analysis-panel review-accordion span-all">[\s\S]*Funcionalidad 3D/));
 test("Q humanReviewRequired y notClinicalDiagnosis permanecen visibles", () => {
   const source = fs.readFileSync("src/components/AnalysisTimelineView.tsx", "utf8");
   assert.match(source, /Revisi.n profesional obligatoria/);

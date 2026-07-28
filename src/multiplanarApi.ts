@@ -137,3 +137,23 @@ export async function submitRunReview(multiplanarRunId: string, payload: RunRevi
 export function aiAssetUrl(runId: string, plane: Plane, assetName: AssetName): string {
   return `${API_BASE_URL}/api/ai/assets/${encodeURIComponent(runId)}/${plane}/${assetName}`;
 }
+
+/**
+ * Fetches the raw 3D proxy mesh JSON from a URL already sanitized by
+ * multiplanarRunAdapter.ts (parseMultiplanarRunResponse never lets an
+ * internal path or blocked host through `threeD.assets[].url`). This does
+ * not build or guess any backend route — it only follows whatever URL the
+ * canonical run already carries. Callers must run the result through
+ * parseThreeDProxyMeshAsset before trusting its shape.
+ */
+export async function fetchThreeDProxyAsset(url: string): Promise<unknown> {
+  const traceId = `frontend-threed-asset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const target = url.startsWith("/api/") ? `${API_BASE_URL}${url}` : url;
+  let response = await fetch(target, { headers: { "X-Trace-Id": traceId, ...authHeaders() } });
+  if (response.status === 401) {
+    await refreshDoctorSession();
+    response = await fetch(target, { headers: { "X-Trace-Id": traceId, ...authHeaders() } });
+  }
+  if (!response.ok) throw await backendErrorFrom(response, url, traceId);
+  return await response.json();
+}
