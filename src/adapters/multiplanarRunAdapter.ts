@@ -1,4 +1,4 @@
-import { ContractError } from "../api";
+import { API_BASE_URL, ContractError } from "../api";
 import type { Plane } from "../appTypes";
 import {
   MULTIPLANAR_CONTRACT_V2,
@@ -125,6 +125,36 @@ function isSanitizedPublicUrl(value: unknown): string | undefined {
   if (BLOCKED_URL_PATTERNS.some((pattern) => pattern.test(url))) return undefined;
   if (/^https?:\/\//i.test(url)) return url;
   if (url.startsWith("/api/")) return url;
+  return undefined;
+}
+
+function apiOrigin(): string | undefined {
+  try {
+    return new URL(API_BASE_URL).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Stricter than isSanitizedPublicUrl: the workspace 3D mesh is fetched with
+ * the doctor's Authorization header attached (see fetchThreeDProxyAsset in
+ * multiplanarApi.ts), so — unlike plane preview images — it must never accept
+ * an arbitrary https host. Only a Backend-relative `/api/...` path, or an
+ * absolute URL whose origin matches API_BASE_URL exactly, qualifies.
+ */
+export function isDurableMeshAssetUrl(value: unknown): string | undefined {
+  const url = typeof value === "string" ? value.trim() : undefined;
+  if (!url) return undefined;
+  if (BLOCKED_URL_PATTERNS.some((pattern) => pattern.test(url))) return undefined;
+  if (url.startsWith("/api/")) return url;
+  try {
+    const parsed = new URL(url);
+    const origin = apiOrigin();
+    if (origin && parsed.origin === origin && parsed.pathname.startsWith("/api/")) return url;
+  } catch {
+    return undefined;
+  }
   return undefined;
 }
 
@@ -288,7 +318,7 @@ function parseThreeDAssets(rawAssets: unknown): CanonicalThreeDAsset[] {
     const record = asRecord(item);
     if (!record) return assets;
     const assetName = asString(record.assetName);
-    const url = isSanitizedPublicUrl(record.url) ?? isSanitizedPublicUrl(record.relativePath);
+    const url = isDurableMeshAssetUrl(record.url) ?? isDurableMeshAssetUrl(record.relativePath);
     if (!assetName || !url) return assets;
     assets.push({ assetName, url });
     return assets;
@@ -318,7 +348,14 @@ function parseThreeDReconstruction(rawReconstruction: unknown): CanonicalThreeDR
  * status like `pending_registered_reconstruction`) — display-state
  * interpretation belongs to threeDProxyViewModel.ts, not this adapter.
  */
-function parseThreeD(rawThreeD: unknown): CanonicalThreeD | undefined {
+/**
+ * Exported for reuse by studyReviewThreeD.ts: the Backend's persisted
+ * `canonicalRun.threeD` / `metricsSnapshot.threeD` snapshot is written
+ * verbatim from this same shape at persist time (see
+ * MultiplanarRunPersistenceService.metricsSnapshot on the Backend) — only
+ * `assets[].url` is rewritten to a durable path, everything else matches.
+ */
+export function parseThreeD(rawThreeD: unknown): CanonicalThreeD | undefined {
   const record = asRecord(rawThreeD);
   if (!record) return undefined;
   const sourcePlaneRunIds = asRecord(record.sourcePlaneRunIds);

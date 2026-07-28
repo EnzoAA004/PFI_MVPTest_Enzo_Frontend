@@ -1,6 +1,6 @@
 import { API_BASE_URL } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
-import { parseMultiplanarRunResponse } from "./adapters/multiplanarRunAdapter";
+import { isDurableMeshAssetUrl, parseMultiplanarRunResponse } from "./adapters/multiplanarRunAdapter";
 import type { CanonicalMultiplanarRun } from "./contracts/canonicalMultiplanarRun";
 import type { InputResponse } from "./contracts/inputApiTypes";
 import type { RunReviewRequest, RunReviewResponse } from "./contracts/reviewApiTypes";
@@ -140,20 +140,27 @@ export function aiAssetUrl(runId: string, plane: Plane, assetName: AssetName): s
 
 /**
  * Fetches the raw 3D proxy mesh JSON from a URL already sanitized by
- * multiplanarRunAdapter.ts (parseMultiplanarRunResponse never lets an
- * internal path or blocked host through `threeD.assets[].url`). This does
+ * multiplanarRunAdapter.ts (parseThreeD/isDurableMeshAssetUrl never let an
+ * internal path or arbitrary host through `threeD.assets[].url`). This does
  * not build or guess any backend route — it only follows whatever URL the
  * canonical run already carries. Callers must run the result through
  * parseThreeDProxyMeshAsset before trusting its shape.
+ *
+ * Defense in depth: the origin is re-validated here, independently of the
+ * adapter, before any network call — a malicious/mismatched origin is
+ * rejected outright and the doctor's JWT (authHeaders()) is never attached
+ * to it, not even a request without credentials is attempted.
  */
 export async function fetchThreeDProxyAsset(url: string): Promise<unknown> {
+  const sanitizedUrl = isDurableMeshAssetUrl(url);
+  if (!sanitizedUrl) throw new BackendApiError("URL del asset 3D no autorizada.", 0, url);
   const traceId = `frontend-threed-asset-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const target = url.startsWith("/api/") ? `${API_BASE_URL}${url}` : url;
+  const target = sanitizedUrl.startsWith("/api/") ? `${API_BASE_URL}${sanitizedUrl}` : sanitizedUrl;
   let response = await fetch(target, { headers: { "X-Trace-Id": traceId, ...authHeaders() } });
   if (response.status === 401) {
     await refreshDoctorSession();
     response = await fetch(target, { headers: { "X-Trace-Id": traceId, ...authHeaders() } });
   }
-  if (!response.ok) throw await backendErrorFrom(response, url, traceId);
+  if (!response.ok) throw await backendErrorFrom(response, sanitizedUrl, traceId);
   return await response.json();
 }

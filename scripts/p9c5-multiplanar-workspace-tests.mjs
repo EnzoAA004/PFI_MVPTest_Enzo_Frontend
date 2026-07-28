@@ -230,7 +230,7 @@ test("7 generacion del view model a partir de threeD + asset ya parseado", () =>
 test("8 estructuras del proxy conservan el label crudo (raw_*), sin traducir a anatomia", () => {
   const asset = assetParser.parseThreeDProxyMeshAsset(validMeshAsset());
   const viewModel = threeDViewModel.canonicalThreeDToProxyViewModel(
-    { enabled: true, status: "experimental_ready", sourcePlaneRunIds: { sagittal: null, axial: null }, requiredInputs: [], assets: [], warnings: [] },
+    { enabled: true, status: "experimental_ready", sourcePlaneRunIds: { sagittal: null, axial: null }, requiredInputs: [], assets: [{ assetName: "lumbar-3d-mesh.json", url: "/api/ai/assets/x/workspace/lumbar-3d-mesh.json" }], warnings: [] },
     { status: "loaded", asset },
   );
   assert.equal(viewModel.geometry.structures[0].label, "raw_50");
@@ -261,7 +261,7 @@ test("10 SpineReconstructionPreview nunca combina el proxy con la columna generi
 
 // 11. estado controlado ante asset invalido
 test("11 asset invalido produce estado visual controlado, nunca una excepcion sin manejar", () => {
-  const threeD = { enabled: true, status: "experimental_ready", sourcePlaneRunIds: { sagittal: null, axial: null }, requiredInputs: [], assets: [], warnings: [] };
+  const threeD = { enabled: true, status: "experimental_ready", sourcePlaneRunIds: { sagittal: null, axial: null }, requiredInputs: [], assets: [{ assetName: "lumbar-3d-mesh.json", url: "/api/ai/assets/x/workspace/lumbar-3d-mesh.json" }], warnings: [] };
   const viewModel = threeDViewModel.canonicalThreeDToProxyViewModel(threeD, { status: "invalid" });
   assert.equal(viewModel.state, "asset_invalid");
   assert.equal(viewModel.controlsEnabled, false);

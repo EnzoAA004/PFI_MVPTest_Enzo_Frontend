@@ -291,6 +291,7 @@ function normalizeRun(value: unknown, study: StudyRow): StudyRun {
     artifactsByPlane,
     corrections,
     metricsSnapshot: asRecord(rawRun.metricsSnapshot),
+    canonicalRun: asRecord(rawRun.canonicalRun),
     artifactCount: typeof run.artifactCount === "number" ? run.artifactCount : Object.values(artifactsByPlane).reduce((sum, values) => sum + (values?.length ?? 0), 0),
     measurementCount: typeof run.measurementCount === "number" ? run.measurementCount : Object.values(measurementsByPlane).reduce((sum, values) => sum + (values?.length ?? 0), 0),
     createdAt: typeof run.createdAt === "string" ? run.createdAt : undefined,

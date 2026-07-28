@@ -125,6 +125,24 @@ export function canonicalThreeDToProxyViewModel(
     };
   }
 
+  // threeD.enabled=true but no usable asset survived sanitization/parsing
+  // (e.g. a rejected host, or the AI Module declaring the mesh without an
+  // asset entry) — there is nothing to fetch, so this must resolve
+  // immediately instead of leaving the caller stuck in "loading" forever.
+  if (threeD.assets.length === 0) {
+    return {
+      state: "asset_invalid",
+      title: TITLES.asset_invalid,
+      description: DESCRIPTIONS.asset_invalid,
+      warnings: threeD.warnings,
+      traceSummary,
+      flags,
+      controlsEnabled: false,
+      traceId: assetState.traceId,
+      retryable: false,
+    };
+  }
+
   if (assetState.status === "idle" || assetState.status === "loading") {
     return {
       state: "loading",

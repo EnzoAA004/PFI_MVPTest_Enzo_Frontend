@@ -256,6 +256,8 @@ export function selectReviewableRunFromDetail(detail: StudyDetailResponse): Revi
     measurementsByPlane: firstRun.measurementsByPlane,
     artifactsByPlane: firstRun.artifactsByPlane,
     corrections: firstRun.corrections,
+    canonicalRun: firstRun.canonicalRun,
+    metricsSnapshot: firstRun.metricsSnapshot,
     planes: persistedPlanes,
     measurementValues: measurements,
     normalizedMeasurements: measurements,

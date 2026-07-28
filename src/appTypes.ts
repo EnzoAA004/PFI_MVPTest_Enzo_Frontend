@@ -309,6 +309,9 @@ export type AiRunResponse = {
     status?: string;
     requiredInputs?: string[];
   };
+  /** Backend P9-B.2.1 durable reopening contract (StudyRunDetailDto.canonicalRun). */
+  canonicalRun?: Record<string, unknown>;
+  metricsSnapshot?: Record<string, unknown>;
   dataOrigin?: DataOrigin;
 };
 
@@ -370,6 +373,8 @@ export type StudyRun = {
   artifactsByPlane?: Partial<Record<Plane, PersistedArtifact[]>>;
   corrections?: PersistedReviewCorrection[];
   metricsSnapshot?: Record<string, unknown>;
+  /** Backend P9-B.2.1 durable reopening contract (StudyRunDetailDto.canonicalRun). Carries `threeD` verbatim from persist time — see parseThreeD in multiplanarRunAdapter.ts. */
+  canonicalRun?: Record<string, unknown>;
   artifactCount?: number;
   measurementCount?: number;
   createdAt?: string;

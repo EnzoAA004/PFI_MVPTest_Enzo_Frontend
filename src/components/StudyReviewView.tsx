@@ -2,6 +2,10 @@
 import { exportReviewReport } from "../api";
 import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudyMetadataInput, StudySeries } from "../appTypes";
+import { parseThreeD } from "../adapters/multiplanarRunAdapter";
+import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
+import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
+import { BackendApiError, fetchThreeDProxyAsset } from "../multiplanarApi";
 import { displayInferenceMode, displayMeasurementLabel, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayTechnicalReadiness, displayUnit } from "../clinicalDisplay";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
 import { updateStudyMetadata } from "../studyApi";
@@ -304,6 +308,47 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     modelKey: run.modelKey ?? selectedDetail?.study?.modelKey ?? undefined,
     review: run.review ?? selectedDetail?.review,
   };
+
+  // P9-C.5 Parte B: threeD reabierto desde el snapshot durable del backend
+  // (canonicalRun/metricsSnapshot), nunca desde el AI Module en vivo. Mismo
+  // parser que el flujo de analisis en curso (multiplanarRunAdapter.ts) porque
+  // el backend persiste threeD con la forma exacta que ya produce el AI Module.
+  const persistedThreeD = useMemo(
+    () => (demoMode ? undefined : parseThreeD(run.canonicalRun?.threeD ?? run.metricsSnapshot?.threeD)),
+    [demoMode, run.canonicalRun, run.metricsSnapshot],
+  );
+  const [threeDAssetState, setThreeDAssetState] = useState<ThreeDProxyAssetFetchState>({ status: "idle" });
+  const threeDMeshAssetUrl = persistedThreeD?.enabled ? persistedThreeD.assets.find((asset) => asset.assetName.endsWith(".json"))?.url : undefined;
+
+  useEffect(() => {
+    if (!threeDMeshAssetUrl) {
+      setThreeDAssetState({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setThreeDAssetState({ status: "loading" });
+    fetchThreeDProxyAsset(threeDMeshAssetUrl)
+      .then((raw) => {
+        if (cancelled) return;
+        try {
+          const asset = parseThreeDProxyMeshAsset(raw);
+          setThreeDAssetState({ status: "loaded", asset });
+        } catch (error) {
+          if (error instanceof ThreeDProxyAssetError) setThreeDAssetState({ status: "invalid" });
+          else throw error;
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setThreeDAssetState({ status: "error", traceId: error instanceof BackendApiError ? error.traceId : undefined });
+      });
+    return () => { cancelled = true; };
+  }, [threeDMeshAssetUrl]);
+
+  const threeDProxyViewModel = useMemo(
+    () => canonicalThreeDToProxyViewModel(persistedThreeD, threeDAssetState, displayRun.humanReviewRequired ?? null),
+    [persistedThreeD, threeDAssetState, displayRun.humanReviewRequired],
+  );
 
   const sagittalWorkspace = useMemo(() => resolvePersistedPlaneWorkspace(displayRun, "sagittal"), [displayRun]);
   const axialWorkspace = useMemo(() => resolvePersistedPlaneWorkspace(displayRun, "axial"), [displayRun]);
@@ -801,8 +846,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         <section className="center-column">
           <div className="workspace-tabs">
             {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => {
-              const disabled = item === "Axial" ? !axialWorkspace.available : item === "3D Reconstruction" ? displayRun.threeD?.status === "blocked_missing_axial" || displayRun.threeD?.enabled === false : !sagittalWorkspace.planeRunId;
-              return <button aria-disabled={disabled} className={tab === item ? "active" : ""} disabled={disabled} key={item} onClick={() => setTab(item)} title={disabled ? item === "Axial" ? "Axial opcional no disponible para esta revisión sagital." : item === "3D Reconstruction" ? "3D paciente-específico bloqueado: falta axial real." : "Sagital persistido no disponible." : undefined} type="button">{item === "3D Reconstruction" ? "Reconstrucción 3D" : item === "Sagittal" ? "Sagital" : "Axial"}</button>;
+              // El tab 3D nunca se deshabilita: cada estado (bloqueado, cargando,
+              // error, disponible) tiene su propio mensaje claro dentro del panel.
+              const disabled = item === "Axial" ? !axialWorkspace.available : item === "3D Reconstruction" ? false : !sagittalWorkspace.planeRunId;
+              return <button aria-disabled={disabled} className={tab === item ? "active" : ""} disabled={disabled} key={item} onClick={() => setTab(item)} title={disabled ? item === "Axial" ? "Axial opcional no disponible para esta revisión sagital." : "Sagital persistido no disponible." : undefined} type="button">{item === "3D Reconstruction" ? "Proxy 3D experimental" : item === "Sagittal" ? "Sagital" : "Axial"}</button>;
             })}
           </div>
           <div className="toolbar compact-toolbar review-toolbar" role="toolbar" aria-label="Herramientas de revisión">
@@ -817,7 +864,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </div>
           <div className="edit-state compact-copy">Plano: <strong>{currentSeries?.name ?? "sin plano persistido"}</strong> · Run de plano: <strong>{activeWorkspace.planeRunId ?? "no informado"}</strong> · Storage: <strong>{activeWorkspace.storageStatus}</strong> · Superposición: <strong>{overlayAvailable ? "overlay.png real" : activeWorkspace.overlayUrl ? "verificando overlay.png" : "no disponible"}</strong> · Borradores del revisor: <strong>{reviewerDraftCount} medición/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
           {tab === "3D Reconstruction" ? (
-            <article className="panel-card full-viewer"><SpineReconstructionPreview threeD={displayRun.threeD} /></article>
+            <article className="panel-card full-viewer"><SpineReconstructionPreview proxy={threeDProxyViewModel} /></article>
           ) : (
             <div className="viewer-stack compact-viewer-stack">
               <MriSliceViewer
