@@ -5,6 +5,14 @@ Referencias de integración (sin modificar): Backend `822384f...` / AI Module `0
 
 No se modificó el Backend ni el AI Module. No se reabrió alcance funcional de P9 salvo los defectos de seguridad directamente relacionados descriptos abajo (swallow silencioso de refresh en `reviewPersistenceApi.ts`, inconsistencia de gating de `console.warn`, ausencia de manejo de 401 en 3 módulos).
 
+## 0. Hotfix posterior: `/api/ai/health` y `/api/ai/models` tratados como públicos
+
+Causa raíz de 401 en producción: `getHealth()` y `getModels()` (`src/api.ts`) llamaban a `request(..., false)`, omitiendo `Authorization` — pero ambos endpoints son protegidos (cualquier profesional autenticado y no pendiente, según `AuthFilter` del Backend), no públicos ni ADMIN-only. Se corrigieron ambos para usar `includeAuth=true` (parámetro omitido, es el default).
+
+Se revisaron los demás usos de `includeAuth=false` en `api.ts` contra el Backend real (`AuthFilter.java`, `SystemController.java`, `AiBackendController.java`, `AiCompletionController.java`, `AiRoadmapController.java`, `AiEvaluationController.java`): `getSystemDiagnostics()`/`warmupSystem()` son ADMIN-only y `getAiCompletion()`/`getAiRoadmap()`/`getAiEvaluationContract()`/`getAiEvaluationSummary()` son de cualquier autenticado no-pendiente — ninguno es público. Los 8 se corrigieron a `includeAuth=true`. El único endpoint genuinamente público es `/api/system/health` (`AuthFilter.PUBLIC_LIVENESS_PATHS`), para el que se agregó `getPublicSystemHealth()` — a usar si en el futuro se necesita un liveness check antes del login; hoy no hay ningún llamado pre-login en la app.
+
+Tests: `scripts/p10c1-hotfix-protected-endpoints-tests.mjs` (`npm run test:p10c1-hotfix-endpoints`, 7 tests cubriendo los 8 puntos pedidos — 4 y 5 se validan juntos, ya que el cliente no distingue rol, solo adjunta el token; el rol lo aplica el Backend). Suite completa (`npm run test`), `typecheck`, `lint`, `build` y E2E (`test:e2e:p9c`, `test:e2e:p10c1`) reverificados con exit 0 tras el fix.
+
 ## 1. Alcance
 
 Auditoría transversal y endurecimiento del cliente HTTP, la sesión, el manejo de errores, la trazabilidad y la configuración pública del Frontend. No se tocó el flujo funcional de P9 (carga sagital/axial, corrida multiplanar, proxy 3D experimental, reapertura vía `canonicalRun`, revisión, exportaciones).

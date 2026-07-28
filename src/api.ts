@@ -462,13 +462,26 @@ async function request<T>(path: string, init?: RequestInit, fallback?: () => T |
   }
 }
 
+// /api/ai/health and /api/ai/models are protected endpoints (any authenticated,
+// non-pending professional) per the Backend's AuthFilter default gate — they
+// are NOT public. Authorization must always be attached here.
 export async function getHealth() {
-  return request<{ status: string; service?: string }>("/api/ai/health", undefined, () => markDataOrigin({ status: "demo", service: "mock-local" }, "demo"), false);
+  return request<{ status: string; service?: string }>("/api/ai/health", undefined, () => markDataOrigin({ status: "demo", service: "mock-local" }, "demo"));
 }
 
 export async function getModels(): Promise<AiModel[]> {
-  const response = await request<unknown>("/api/ai/models", undefined, demoModelsResponse, false);
+  const response = await request<unknown>("/api/ai/models", undefined, demoModelsResponse);
   return normalizeModels(response);
+}
+
+/**
+ * The only endpoint that is genuinely public (no Authorization) for a
+ * pre-login liveness check, per the Backend's AuthFilter.PUBLIC_LIVENESS_PATHS.
+ * Never use /api/ai/health for this — that endpoint requires an authenticated,
+ * non-pending session and will 401 without one.
+ */
+export async function getPublicSystemHealth(): Promise<{ status: string }> {
+  return request<{ status: string }>("/api/system/health", undefined, () => markDataOrigin({ status: "demo" }, "demo"), false);
 }
 
 export async function getStudies(): Promise<StudiesResponse> {
@@ -476,28 +489,32 @@ export async function getStudies(): Promise<StudiesResponse> {
   return normalizeStudiesResponse(response);
 }
 
+// ADMIN-only per SystemController (RoleAuthorizationService.requireAdmin) —
+// still requires Authorization; the Backend enforces the role, not the client.
 export async function getSystemDiagnostics(): Promise<SystemDiagnostics> {
-  return request<SystemDiagnostics>("/api/system/diagnostics", undefined, () => markDataOrigin({ status: "demo", checkedAt: new Date().toISOString(), backend: { available: true, status: "demo" }, aiModule: { available: true, status: "demo" }, database: { available: true, status: "demo", mode: "mock" }, auth: { enabled: true, status: "demo" }, persistence: { mode: "mock", postgresEnabled: false }, humanReviewRequired: true, notClinicalDiagnosis: true }, "demo"), false);
+  return request<SystemDiagnostics>("/api/system/diagnostics", undefined, () => markDataOrigin({ status: "demo", checkedAt: new Date().toISOString(), backend: { available: true, status: "demo" }, aiModule: { available: true, status: "demo" }, database: { available: true, status: "demo", mode: "mock" }, auth: { enabled: true, status: "demo" }, persistence: { mode: "mock", postgresEnabled: false }, humanReviewRequired: true, notClinicalDiagnosis: true }, "demo"));
 }
 
+// Any authenticated, non-pending professional (AuthFilter default gate) — not public.
 export async function getAiCompletion(): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>("/api/ai/completion", undefined, () => markDataOrigin({ status: "demo", completionPercent: 67, humanReviewRequired: true, notClinicalDiagnosis: true }, "demo"), false);
+  return request<Record<string, unknown>>("/api/ai/completion", undefined, () => markDataOrigin({ status: "demo", completionPercent: 67, humanReviewRequired: true, notClinicalDiagnosis: true }, "demo"));
 }
 
 export async function getAiRoadmap(): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>("/api/ai/roadmap", undefined, () => markDataOrigin({ status: "demo", currentMode: "contract", completed: [], pending: [] }, "demo"), false);
+  return request<Record<string, unknown>>("/api/ai/roadmap", undefined, () => markDataOrigin({ status: "demo", currentMode: "contract", completed: [], pending: [] }, "demo"));
 }
 
 export async function getAiEvaluationContract(): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>("/api/ai/evaluation/contract", undefined, () => markDataOrigin({ status: "demo", metrics: [] }, "demo"), false);
+  return request<Record<string, unknown>>("/api/ai/evaluation/contract", undefined, () => markDataOrigin({ status: "demo", metrics: [] }, "demo"));
 }
 
 export async function getAiEvaluationSummary(): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>("/api/ai/evaluation/summary", undefined, () => markDataOrigin({ status: "demo", reportCount: 0 }, "demo"), false);
+  return request<Record<string, unknown>>("/api/ai/evaluation/summary", undefined, () => markDataOrigin({ status: "demo", reportCount: 0 }, "demo"));
 }
 
+// ADMIN-only per SystemController (RoleAuthorizationService.requireAdmin).
 export async function warmupSystem(): Promise<SystemDiagnostics> {
-  return request<SystemDiagnostics>("/api/system/warmup", { method: "POST" }, () => markDataOrigin({ status: "demo", checkedAt: new Date().toISOString(), aiModule: { available: true, status: "demo", message: "warmup demo" } }, "demo"), false);
+  return request<SystemDiagnostics>("/api/system/warmup", { method: "POST" }, () => markDataOrigin({ status: "demo", checkedAt: new Date().toISOString(), aiModule: { available: true, status: "demo", message: "warmup demo" } }, "demo"));
 }
 
 export async function getDemoStudyReview(): Promise<any> {
