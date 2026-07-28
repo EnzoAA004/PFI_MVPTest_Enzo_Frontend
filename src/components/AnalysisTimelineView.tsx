@@ -42,6 +42,21 @@ function planeLabel(plane: Plane) {
   return plane === "sagittal" ? "Sagital" : "Axial";
 }
 
+/**
+ * Coordinated 2D/3D selection (P9-C.5 gap closure): the experimental 3D proxy
+ * groups faces by the sagittal class key (e.g. "vertebra_group", "canal",
+ * "disc_group" — see AI Module P9-A.3.1 structures[].label). Sagittal
+ * landmarks use the same key as a prefix of their labelKey (e.g.
+ * "vertebra_group_centroid"). This derives that shared key so selecting one
+ * can highlight the other; it never invents anatomy, it only reuses an
+ * identifier that already exists verbatim in both places.
+ */
+export function structureKeyForLandmarkLabelKey(labelKey: string | undefined): string | null {
+  if (!labelKey) return null;
+  const match = labelKey.match(/^(vertebra_group|canal|disc_group)/);
+  return match ? match[1] : null;
+}
+
 function hasAllowedExtension(fileName: string) {
   const lower = fileName.toLowerCase();
   return allowedInputExtensions.some((extension) => lower.endsWith(extension));
@@ -234,6 +249,7 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
   const [sagittalOverlayAvailable, setSagittalOverlayAvailable] = useState(false);
   const [navigatingToSavedStudy, setNavigatingToSavedStudy] = useState(false);
   const [threeDAssetState, setThreeDAssetState] = useState<ThreeDProxyAssetFetchState>({ status: "idle" });
+  const [selectedStructureLabel, setSelectedStructureLabel] = useState<string | null>(null);
   const runInFlightRef = useRef(false);
 
   const normalizedCaseId = caseId.trim();
@@ -332,6 +348,20 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
 
   function retryThreeDAsset() {
     if (threeDMeshAssetUrl) void loadThreeDAsset(threeDMeshAssetUrl);
+  }
+
+  function handleSelectSagittalLandmark(landmarkId: string) {
+    setSelectedSagittalLandmark(landmarkId);
+    const landmark = sagittalPlaneRun?.landmarks.find((item) => (item.id ?? item.labelKey) === landmarkId);
+    setSelectedStructureLabel(structureKeyForLandmarkLabelKey(landmark?.labelKey));
+  }
+
+  function handleSelectStructure(label: string | null) {
+    setSelectedStructureLabel(label);
+    const matchingLandmark = label
+      ? sagittalPlaneRun?.landmarks.find((item) => structureKeyForLandmarkLabelKey(item.labelKey) === label)
+      : undefined;
+    setSelectedSagittalLandmark(matchingLandmark ? (matchingLandmark.id ?? matchingLandmark.labelKey ?? "") : "");
   }
 
   function openStep(step: Step) {
@@ -655,7 +685,7 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
               <MriSliceViewer
                 model={sagittalViewerModel}
                 selectedLandmarkId={selectedSagittalLandmark}
-                onSelectLandmark={setSelectedSagittalLandmark}
+                onSelectLandmark={handleSelectSagittalLandmark}
                 readonly
                 overlayEnabled
                 overlayOpacity={0.65}
@@ -688,7 +718,7 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
             </section>
           )}
           <div className="span-all">
-            <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(sagittalPlaneRun) ?? resolveWorkspaceInferenceMode(run)} description={`Mediciones sagitales reales${axialRows.length > 0 ? " y axiales experimentales (sin interpretación anatómica de raw_*)" : ""}. Editables como borrador del revisor.`} onChange={updateMeasurements} />
+            <MeasurementsPanel measurements={measurements} inferenceStatus={resolvePlaneInferenceMode(sagittalPlaneRun) ?? resolveWorkspaceInferenceMode(run)} description={`Mediciones devueltas por inferencia sagital real${axialRows.length > 0 ? " y axiales experimentales (sin interpretación anatómica de raw_*)" : ""}. Editables como borrador del revisor.`} onChange={updateMeasurements} />
           </div>
 
           <div className="span-all">
@@ -705,11 +735,13 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
               <h2>{threeDProxyViewModel.title}</h2>
               <StatusBadge tone={threeDProxyViewModel.state === "available" ? "green" : "amber"}>{threeDProxyViewModel.state}</StatusBadge>
             </div>
-            <SpineReconstructionPreview proxy={threeDProxyViewModel} />
-            {threeDProxyViewModel.state === "asset_error" && (
-              <button className="ghost-button" onClick={retryThreeDAsset} type="button">Reintentar carga del proxy 3D</button>
-            )}
-            <p className="preview-meta">No representa una reconstrucción anatómica ni volumétrica. Deriva de bounding boxes 2D por plano con mapping explícito provisto por configuración.</p>
+            <SpineReconstructionPreview
+              proxy={threeDProxyViewModel}
+              onRetryProxy={retryThreeDAsset}
+              selectedStructure={selectedStructureLabel}
+              onSelectStructure={handleSelectStructure}
+            />
+            <p className="preview-meta">No representa una reconstrucción anatómica ni volumétrica. Deriva de bounding boxes 2D por plano con mapping explícito provisto por configuración. Seleccionar un landmark sagital resalta la estructura equivalente del proxy, y viceversa.</p>
           </details>
           <section className="panel-card compact-card analysis-panel span-all">
             <div className="analysis-actions">

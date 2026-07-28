@@ -13,9 +13,12 @@ import { GenericAtlasPreview, type LegacyThreeDContract } from "./GenericAtlasPr
 type Props = {
   threeD?: LegacyThreeDContract | null;
   proxy?: ThreeDProxyViewModel;
+  onRetryProxy?: () => void;
+  selectedStructure?: string | null;
+  onSelectStructure?: (label: string | null) => void;
 };
 
-export function SpineReconstructionPreview({ threeD, proxy }: Props) {
-  if (proxy) return <ExperimentalProxyViewer viewModel={proxy} />;
+export function SpineReconstructionPreview({ threeD, proxy, onRetryProxy, selectedStructure, onSelectStructure }: Props) {
+  if (proxy) return <ExperimentalProxyViewer viewModel={proxy} onRetry={onRetryProxy} selectedStructure={selectedStructure} onSelectStructure={onSelectStructure} />;
   return <GenericAtlasPreview threeD={threeD} />;
 }

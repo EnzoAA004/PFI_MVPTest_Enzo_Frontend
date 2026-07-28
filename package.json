@@ -28,6 +28,7 @@
     "test:p9c5-workspace": "node scripts/p9c5-multiplanar-workspace-tests.mjs",
     "test:e2e:contract": "node scripts/playwright-contract-e2e.mjs",
     "test:e2e:p9c": "node scripts/playwright-p9c-e2e.mjs",
+    "test:e2e:p9c5": "node scripts/playwright-p9c5-e2e.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

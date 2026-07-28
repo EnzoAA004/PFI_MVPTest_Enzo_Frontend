@@ -50,6 +50,33 @@ exports.canonicalThreeDToProxyViewModel = canonicalThreeDToProxyViewModel;`, san
   return sandbox.exports;
 }
 
+/** Same loader pattern as p9c3-canonical-components-tests.mjs: stubs react/react-jsx-runtime, returns {} for other imports, reaches only pure exported helpers. */
+function loadComponentModule(path) {
+  const source = readFileSync(join(root, path), "utf8");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const exports = {};
+  const context = {
+    exports,
+    console,
+    require: (id) => {
+      if (id === "react") return { useEffect: () => undefined, useMemo: (fn) => fn(), useRef: () => ({ current: null }), useState: (initial) => [initial, () => undefined] };
+      if (id === "react/jsx-runtime") return { jsx: () => ({}), jsxs: () => ({}), Fragment: "Fragment" };
+      return {};
+    },
+  };
+  vm.runInNewContext(compiled, context, { filename: path });
+  return exports;
+}
+
+function loadMeasurementsPanel() {
+  return loadComponentModule("src/components/MeasurementsPanel.tsx");
+}
+
+const analysisTimelineView = loadComponentModule("src/components/AnalysisTimelineView.tsx");
+const measurementsPanel = loadMeasurementsPanel();
+
 function readSource(path) {
   return readFileSync(join(root, path), "utf8");
 }
@@ -225,10 +252,10 @@ test("9 AnalysisTimelineView muestra los flags reales del axial candidato, nunca
 // 10. no uso de la columna generica como resultado del paciente
 test("10 SpineReconstructionPreview nunca combina el proxy con la columna generica; AnalysisTimelineView siempre pasa proxy en el flujo clinico", () => {
   const router = readSource("src/components/SpineReconstructionPreview.tsx");
-  assert.match(router, /if \(proxy\) return <ExperimentalProxyViewer viewModel=\{proxy\} \/>;/);
+  assert.match(router, /if \(proxy\) return <ExperimentalProxyViewer viewModel=\{proxy\}/);
   assert.match(router, /return <GenericAtlasPreview threeD=\{threeD\} \/>;/);
   const timeline = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(timeline, /<SpineReconstructionPreview proxy=\{threeDProxyViewModel\} \/>/);
+  assert.match(timeline, /<SpineReconstructionPreview[\s\S]{0,80}proxy=\{threeDProxyViewModel\}/);
   assert.ok(!timeline.includes("<SpineReconstructionPreview />"), "AnalysisTimelineView ya no debe renderizar el atlas generico sin proxy en el flujo de revision");
 });
 
@@ -294,6 +321,52 @@ test("15 ExperimentalProxyViewer libera renderer/geometria/materiales en el clea
   assert.match(viewer, /materials\.forEach\(\(material\) => material\.dispose\(\)\)/);
   assert.match(viewer, /window\.cancelAnimationFrame\(animation\)/);
   assert.match(viewer, /resizeObserver\.disconnect\(\)/);
+});
+
+// 16. seleccion coordinada 2D/3D: mapeo landmark <-> estructura
+test("16 structureKeyForLandmarkLabelKey deriva la misma clave que usan las estructuras del proxy 3D", () => {
+  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey("vertebra_group_centroid"), "vertebra_group");
+  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey("canal_centroid"), "canal");
+  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey("disc_group_centroid"), "disc_group");
+  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey("raw_50_centroid"), null);
+  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey(undefined), null);
+});
+
+test("16b ExperimentalProxyViewer acepta seleccion controlada externa para coordinar con el visor 2D", () => {
+  const viewer = readSource("src/components/ExperimentalProxyViewer.tsx");
+  assert.match(viewer, /selectedStructure\?: string \| null;/);
+  assert.match(viewer, /onSelectStructure\?: \(label: string \| null\) => void;/);
+  const timeline = readSource("src/components/AnalysisTimelineView.tsx");
+  assert.match(timeline, /selectedStructure=\{selectedStructureLabel\}/);
+  assert.match(timeline, /onSelectStructure=\{handleSelectStructure\}/);
+  assert.match(timeline, /onSelectLandmark=\{handleSelectSagittalLandmark\}/);
+});
+
+// 17. correcciones persistentes plane-agnosticas (axial ya viaja por el mismo mecanismo que sagital)
+test("17 reviewCorrectionsFrom incluye correcciones axiales exactamente igual que sagitales (mismo mecanismo de persistencia)", () => {
+  const measurements = [
+    { id: "m-sag-1", label: "canal width", labelKey: "canal width", value: 10, aiValue: 10, reviewerValue: 11, unit: "mm", plane: "sagittal", source: "Reviewer", status: "editado" },
+    { id: "m-ax-1", label: "raw_50 area", labelKey: "raw_50 area", value: 20, aiValue: 20, reviewerValue: 25, unit: "mm2", plane: "axial", source: "Reviewer", status: "editado" },
+    { id: "m-ax-2", label: "raw_100 area", labelKey: "raw_100 area", value: 5, aiValue: 5, reviewerValue: 5, unit: "mm2", plane: "axial", source: "AI", status: "pendiente" },
+  ];
+  const corrections = analysisTimelineView.reviewCorrectionsFrom(measurements);
+  assert.equal(corrections.length, 2);
+  assert.ok(corrections.some((correction) => correction.measurementId === "m-sag-1"));
+  assert.ok(corrections.some((correction) => correction.measurementId === "m-ax-1"));
+  assert.ok(!corrections.some((correction) => correction.measurementId === "m-ax-2"), "medicion axial sin editar no debe generar correction");
+  const axialCorrection = corrections.find((correction) => correction.measurementId === "m-ax-1");
+  assert.equal(axialCorrection.beforeValue.value, 20);
+  assert.equal(axialCorrection.afterValue.value, 25);
+});
+
+// 18. mediciones separadas visualmente por plano
+test("18 MeasurementsPanel muestra columna Plano cuando hay mas de un plano presente", () => {
+  assert.equal(measurementsPanel.displayMeasurementPlane("sagittal"), "Sagital");
+  assert.equal(measurementsPanel.displayMeasurementPlane("axial"), "Axial");
+  assert.equal(measurementsPanel.displayMeasurementPlane(undefined), "no informado");
+  const source = readSource("src/components/MeasurementsPanel.tsx");
+  assert.match(source, /hasMultiplePlanes/);
+  assert.match(source, /data-plane=\{measurement\.plane/);
 });
 
 console.log(`P9-C.5 multiplanar workspace tests passed: ${count}`);

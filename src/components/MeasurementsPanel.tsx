@@ -55,6 +55,12 @@ export function formatTechnicalConfidence(value?: number) {
   return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(1).replace(".", ",")} %` : "N/D";
 }
 
+export function displayMeasurementPlane(plane: Measurement["plane"]) {
+  if (plane === "sagittal") return "Sagital";
+  if (plane === "axial") return "Axial";
+  return "no informado";
+}
+
 export function measurementDelta(measurement: Measurement) {
   const ai = numericValue(measurement.aiValue ?? measurement.value);
   const reviewer = numericValue(measurement.reviewerValue);
@@ -84,6 +90,12 @@ export function MeasurementsPanel({ measurements, inferenceStatus, description, 
     onChange(applyReviewerMeasurementEdit(measurements, id, value), `${id} actualizado por revisor`);
   }
 
+  const hasMultiplePlanes = new Set(measurements.map((measurement) => measurement.plane ?? "no informado")).size > 1;
+  const orderedMeasurements = hasMultiplePlanes
+    ? [...measurements].sort((a, b) => (a.plane === b.plane ? 0 : a.plane === "sagittal" ? -1 : 1))
+    : measurements;
+  const regionLabel = hasMultiplePlanes ? "Mediciones tecnicas por plano (sagital y axial)" : "Mediciones tecnicas sagitales";
+
   return (
     <section className="panel-card measurements-panel">
       <div className="section-title">
@@ -92,8 +104,9 @@ export function MeasurementsPanel({ measurements, inferenceStatus, description, 
       </div>
       {description && <p className="technical-note">{description}</p>}
       <p className="technical-note measurement-honesty-note">Estas son metricas geometricas tecnicas calculadas sobre mascaras agrupadas. No corresponden todavia a mediciones clinicas por nivel vertebral y requieren revision profesional.</p>
-      <div className="measurement-table professional-measurement-table" role="region" aria-label="Mediciones tecnicas sagitales">
+      <div className="measurement-table professional-measurement-table" role="region" aria-label={regionLabel}>
         <div className="measurement-head">
+          {hasMultiplePlanes && <span>Plano</span>}
           <span>Metrica</span>
           <span>Valor IA original</span>
           <span>Valor revisado</span>
@@ -102,14 +115,15 @@ export function MeasurementsPanel({ measurements, inferenceStatus, description, 
           <span>Estado</span>
           <span>Diferencia</span>
         </div>
-        {measurements.map((measurement) => {
+        {orderedMeasurements.map((measurement) => {
           const aiValue = measurement.aiValue ?? measurement.value;
           const reviewerValue = measurement.reviewerValue ?? "";
           return (
-            <div className="measurement-row" key={measurement.id}>
+            <div className="measurement-row" data-plane={measurement.plane ?? "no informado"} key={measurement.id}>
+              {hasMultiplePlanes && <span className="measurement-plane-tag">{displayMeasurementPlane(measurement.plane)}</span>}
               <span title={`Tecnico original: ${measurement.label}`}>{displayMeasurementLabel(measurement)}</span>
               <span className="tabular-value ai-measurement-value">{String(aiValue)}</span>
-              <input aria-label={`Valor revisado para ${displayMeasurementLabel(measurement)}`} value={String(reviewerValue)} onChange={(event) => updateValue(measurement.id, event.target.value)} placeholder={String(aiValue)} />
+              <input aria-label={`Valor revisado para ${displayMeasurementLabel(measurement)} (${displayMeasurementPlane(measurement.plane)})`} value={String(reviewerValue)} onChange={(event) => updateValue(measurement.id, event.target.value)} placeholder={String(aiValue)} />
               <span>{displayMeasurementUnit(measurement.unit)}</span>
               <span>{formatTechnicalConfidence(measurement.confidence)}</span>
               <span>{measurement.status}</span>

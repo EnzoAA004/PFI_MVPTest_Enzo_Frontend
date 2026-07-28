@@ -11,6 +11,13 @@ import type { ThreeDProxyViewModel } from "../viewModels/threeDProxyViewModel";
 type Props = {
   viewModel: ThreeDProxyViewModel;
   onRetry?: () => void;
+  /**
+   * Optional controlled selection, for 2D<->3D coordination (P9-C.5 gap
+   * closure): when provided by the caller, structure selection is driven
+   * externally (e.g. from a 2D landmark pick) instead of local-only state.
+   */
+  selectedStructure?: string | null;
+  onSelectStructure?: (label: string | null) => void;
 };
 
 const PALETTE = ["--primary", "--teal", "--warning", "--ai"];
@@ -20,11 +27,13 @@ function cssToken(name: string, fallback: string) {
   return value || fallback;
 }
 
-export function ExperimentalProxyViewer({ viewModel, onRetry }: Props) {
+export function ExperimentalProxyViewer({ viewModel, onRetry, selectedStructure: controlledSelectedStructure, onSelectStructure }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const controlsRef = useRef<{ rotate: (delta: number) => void; zoom: (delta: number) => void; fit: () => void; selectStructure: (label: string | null) => void; setRotationEnabled: (enabled: boolean) => void } | null>(null);
   const [rendererState, setRendererState] = useState<"loading" | "ready" | "failed">("loading");
-  const [selectedStructure, setSelectedStructure] = useState<string | null>(null);
+  const [internalSelectedStructure, setInternalSelectedStructure] = useState<string | null>(null);
+  const isControlled = controlledSelectedStructure !== undefined;
+  const selectedStructure = isControlled ? controlledSelectedStructure : internalSelectedStructure;
   const [rotationEnabled, setRotationEnabled] = useState(false);
   const rotationEnabledRef = useRef(false);
   const geometry = viewModel.state === "available" ? viewModel.geometry : undefined;
@@ -235,10 +244,14 @@ export function ExperimentalProxyViewer({ viewModel, onRetry }: Props) {
     };
   }, [geometry]);
 
+  useEffect(() => {
+    if (rendererState === "ready") controlsRef.current?.selectStructure(selectedStructure ?? null);
+  }, [selectedStructure, rendererState]);
+
   function toggleStructure(label: string) {
     const next = selectedStructure === label ? null : label;
-    setSelectedStructure(next);
-    controlsRef.current?.selectStructure(next);
+    if (isControlled) onSelectStructure?.(next);
+    else setInternalSelectedStructure(next);
   }
 
   function toggleRotation() {
