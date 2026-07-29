@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract && npm run test:p8d2-review && npm run test:p8c2-assets && npm run test:p8d3-corrections && npm run test:p8d4-status && npm run test:p8e2-history && npm run test:p8e3-labelkey && npm run test:p9c1-canonical && npm run test:p9c2-readiness && npm run test:p9c3-components && npm run test:p9c4-closure && npm run test:p9c5-workspace && npm run test:p9c5b-reopening && npm run test:p10c1-security && npm run test:p10c1-hotfix-endpoints",
+    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract && npm run test:p8d2-review && npm run test:p8c2-assets && npm run test:p8d3-corrections && npm run test:p8d4-status && npm run test:p8e2-history && npm run test:p8e3-labelkey && npm run test:p9c1-canonical && npm run test:p9c2-readiness && npm run test:p9c3-components && npm run test:p9c4-closure && npm run test:p9c5-workspace && npm run test:p9c5b-reopening && npm run test:p10c1-security && npm run test:p10c1-hotfix-endpoints && npm run test:p10-5-d0",
     "build": "vite build",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc -b",
@@ -27,6 +27,7 @@
     "test:p9c4-closure": "node scripts/p9c4-canonical-closure-tests.mjs",
     "test:p9c5-workspace": "node scripts/p9c5-multiplanar-workspace-tests.mjs",
     "test:p9c5b-reopening": "node scripts/p9c5b-reopening-tests.mjs",
+    "test:p10-5-d0": "node scripts/p10-5-d0-viewer-shell-tests.mjs",
     "test:p10c1-security": "node scripts/p10c1-security-tests.mjs",
     "test:p10c1-hotfix-endpoints": "node scripts/p10c1-hotfix-protected-endpoints-tests.mjs",
     "test:e2e:contract": "node scripts/playwright-contract-e2e.mjs",

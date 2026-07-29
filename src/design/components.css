@@ -4284,3 +4284,37 @@ body,
 
 
 
+
+/* P10.5-D.0 — stack viewer shell */
+.volume-stack-viewer .volume-stack-canvas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  background: #0b1220;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0.5rem 0;
+}
+.volume-stack-viewer .volume-stack-canvas img {
+  max-width: 100%;
+  max-height: 420px;
+  display: block;
+}
+.volume-stack-viewer .volume-stack-placeholder {
+  color: #94a3b8;
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 2rem 1.5rem;
+  max-width: 32rem;
+}
+.volume-stack-viewer .volume-stack-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.volume-stack-viewer .volume-stack-controls input[type="range"] {
+  flex: 1 1 160px;
+  min-width: 140px;
+}
