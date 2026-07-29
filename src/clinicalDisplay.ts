@@ -52,6 +52,54 @@ const measurementLabels: Record<string, string> = {
   "disc_group height": "Altura del grupo de discos intervertebrales",
 };
 
+/**
+ * Short forms for dense tables, where the full label does not fit in a column.
+ * The structure is already implied by the row grouping, so only the magnitude
+ * needs to be spelled out.
+ */
+const measurementShortLabels: Record<string, string> = {
+  "vertebra_group area": "Área vertebral",
+  "vertebra_group width": "Ancho vertebral",
+  "vertebra_group height": "Altura vertebral",
+  "canal area": "Área canal",
+  "canal width": "Ancho canal",
+  "canal height": "Altura canal",
+  "disc_group area": "Área discal",
+  "disc_group width": "Ancho discal",
+  "disc_group height": "Altura discal",
+};
+
+/** Segmentation class keys emitted by the sagittal model. */
+const structureLabels: Record<string, string> = {
+  vertebra_group: "Grupo vertebral",
+  canal: "Canal espinal",
+  disc_group: "Grupo discal",
+  background: "Fondo",
+};
+
+const landmarkLabels: Record<string, string> = {
+  vertebra_group_centroid: "Centroide del grupo vertebral",
+  canal_centroid: "Centroide del canal espinal",
+  disc_group_centroid: "Centroide del grupo discal",
+};
+
+/**
+ * Lumbar levels in reading order. A lumbar MRI is read and reported level by
+ * level, so this is the fixed spine of the findings panel — the list is always
+ * rendered complete, including levels with no finding.
+ */
+export const LUMBAR_LEVELS = ["L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1"] as const;
+export type LumbarLevel = (typeof LUMBAR_LEVELS)[number];
+
+/** Accepts l4_l5 / L4L5 / l4-l5 / "L4 L5" and normalizes to the canonical "L4-L5". */
+export function normalizeLevel(value: string | null | undefined): LumbarLevel | null {
+  if (!value) return null;
+  const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const match = compact.match(/^([LS]\d)([LS]\d)$/);
+  const candidate = match ? `${match[1]}-${match[2]}` : value.toUpperCase().trim();
+  return (LUMBAR_LEVELS as readonly string[]).includes(candidate) ? (candidate as LumbarLevel) : null;
+}
+
 const modalityLabels: Record<string, string> = {
   MRI: "Resonancia magnética",
 };
@@ -94,14 +142,24 @@ export function displayMeasurementLabel(value: string | null | undefined) {
   return measurementLabels[value] ?? readableFallback(value);
 }
 
+export function displayMeasurementLabelShort(value: string | null | undefined) {
+  if (!value) return "Medición";
+  return measurementShortLabels[value] ?? displayMeasurementLabel(value);
+}
+
+export function displayStructureLabel(value: string | null | undefined) {
+  if (!value) return "Estructura";
+  return structureLabels[value] ?? readableFallback(value);
+}
+
 export function displayLandmarkLabel(value: string | null | undefined) {
   if (!value) return "Punto de referencia";
-  return readableFallback(value);
+  return landmarkLabels[value] ?? readableFallback(value);
 }
 
 export function displayMeasurementLevel(value: string | null | undefined) {
   if (!value || value === "Nivel no informado") return "Nivel no informado";
-  return readableFallback(value);
+  return normalizeLevel(value) ?? readableFallback(value);
 }
 
 export function displayTechnicalReadiness(value: string | null | undefined) {

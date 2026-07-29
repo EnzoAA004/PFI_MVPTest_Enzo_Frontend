@@ -1,4 +1,5 @@
 import type { Measurement } from "../appTypes";
+import { displayMeasurementLabel as displayCanonicalMeasurementLabel, displayUnit } from "../clinicalDisplay";
 
 interface MeasurementsPanelProps {
   measurements: Measurement[];
@@ -7,39 +8,30 @@ interface MeasurementsPanelProps {
   onChange: (measurements: Measurement[], detail: string) => void;
 }
 
-const measurementLabelMap: Record<string, string> = {
-  "vertebra_group area": "Área total segmentada — grupo vertebral",
-  "vertebra_group width": "Extensión horizontal — grupo vertebral",
-  "vertebra_group height": "Extensión vertical — grupo vertebral",
-  "canal area": "Área total segmentada — canal",
-  "canal width": "Extensión horizontal — canal",
-  "canal height": "Extensión vertical — canal",
-  "disc_group area": "Área total segmentada — grupo discal",
-  "disc_group width": "Extensión horizontal — grupo discal",
-  "disc_group height": "Extensión vertical — grupo discal",
-};
-
-function normalizedMeasurementKey(measurement: Measurement) {
-  return `${measurement.label ?? measurement.id}`.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase().trim();
+/**
+ * Legacy `Measurement` rows can carry the canonical key in `labelKey`, or an
+ * already-degraded form in `label` ("vertebra group area", "vertebraGroupArea").
+ * This recovers the canonical key so the single dictionary in clinicalDisplay.ts
+ * can resolve it — there is no second translation table here on purpose.
+ */
+function canonicalMeasurementKey(measurement: Measurement) {
+  if (measurement.labelKey) return measurement.labelKey;
+  const words = `${measurement.label ?? measurement.id}`
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .trim();
+  const structure = words.includes("vertebra") ? "vertebra_group" : words.includes("canal") ? "canal" : words.includes("disc") ? "disc_group" : null;
+  const magnitude = words.includes("area") ? "area" : words.includes("width") ? "width" : words.includes("height") ? "height" : null;
+  return structure && magnitude ? `${structure} ${magnitude}` : words;
 }
 
 export function displayMeasurementLabel(measurement: Measurement) {
-  const key = normalizedMeasurementKey(measurement);
-  if (measurementLabelMap[key]) return measurementLabelMap[key];
-  if (key.includes("vertebra group") && key.includes("area")) return measurementLabelMap["vertebra_group area"];
-  if (key.includes("vertebra group") && key.includes("width")) return measurementLabelMap["vertebra_group width"];
-  if (key.includes("vertebra group") && key.includes("height")) return measurementLabelMap["vertebra_group height"];
-  if (key.includes("canal") && key.includes("area")) return measurementLabelMap["canal area"];
-  if (key.includes("canal") && key.includes("width")) return measurementLabelMap["canal width"];
-  if (key.includes("canal") && key.includes("height")) return measurementLabelMap["canal height"];
-  if (key.includes("disc group") && key.includes("area")) return measurementLabelMap["disc_group area"];
-  if (key.includes("disc group") && key.includes("width")) return measurementLabelMap["disc_group width"];
-  if (key.includes("disc group") && key.includes("height")) return measurementLabelMap["disc_group height"];
-  return measurement.label;
+  return displayCanonicalMeasurementLabel(canonicalMeasurementKey(measurement));
 }
 
 export function displayMeasurementUnit(unit: string) {
-  return unit === "mm2" ? "mm²" : unit;
+  return displayUnit(unit);
 }
 
 function numericValue(value: number | string | null | undefined) {

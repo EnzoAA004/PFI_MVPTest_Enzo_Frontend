@@ -15,14 +15,23 @@
     --info-bg: #EFF4FF;
     /* Typography */
     --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    /* Numeric readout font: measurements, slice indices, W/L, spacing. Any value a
+       professional compares column-to-column must be tabular. */
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, monospace;
     --fs-h1: 24px;
     --fs-h2: 18px;
     --fs-h3: 15px;
     --fs-body: 14px;
     --fs-small: 12px;
+    --fs-micro: 11px;
     --fw-regular: 400;
     --fw-medium: 500;
     --fw-semibold: 600;
+    /* Density — clinical software is dense. These replace ad-hoc px paddings. */
+    --row-h: 32px;
+    --control-h: 28px;
+    --toolbar-h: 40px;
+    --topbar-h: 36px;
     /* Spacing */
     --sp-1: 4px;
     --sp-2: 8px;
@@ -79,6 +88,74 @@
     --shadow-card: 0 18px 50px rgba(15, 23, 42, .08);
     --shadow-float: 0 24px 70px rgba(15, 23, 42, .14);
     --shadow-modal: 0 28px 90px rgba(15, 23, 42, .22);
+  }
+
+  /*
+   * Reading room (dark). Scoped to [data-theme="reading"] so the light clinical
+   * palette above is untouched — worklist and administration stay light, only the
+   * reading workspace goes dark.
+   *
+   * Why dark: a reading room is a dark room. On a bright background the eye adapts
+   * to the UI instead of the image, which flattens the perceived contrast of the
+   * scan. Here the image is the only bright thing on screen; every surface around
+   * it is near-black and every border is low-contrast.
+   *
+   * Most semantic aliases in :root are color-mix() over --surface / --bg-app, so
+   * they re-resolve against the values redefined here. The ones that would land on
+   * an unreadable value are overridden explicitly.
+   */
+  [data-theme="reading"] {
+    --bg-app: #0B0E13;
+    --surface: #12161D;
+    --surface-raised: #171C25;
+    --border: #232A35;
+    --border-strong: #313A48;
+    --text: #E6EAF0;
+    --text-muted: #8B96A5;
+    /* Accents are desaturated: on near-black, fully saturated hues vibrate. */
+    --primary: #4F8DF7;
+    --ai: #9B7BF0;
+    --success: #3DBE72;
+    --warning: #E0A030;
+    --danger: #E5544B;
+    --info-bg: #16202F;
+
+    --surface-subtle: #0F131A;
+    --surface-soft: #16202F;
+    --surface-warm: color-mix(in srgb, var(--surface) 84%, var(--warning));
+    --surface-success: color-mix(in srgb, var(--surface) 86%, var(--success));
+    --surface-danger: color-mix(in srgb, var(--surface) 86%, var(--danger));
+    --surface-ai: color-mix(in srgb, var(--surface) 86%, var(--ai));
+    --border-info: color-mix(in srgb, var(--border) 60%, var(--primary));
+    --border-warning: color-mix(in srgb, var(--border) 60%, var(--warning));
+    --border-success: color-mix(in srgb, var(--border) 60%, var(--success));
+    --border-danger: color-mix(in srgb, var(--border) 60%, var(--danger));
+    --text-primary-strong: #8FB6FA;
+    --text-success-strong: #7BD6A0;
+    --text-warning-strong: #EBC076;
+    --text-danger-strong: #F08A83;
+    --text-ai-strong: #BCA5F5;
+    --text-on-dark: var(--text);
+
+    /* The viewport is pure black: maximum dynamic range for the scan. */
+    --viewport-bg: #000000;
+    /* Corner annotations burned over the image (DICOM convention). Never pure
+       white — it would compete with the brightest pixels of the scan. */
+    --viewport-annotation: #B9C4D2;
+    --viewport-annotation-strong: #E6EAF0;
+    --viewport-reference-line: #E0A030;
+    --viewport-crosshair: #4F8DF7;
+
+    --focus-ring: rgba(79, 141, 247, .32);
+    /* Elevation in a dark room comes from borders and a lighter surface, not from
+       drop shadows — a shadow over near-black is invisible. */
+    --shadow-sm: none;
+    --shadow-card: none;
+    --shadow-legacy: none;
+    --shadow-float: 0 16px 40px rgba(0, 0, 0, .6);
+    --shadow-modal: 0 24px 70px rgba(0, 0, 0, .75);
+
+    color-scheme: dark;
   }
 }
 

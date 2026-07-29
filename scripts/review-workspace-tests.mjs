@@ -14,6 +14,9 @@ function loadTsModule(path) {
     require: (id) => {
       if (id === "react") return { useEffect: () => undefined, useMemo: (fn) => fn(), useRef: () => ({ current: null }), useState: (initial) => [initial, () => undefined] };
       if (id === "react/jsx-runtime") return { jsx: () => ({}), jsxs: () => ({}), Fragment: "Fragment" };
+      // Real project modules are loaded for real, so the assertions exercise the
+      // actual shared implementation instead of a stub.
+      if (id === "../clinicalDisplay") return loadTsModule("src/clinicalDisplay.ts");
       return {};
     },
   };

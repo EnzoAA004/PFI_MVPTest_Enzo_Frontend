@@ -209,10 +209,16 @@ test("B3 seleccion estable: id real primero, labelKey como fallback controlado, 
 });
 
 test("B4 landmark desconocido se muestra de forma legible, no como fallback generico opaco", () => {
-  const shown = display.displayLandmarkLabel("vertebra_group_centroid");
-  assert.equal(shown, "vertebra group centroid");
+  const shown = display.displayLandmarkLabel("supra_iliac_marker");
+  assert.equal(shown, "supra iliac marker");
   assert.notEqual(shown, "Punto de referencia");
   assert.equal(display.displayLandmarkLabel(undefined), "Punto de referencia");
+});
+
+test("B4.1 landmark conocido se traduce al espanol, no queda en snake_case legible", () => {
+  assert.equal(display.displayLandmarkLabel("vertebra_group_centroid"), "Centroide del grupo vertebral");
+  assert.equal(display.displayLandmarkLabel("canal_centroid"), "Centroide del canal espinal");
+  assert.equal(display.displayLandmarkLabel("disc_group_centroid"), "Centroide del grupo discal");
 });
 
 test("B5 no identifica raw_* axial como anatomia", () => {
