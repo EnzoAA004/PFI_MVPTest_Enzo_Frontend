@@ -4,7 +4,7 @@ import { isDurableMeshAssetUrl, parseMultiplanarRunResponse } from "./adapters/m
 import { toSafeFrontendError } from "./security/safeError";
 import { generateTraceId } from "./security/traceId";
 import type { CanonicalMultiplanarRun } from "./contracts/canonicalMultiplanarRun";
-import type { InputResponse } from "./contracts/inputApiTypes";
+import type { InputResponse, StudyIngestionResponse } from "./contracts/inputApiTypes";
 import type { RunReviewRequest, RunReviewResponse } from "./contracts/reviewApiTypes";
 import type { AssetName, DiagnosticEndpointResponse, MultiplanarRunPayload } from "./contracts/multiplanarHttpTypes";
 import type { MultiplanarContract } from "./multiplanarTypes";
@@ -79,6 +79,17 @@ export async function uploadAiInput(file: File, caseId: string, plane: Plane): P
   formData.append("caseId", caseId);
   formData.append("plane", plane);
   return multiplanarRequest<InputResponse>("/api/ai/inputs", {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData,
+  });
+}
+
+export async function uploadAiStudy(file: File, caseId: string): Promise<StudyIngestionResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("caseId", caseId);
+  return multiplanarRequest<StudyIngestionResponse>("/api/ai/studies", {
     method: "POST",
     headers: authHeaders(),
     body: formData,

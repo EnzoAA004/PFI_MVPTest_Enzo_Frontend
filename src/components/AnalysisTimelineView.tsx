@@ -1,9 +1,9 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { API_BASE_URL } from "../api";
-import { BackendApiError, aiAssetUrl, fetchThreeDProxyAsset, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput } from "../multiplanarApi";
+import { BackendApiError, aiAssetUrl, fetchThreeDProxyAsset, getMultiplanarContract, runMultiplanarAnalysis, submitRunReview, uploadAiInput, uploadAiStudy } from "../multiplanarApi";
 import type { Measurement, Plane } from "../appTypes";
 import type { CanonicalAssetName, CanonicalMultiplanarRun, CanonicalPlaneRun } from "../contracts/canonicalMultiplanarRun";
-import type { InputResponse } from "../contracts/inputApiTypes";
+import type { InputResponse, StudyIngestionResponse } from "../contracts/inputApiTypes";
 import type { RunReviewStatus } from "../contracts/reviewApiTypes";
 import type { MultiplanarRunPayload } from "../contracts/multiplanarHttpTypes";
 import type { MultiplanarContract } from "../multiplanarTypes";
@@ -233,6 +233,7 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
   const [studyMetadataError, setStudyMetadataError] = useState("");
   const [contract, setContract] = useState<MultiplanarContract | null>(null);
   const [uploads, setUploads] = useState<Record<Plane, UploadState>>(emptyUploads);
+  const [studyInfo, setStudyInfo] = useState<StudyIngestionResponse | null>(null);
   const [run, setRun] = useState<CanonicalMultiplanarRun | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [reviewStatus, setReviewStatus] = useState<RunReviewStatus>("edited");
@@ -395,6 +396,56 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
 
   function handleFileChange(plane: Plane, event: ChangeEvent<HTMLInputElement>) {
     void handleUpload(plane, event.target.files?.[0]);
+    event.target.value = "";
+  }
+
+  async function handleStudyUpload(file?: File) {
+    if (!file) return;
+    if (!normalizedCaseId) {
+      setMessage("Ingresá un identificador de caso de-identificado antes de subir el estudio.");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      setMessage("El estudio debe ser un archivo .zip con la serie DICOM.");
+      return;
+    }
+    setRun(null);
+    setEvaluationVisited(false);
+    setReviewSaved(false);
+    setStudyInfo(null);
+    setUploads({ sagittal: { fileName: file.name, status: "uploading" }, axial: { fileName: file.name, status: "uploading" } });
+    try {
+      const study = await uploadAiStudy(file, normalizedCaseId);
+      setStudyInfo(study);
+      const next: Record<Plane, UploadState> = { sagittal: { status: "idle" }, axial: { status: "idle" } };
+      if (study.sagittal) {
+        next.sagittal = {
+          fileName: `${study.sagittal.description || "serie sagital"} (${study.sagittal.sliceCount} cortes, ${study.sagittal.weighting.toUpperCase()})`,
+          status: "uploaded",
+          input: { inputId: study.sagittal.inputId, caseId: study.sagittal.caseId, plane: "sagittal", format: study.sagittal.format, size: study.sagittal.size },
+        };
+      }
+      if (study.axial) {
+        next.axial = {
+          fileName: `${study.axial.description || "serie axial"} (${study.axial.sliceCount} cortes, ${study.axial.weighting.toUpperCase()})`,
+          status: "uploaded",
+          input: { inputId: study.axial.inputId, caseId: study.axial.caseId, plane: "axial", format: study.axial.format, size: study.axial.size },
+        };
+      }
+      setUploads(next);
+      const parts = [`Estudio procesado: ${study.seriesFound.length} series detectadas.`];
+      parts.push(study.sagittal ? "Sagital seleccionada." : "Sin serie sagital.");
+      if (study.axial) parts.push("Axial seleccionada.");
+      if (study.warnings.length) parts.push(study.warnings.join(" "));
+      setMessage(parts.join(" "));
+    } catch (error) {
+      setUploads(emptyUploads);
+      setMessage(apiErrorMessage(error, "procesar estudio"));
+    }
+  }
+
+  function handleStudyFileChange(event: ChangeEvent<HTMLInputElement>) {
+    void handleStudyUpload(event.target.files?.[0]);
     event.target.value = "";
   }
 
@@ -604,6 +655,26 @@ export function AnalysisTimelineView({ reviewerName, onViewSavedStudy, onBackToS
               </label>
             </div>
           </section>
+          <section className="panel-card compact-card analysis-panel">
+            <div className="section-title"><h3>Subir estudio completo (.zip)</h3></div>
+            <p className="muted compact-copy">Un único .zip con la serie DICOM del estudio. La IA detecta todas las series y separa automáticamente sagital (T2, con fallback T1) y axial (T2).</p>
+            <input aria-label="Subir estudio DICOM (.zip)" accept=".zip,application/zip" disabled={!normalizedCaseId || uploads.sagittal.status === "uploading"} onChange={handleStudyFileChange} type="file" />
+            {uploads.sagittal.status === "uploading" && studyInfo === null && <span className="technical-state">procesando estudio...</span>}
+            {studyInfo && (
+              <div className="settings-details">
+                <div><dt>Series detectadas</dt><dd>{studyInfo.seriesFound.length}</dd></div>
+                <ul className="compact-copy">
+                  {studyInfo.seriesFound.map((serie) => (
+                    <li key={serie.seriesInstanceUid}>{serie.description || "sin descripción"} — {serie.plane ?? "plano ?"} / {serie.weighting.toUpperCase()} ({serie.sliceCount} cortes)</li>
+                  ))}
+                </ul>
+                {studyInfo.warnings.map((warning, index) => (
+                  <span className="delta-alert" key={`study-warning-${index}`}>{warning}</span>
+                ))}
+              </div>
+            )}
+          </section>
+          <p className="muted compact-copy">O cargá cada plano por separado (volumen .mha/.npy o imagen suelta):</p>
           <div className="analysis-upload-grid">
             {uploadPlanes.map((plane) => {
               const upload = uploads[plane];
