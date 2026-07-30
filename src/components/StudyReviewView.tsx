@@ -136,6 +136,10 @@ function readinessLabel(value?: string) {
   return displayTechnicalReadiness(value);
 }
 
+function clampSlice(index: number, total: number) {
+  return Math.min(Math.max(index, 0), Math.max(0, total - 1));
+}
+
 /**
  * Miniatura del rail de series.
  *
@@ -276,6 +280,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   // everything technical kept out of the clinical surface entirely.
   const [panelTab, setPanelTab] = useState<"findings" | "review" | "technical">("findings");
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  // Corte visible por plano. Arranca en el corte que analizó la IA y se mueve con
+  // la rueda o el teclado; queda por plano para que cambiar de serie no lo pierda.
+  const [sliceByPlane, setSliceByPlane] = useState<Record<string, number>>({});
   const [selectedDetail, setSelectedDetail] = useState<StudyDetailResponse | null>(() => loadSelectedStudyDetail());
   const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
   const [metadataDraft, setMetadataDraft] = useState<StudyMetadataDraft>(() => metadataDraftFromDetail(loadSelectedStudyDetail(), run));
@@ -394,6 +401,27 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const handleOverlayAvailableChange = useCallback((available: boolean) => {
     setOverlayAvailableByPlano((current) => (current[activePlano] === available ? current : { ...current, [activePlano]: available }));
   }, [activePlano]);
+
+  const sliceTotal = currentSeries?.sliceCount ?? 1;
+  const aiSliceIndex = Math.min(Math.max(currentSeries?.selectedSlice ?? 0, 0), Math.max(0, sliceTotal - 1));
+  const currentSliceIndex = sliceByPlane[activePlano] ?? aiSliceIndex;
+  const sliceNavigation = sliceTotal > 1
+    ? {
+      current: currentSliceIndex,
+      total: sliceTotal,
+      aiIndex: aiSliceIndex,
+      // Hasta que exista el catálogo de previews, la imagen persistida corresponde
+      // exclusivamente al corte que la IA analizó.
+      hasImage: currentSliceIndex === aiSliceIndex,
+      onChange: (index: number) => setSliceByPlane((current) => ({ ...current, [activePlano]: clampSlice(index, sliceTotal) })),
+      // Se resuelve dentro del setter para no perder pasos cuando llegan varios
+      // eventos de rueda en el mismo tick.
+      onStep: (delta: number) => setSliceByPlane((current) => ({
+        ...current,
+        [activePlano]: clampSlice((current[activePlano] ?? aiSliceIndex) + delta, sliceTotal),
+      })),
+    }
+    : undefined;
 
   const viewerModel = useMemo(
     () => studyRunToMriViewerModel({
@@ -702,7 +730,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const visibleRows = activeGroup ? resultRows.filter((row) => activeGroup.findings.some((finding) => finding.id === row.id)) : resultRows;
   const caseLabel = displayRun.caseId ?? studyReview?.caseId ?? "Caso sin identificador";
   const subjectLabel = displaySubjectRef(selectedDetail?.study?.subjectRef ?? run.patientId ?? null);
-  const sliceLabel = currentSeries?.sliceCount ? `corte ${currentSeries.selectedSlice ?? 1}/${currentSeries.sliceCount}` : "corte único";
+  // La esquina del viewport muestra el corte que se está mirando, no el que analizó
+  // la IA: es el índice de referencia mientras se recorre el stack.
+  const sliceLabel = sliceTotal > 1 ? `corte ${currentSliceIndex + 1}/${sliceTotal}` : "corte único";
 
   return (
     <div className="rr" data-theme="reading">
@@ -792,10 +822,57 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   onLandmarkAddComplete={() => setLandmarkAddMode(false)}
                   overlayEnabled
                   onOverlayAvailableChange={handleOverlayAvailableChange}
+                  slice={sliceNavigation}
                 />
               </>
             )}
           </div>
+
+          {sliceNavigation && (
+            <div className="rr-slicebar">
+              <button
+                className="rr-slice-step"
+                type="button"
+                onClick={() => sliceNavigation.onChange(Math.max(0, currentSliceIndex - 1))}
+                disabled={currentSliceIndex <= 0}
+                aria-label="Corte anterior"
+              >
+                ‹
+              </button>
+              <input
+                className="rr-slice-range"
+                type="range"
+                min={0}
+                max={sliceTotal - 1}
+                value={currentSliceIndex}
+                onChange={(event) => sliceNavigation.onChange(Number(event.target.value))}
+                aria-label={`Corte ${currentSliceIndex + 1} de ${sliceTotal}`}
+                list="rr-slice-marks"
+              />
+              {/* El corte analizado por la IA queda marcado sobre la barra para poder
+                  volver a él después de recorrer el stack. */}
+              <datalist id="rr-slice-marks"><option value={aiSliceIndex} /></datalist>
+              <button
+                className="rr-slice-step"
+                type="button"
+                onClick={() => sliceNavigation.onChange(Math.min(sliceTotal - 1, currentSliceIndex + 1))}
+                disabled={currentSliceIndex >= sliceTotal - 1}
+                aria-label="Corte siguiente"
+              >
+                ›
+              </button>
+              <span className="rr-slice-index">{currentSliceIndex + 1}/{sliceTotal}</span>
+              <button
+                className="rr-slice-ai"
+                type="button"
+                onClick={() => sliceNavigation.onChange(aiSliceIndex)}
+                disabled={currentSliceIndex === aiSliceIndex}
+                title={`Volver al corte analizado por la IA (${aiSliceIndex + 1})`}
+              >
+                corte IA {aiSliceIndex + 1}
+              </button>
+            </div>
+          )}
         </main>
 
         <aside className="rr-panel" aria-label="Panel de revisión">

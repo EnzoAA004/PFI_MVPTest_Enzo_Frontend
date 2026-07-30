@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent, type WheelEvent } from "react";
 import { useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { displayLandmarkLabel } from "../clinicalDisplay";
 import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
@@ -28,6 +28,30 @@ type Point = {
   y: number;
 };
 
+/**
+ * Navegación por cortes del stack.
+ *
+ * Es opcional: cuando no se pasa, la rueda sigue haciendo zoom, que es el
+ * comportamiento que espera el flujo de análisis. Cuando se pasa, la rueda cambia
+ * de corte —como en cualquier estación de lectura— y el zoom se mueve a Ctrl+rueda.
+ */
+export type SliceNavigation = {
+  current: number;
+  total: number;
+  /** Corte que la IA analizó; es el único con imagen hasta que exista el catálogo. */
+  aiIndex: number;
+  /** Si el corte actual tiene una imagen real disponible. */
+  hasImage: boolean;
+  /** Salto absoluto: slider y botones. */
+  onChange: (index: number) => void;
+  /**
+   * Desplazamiento relativo: rueda y teclado. Va aparte de onChange porque varios
+   * eventos seguidos se procesan en el mismo tick de React y calcular el destino
+   * con `current` (ya obsoleto) perdía pasos al scrollear rápido.
+   */
+  onStep: (delta: number) => void;
+};
+
 type Props = {
   model: MriViewerModel;
   selectedLandmarkId: string;
@@ -40,6 +64,7 @@ type Props = {
   overlayEnabled?: boolean;
   overlayOpacity?: number;
   onOverlayAvailableChange?: (available: boolean) => void;
+  slice?: SliceNavigation;
 };
 
 const neutralPreset: WindowPreset = { id: "neutral", label: "Neutral PNG", brightness: 100, contrast: 100 };
@@ -122,6 +147,7 @@ export function MriSliceViewer({
   overlayEnabled = true,
   overlayOpacity = initialOverlayOpacity,
   onOverlayAvailableChange,
+  slice,
 }: Props) {
   const inputUrl = model.assets.find((asset) => asset.assetName === "input.png")?.url;
   const overlayUrl = model.assets.find((asset) => asset.assetName === "overlay.png")?.url;
@@ -219,11 +245,43 @@ export function MriSliceViewer({
     return clamp(Number(nextZoom.toFixed(3)), minZoom, fitZoom * 6);
   }
 
+  function stepSlice(delta: number) {
+    slice?.onStep(delta);
+  }
+
   function handleWheel(event: WheelEvent<HTMLDivElement>) {
+    /*
+     * En una estación de lectura la rueda recorre el stack: es el gesto que más se
+     * repite durante una lectura. El zoom pasa a Ctrl/⌘+rueda, que además es la
+     * convención del navegador para acercar.
+     */
+    if (slice && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      stepSlice(event.deltaY > 0 ? 1 : -1);
+      return;
+    }
     if (!imageLoaded) return;
     event.preventDefault();
     const direction = event.deltaY > 0 ? -0.08 : 0.08;
     setZoom((value) => boundedZoom(value + fitZoom * direction));
+  }
+
+  function handleFrameKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!slice) return;
+    const actions: Record<string, () => void> = {
+      ArrowUp: () => stepSlice(-1),
+      ArrowLeft: () => stepSlice(-1),
+      ArrowDown: () => stepSlice(1),
+      ArrowRight: () => stepSlice(1),
+      PageUp: () => stepSlice(-5),
+      PageDown: () => stepSlice(5),
+      Home: () => slice.onChange(0),
+      End: () => slice.onChange(Math.max(0, slice.total - 1)),
+    };
+    const action = actions[event.key];
+    if (!action) return;
+    event.preventDefault();
+    action();
   }
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -364,9 +422,23 @@ export function MriSliceViewer({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
+        onKeyDown={handleFrameKeyDown}
         ref={frameRef}
+        tabIndex={slice ? 0 : undefined}
+        role={slice ? "group" : undefined}
+        aria-label={slice ? `${seriesName}: corte ${slice.current + 1} de ${slice.total}. Rueda o flechas para recorrer el stack.` : undefined}
       >
-        {inputState === "loaded" && inputAsset.url ? (
+        {slice && !slice.hasImage ? (
+          /*
+           * Corte navegable sin imagen: hoy solo el corte analizado por la IA tiene
+           * preview. Se dice explicitamente en vez de dejar el visor en blanco o,
+           * peor, repetir la imagen de otro corte.
+           */
+          <div className="asset-empty-state">
+            <strong>Corte {slice.current + 1} sin preview</strong>
+            <span>El estudio conserva {slice.total} cortes, pero por ahora solo el corte {slice.aiIndex + 1} tiene imagen generada. El resto se navega sin superponer una imagen que no le corresponde.</span>
+          </div>
+        ) : inputState === "loaded" && inputAsset.url ? (
           <div className="asset-transform" style={{ height: `${imageSize.height}px`, transform, width: `${imageSize.width}px` }}>
             <img
               ref={imageRef}
