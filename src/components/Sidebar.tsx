@@ -1,14 +1,18 @@
 import type { ViewKey } from "../appTypes";
 import type { ComponentType } from "react";
-import { ClipboardList, Folder, HelpCircle, History, Home, Settings, ShieldCheck, UploadCloud, Users } from "lucide-react";
+import { HelpCircle, ListChecks, Settings, ShieldCheck, UploadCloud, Users } from "lucide-react";
 
+/**
+ * Navigation follows the reading workflow, not the module structure.
+ *
+ * "Inicio", "Estudios" and "Cola de revisión" were three routes rendering the
+ * same table with a different filter; they collapse into a single worklist whose
+ * filter chips carry the counts. The pending badge moves onto that entry.
+ */
 const navItems: Array<{ key: ViewKey; label: string; icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>; badge?: "reviewQueue" }> = [
-  { key: "dashboard", label: "Inicio", icon: Home },
+  { key: "dashboard", label: "Lista de trabajo", icon: ListChecks, badge: "reviewQueue" },
   { key: "analysis", label: "Nuevo análisis", icon: UploadCloud },
-  { key: "studies", label: "Estudios", icon: Folder },
-  { key: "queue", label: "Cola de revisión", icon: ClipboardList, badge: "reviewQueue" },
   { key: "patients", label: "Pacientes", icon: Users },
-  { key: "history", label: "Historial", icon: History },
   { key: "settings", label: "Configuración", icon: Settings },
 ];
 

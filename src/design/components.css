@@ -154,15 +154,6 @@ button  {
   color: var(--text-primary-strong);
   font-weight: 750;
 }
-.button-neutral {
-  background: var(--surface);
-  color: var(--text);
-}
-.button-danger {
-  background: var(--surface-danger);
-  border-color: var(--border-danger);
-  color: var(--text-danger-strong);
-}
 .button-primary:hover:not(:disabled),
 .primary-button:hover:not(:disabled),
 .toolbar button.active,
@@ -198,12 +189,6 @@ button  {
 .reviewer-value-input:focus-visible {
   box-shadow: var(--focus-ring);
   outline: 2px solid transparent;
-}
-.warning-button  {
-  background: var(--surface-warm);
-  border-color: var(--border-warning);
-  color: var(--text-warning-strong);
-  font-weight: 800;
 }
 .button-disabled,
 button:disabled,
@@ -272,33 +257,12 @@ h2  {
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
 }
-.metric-card  {
-  border-left: 5px solid var(--primary);
-  display: grid;
-  gap: 6px;
-  padding: 16px;
-}
 .metric-card span, .metric-card small, .section-title span, dt  {
   color: var(--text-muted);
 }
 .metric-card strong  {
   font-size: 1.75rem;
 }
-.metric-teal  {
-   border-left-color: var(--teal);
-   }
-
-.metric-green  {
-   border-left-color: var(--success);
-   }
-
-.metric-amber  {
-   border-left-color: var(--warning);
-   }
-
-.metric-purple  {
-   border-left-color: var(--ai);
-   }
 .dashboard-grid  {
   align-items: start;
   display: grid;
@@ -355,62 +319,9 @@ h2  {
   padding: 7px 9px;
   white-space: nowrap;
 }
-.badge-blue  {
-   background: var(--text-on-dark);
-   color: var(--text-primary-strong);
-   }
-
-.badge-teal  {
-   background: var(--surface-cyan);
-   color: var(--teal-strong);
-   }
-
-.badge-green  {
-   background: var(--surface-success);
-   color: var(--text-success-strong);
-   }
-
-.badge-amber  {
-   background: var(--surface-warm);
-   color: var(--text-warning-strong);
-   }
-
-.badge-red  {
-   background: var(--surface-danger);
-   color: var(--text-danger-strong);
-   }
-
-.badge-purple  {
-   background: var(--surface-ai);
-   color: var(--text-ai-strong);
-   }
-
-.badge-slate  {
-   background: var(--border);
-   color: var(--text);
-   }
 .model-state, .technical-state  {
   background: var(--surface-ai);
   color: var(--text-ai-strong);
-}
-.mini-mri  {
-  background:
-    radial-gradient(circle at 55% 45%, rgba(255, 255, 255, 0.22), transparent 32%), repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 4px, transparent 4px 11px), linear-gradient(135deg, var(--surface-dark-2), var(--text-muted));
-  border-radius: 8px;
-  height: 220px;
-  overflow: hidden;
-  position: relative;
-}
-.mini-vertebra, .mini-overlay  {
-  position: absolute;
-}
-.mini-vertebra  {
-  background: rgba(226, 232, 240, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 38% 44% 42% 36%;
-  height: 38px;
-  left: 48%;
-  width: 76px;
 }
 .mini-vertebra.v1  {
    top: 44px;
@@ -421,19 +332,6 @@ h2  {
    top: 92px;
    transform: rotate(-5deg);
    }
-
-.mini-vertebra.v3  {
-   top: 140px;
-   transform: rotate(6deg);
-   }
-.mini-overlay  {
-  border: 3px solid color-mix(in srgb, var(--teal) 70%, var(--surface));
-  border-radius: 50%;
-  height: 82px;
-  left: 39%;
-  top: 76px;
-  width: 120px;
-}
 .spine-preview  {
   background: linear-gradient(160deg, var(--text), color-mix(in srgb, var(--surface-dark) 72%, var(--surface)));
   border-radius: 8px;
@@ -465,13 +363,6 @@ h2  {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.16);
   color: var(--border);
-}
-.segmented-control  {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  display: flex;
-  gap: 4px;
-  padding: 3px;
 }
 .segmented-control .active, .viewer-controls button:hover  {
   background: var(--primary);
@@ -575,25 +466,6 @@ dd  {
   font-size: 0.84rem;
   font-weight: 800;
 }
-.slice-canvas  {
-  background:
-    radial-gradient(circle at 52% 45%, rgba(226, 232, 240, 0.22), transparent 28%), radial-gradient(circle at 48% 58%, rgba(148, 163, 184, 0.24), transparent 26%), var(--text);
-  height: 340px;
-  overflow: hidden;
-  position: relative;
-}
-.slice-canvas::before  {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 42%;
-  content: "";
-  inset: 44px 105px;
-  position: absolute;
-}
-.scan-noise  {
-  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 8px);
-  inset: 0;
-  position: absolute;
-}
 .mask, .landmark  {
   position: absolute;
 }
@@ -639,16 +511,6 @@ dd  {
 .landmark.selected  {
   background: var(--surface-warm);
   border-color: var(--warning);
-}
-.ruler  {
-  align-items: center;
-  color: var(--surface-warm);
-  display: flex;
-  gap: 8px;
-  left: 22%;
-  position: absolute;
-  top: 68%;
-  transform: rotate(-8deg);
 }
 .ruler span  {
   background: var(--surface-warm);
@@ -840,10 +702,6 @@ textarea  {
   border-radius: 8px;
   padding: 10px;
 }
-.trend-chart  {
-  display: block;
-  width: 100%;
-}
 .trend-chart line  {
   stroke: var(--border-strong);
   stroke-width: 2;
@@ -875,10 +733,6 @@ textarea  {
   color: var(--text-success-strong);
   content: "OK ";
   font-weight: 900;
-}
-.export-rules  {
-  display: grid;
-  gap: 8px;
 }
 .export-rules span, .library-grid article  {
   background: var(--surface-subtle);
@@ -990,22 +844,6 @@ body {
 .page-heading h1, .history-hero h1 {
   font-size:2.1rem;
   letter-spacing:-.05em}
-.metric-card {
-  min-height:108px;
-  padding:18px;
-  border-left:0;
-  position:relative;
-  overflow:hidden}
-.metric-card::after {
-  content:"";
-  position:absolute;
-  right:18px;
-  top:20px;
-  width:52px;
-  height:52px;
-  border-radius:999px;
-  background:currentColor;
-  opacity:.11}
 .metric-card strong {
   font-size:1.95rem;
   letter-spacing:-.05em}
@@ -1025,10 +863,6 @@ body {
 .status-badge, .model-state, .technical-state, .chip {
   font-size:.68rem;
   padding:6px 9px}
-.mini-mri {
-  height:210px}
-.mini-mri, .slice-canvas {
-  border-radius:15px}
 .spine-preview {
   border-radius:15px;
   min-height:250px;
@@ -1038,8 +872,6 @@ body {
 .review-grid {
   gap:16px;
   grid-template-columns:260px minmax(500px, 1fr) 395px}
-.slice-canvas {
-  height:330px}
 .audit-list article {
   padding:10px;
   border-radius:12px;
@@ -1180,40 +1012,11 @@ body {
   border:1px solid rgba(255, 255, 255, .12);
   border-radius:999px;
   padding:3px 7px}
-.slice-canvas {
-  position:relative;
-  overflow:hidden;
-  border-radius:0;
-  background:var(--surface-scan)}
-.sagittal-canvas {
-  background:radial-gradient(ellipse at 58% 28%, rgba(230, 230, 224, .34), transparent 12%), radial-gradient(ellipse at 58% 44%, rgba(202, 195, 178, .32), transparent 11%), radial-gradient(ellipse at 57% 61%, rgba(190, 178, 166, .34), transparent 12%), linear-gradient(90deg, rgba(0, 0, 0, .88), rgba(20, 24, 29, .82) 36%, rgba(128, 132, 133, .33) 46%, rgba(31, 36, 42, .82) 64%, rgba(0, 0, 0, .92)), repeating-linear-gradient(0deg, rgba(255, 255, 255, .02) 0 1px, transparent 1px 5px)}
-.axial-canvas {
-  background:radial-gradient(ellipse at 49% 52%, rgba(120, 125, 128, .44), transparent 25%), radial-gradient(ellipse at 25% 52%, rgba(28, 32, 36, .93), transparent 23%), radial-gradient(ellipse at 75% 52%, rgba(28, 32, 36, .93), transparent 23%), linear-gradient(110deg, var(--surface-scan), color-mix(in srgb, var(--surface-dark-3) 82%, var(--surface)) 48%, var(--surface-scan)), repeating-linear-gradient(90deg, rgba(255, 255, 255, .022) 0 1px, transparent 1px 6px)}
-.scan-noise {
-  position:absolute;
-  inset:0;
-  background:radial-gradient(circle at 35% 35%, rgba(255, 255, 255, .12), transparent 1px), radial-gradient(circle at 63% 62%, rgba(255, 255, 255, .08), transparent 1px);
-  background-size:7px 7px, 11px 11px;
-  opacity:.42;
-  mix-blend-mode:screen}
-.scan-ruler {
-  position:absolute;
-  background:rgba(255, 255, 255, .26);
-  z-index:2}
 .scan-ruler.vertical {
   right:30px;
   top:26%;
   width:1px;
   height:42%}
-.scan-ruler.horizontal {
-  left:32%;
-  bottom:26px;
-  height:1px;
-  width:34%}
-.overlay-layer {
-  position:absolute;
-  inset:0;
-  z-index:3}
 .sagittal .mask-canal {
   top:18%;
   left:61%;
@@ -1270,14 +1073,6 @@ body {
   background:var(--warning);
   color:var(--surface-dark-2);
   transform:scale(1.06)}
-.ruler {
-  z-index:6}
-.orientation-markers {
-  position:absolute;
-  inset:12px 14px auto auto;
-  display:grid;
-  gap:6px;
-  z-index:6}
 .orientation-markers span {
   display:grid;
   place-items:center;
@@ -1296,11 +1091,6 @@ body {
   color:var(--border-strong);
   padding:8px 12px;
   font-size:.72rem}
-.slice-timeline {
-  height:6px;
-  border-radius:999px;
-  background:rgba(255, 255, 255, .12);
-  overflow:hidden}
 .slice-timeline i {
   display:block;
   height:100%;
@@ -1368,11 +1158,6 @@ body {
   background:var(--surface-soft)}
 .comparison-head, .comparison-row {
   grid-template-columns:1.35fr .7fr .8fr .55fr}
-.comparison-head {
-  color:var(--text-muted);
-  font-size:.72rem;
-  font-weight:900;
-  text-transform:uppercase}
 .comparison-row {
   border:1px solid var(--border);
   border-radius:10px;
@@ -1727,11 +1512,6 @@ body {
 .worklist-search-input input:focus, .advanced-filter-grid select:focus {
   outline:2px solid rgba(37, 99, 235, .16);
   border-color:color-mix(in srgb, var(--primary) 38%, var(--surface))}
-.worklist-filter-tabs {
-  display:flex;
-  gap:8px;
-  overflow-x:auto;
-  padding:2px 1px}
 .worklist-filter-tabs button {
   border:1px solid rgba(148, 163, 184, .22);
   background:var(--surface);
@@ -1747,11 +1527,6 @@ body {
   background:var(--info-bg);
   color:var(--text-primary-strong);
   box-shadow:0 5px 14px rgba(37, 99, 235, .08)}
-.advanced-filter-grid {
-  display:grid;
-  grid-template-columns:repeat(4, minmax(0, 1fr));
-  gap:10px;
-  padding-top:2px}
 .advanced-filter-grid label {
   display:grid;
   gap:6px}
@@ -1764,14 +1539,8 @@ body {
 @media (max-width:980px) {
   .worklist-search-row {
   grid-template-columns:1fr}
-.advanced-filter-grid {
-  grid-template-columns:repeat(2, minmax(0, 1fr))}
 }
 @media (max-width:640px) {
-  .advanced-filter-grid {
-  grid-template-columns:1fr}
-.worklist-filter-tabs {
-  padding-bottom:4px}
 }
 
 /* Source: src/clinical-quiet.css */
@@ -1825,8 +1594,6 @@ body {
 .compact-list .series-item {
   min-height:52px;
   padding:8px}
-.compact-mask-list {
-  gap:6px}
 .compact-mask-list label {
   padding:6px 7px}
 .compact-toolbar {
@@ -1903,8 +1670,6 @@ body {
 .measurements-panel,
 .wide-card {
   min-width:0}
-.wide-card {
-  grid-column:1 / -1}
 .compact-actions {
   gap:7px;
   flex-wrap:wrap}
@@ -1918,10 +1683,6 @@ body {
   gap:14px}
 .quiet-history-grid .trend-grid {
   grid-template-columns:repeat(auto-fit, minmax(230px, 1fr))}
-.quiet-library {
-  display:grid;
-  grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
-  gap:10px}
 .quiet-library article {
   padding:12px}
 .history-tabs {
@@ -1933,10 +1694,6 @@ body {
 .check-list {
   margin:0;
   padding-left:18px}
-.export-rules {
-  display:grid;
-  gap:8px;
-  margin-top:12px}
 .export-rules span {
   display:flex;
   justify-content:space-between;
@@ -1960,9 +1717,6 @@ body {
   width:100%}
 .compact-info div {
   grid-template-columns:1fr}
-.history-stats {
-  display:grid;
-  grid-template-columns:1fr 1fr}
 .export-rules span {
   display:grid}
 }
@@ -2051,31 +1805,6 @@ body {
   width:22px}
 .ios-switch.compact-switch.is-on .ios-switch-thumb {
   transform:translateX(18px)}
-.selectable-worklist .clickable-row {
-  cursor:pointer;
-  transition:background .16s, box-shadow .16s, transform .16s}
-
-.selectable-worklist .clickable-row:hover {
-  background:var(--surface-soft);
-  box-shadow:inset 0 0 0 1px rgba(203, 213, 225, .72)}
-
-.selectable-worklist .clickable-row:focus {
-  outline:none}
-
-.selectable-worklist .clickable-row:focus-visible {
-  background:var(--surface-soft);
-  box-shadow:inset 0 0 0 1px rgba(148, 163, 184, .55);
-  outline:none}
-
-.selectable-worklist .clickable-row.selected-worklist-row {
-  background:var(--surface-soft);
-  box-shadow:inset 0 0 0 1px rgba(203, 213, 225, .62)}
-
-.table-open-button {
-  font-size:.78rem;
-  min-height:30px;
-  padding:6px 10px;
-  white-space:nowrap}
 .clinical-loading-state {
   align-items:center;
   display:flex;
@@ -2113,20 +1842,6 @@ body {
   min-height:26px;
   padding:4px 7px;
   white-space:nowrap}
-.delta-none {
-  color:var(--text-muted)}
-.delta-low {
-  background:var(--surface-success);
-  border-color:var(--border-success);
-  color:var(--text-success-strong)}
-.delta-medium {
-  background:var(--surface-warm);
-  border-color:color-mix(in srgb, var(--warning) 35%, var(--surface));
-  color:var(--text-warning-strong)}
-.delta-high {
-  background:var(--surface-danger);
-  border-color:var(--border-danger);
-  color:var(--text-danger-strong)}
 .comparison-row.outlier-row {
   background:var(--surface-warm);
   border-color:var(--border-warning);
@@ -2257,9 +1972,6 @@ body {
   display: block;
   font-size: .72rem;
   margin-top: 3px;
-}
-.table-open-button  {
-  white-space: nowrap;
 }
 
 .ds-card {
@@ -2469,11 +2181,6 @@ body {
   gap: var(--sp-2);
   min-height: 42px;
   padding: var(--sp-2) var(--sp-3);
-}
-
-.mode-badge {
-  color: var(--text-success-strong);
-  font-weight: var(--fw-semibold);
 }
 
 .profile-chip span {
@@ -2860,56 +2567,9 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.metric-card {
-  border-left: 0;
-  display: grid;
-  gap: var(--sp-1);
-  min-height: 116px;
-  padding: var(--sp-4);
-}
-
-.metric-card::after {
-  display: none;
-}
-
-.metric-icon {
-  align-items: center;
-  background: var(--info-bg);
-  border-radius: var(--radius-card);
-  color: var(--primary);
-  display: inline-flex;
-  height: 48px;
-  justify-content: center;
-  margin-bottom: var(--sp-1);
-  width: 48px;
-}
-
-.metric-teal .metric-icon {
-  background: var(--surface-success);
-  color: var(--teal-strong);
-}
-
-.metric-purple .metric-icon {
-  background: var(--surface-ai);
-  color: var(--ai);
-}
-
-.metric-amber .metric-icon {
-  background: var(--surface-warm);
-  color: var(--warning);
-}
-
 .metric-card strong {
   font-size: var(--fs-h1);
   letter-spacing: 0;
-}
-
-.metric-action {
-  background: transparent;
-  border: 0;
-  color: var(--primary);
-  justify-self: start;
-  padding: 0;
 }
 
 .dashboard-grid {
@@ -2943,43 +2603,10 @@ body {
   color: var(--text-muted);
 }
 
-.case-link {
-  background: transparent;
-  border: 0;
-  color: var(--primary);
-  font-weight: var(--fw-semibold);
-  min-height: 0;
-  padding: 0;
-}
-
-.plane-cell {
-  align-items: center;
-  display: inline-flex;
-  gap: var(--sp-2);
-}
-
-.table-pagination {
-  align-items: center;
-  border-top: 1px solid var(--border);
-  color: var(--text-muted);
-  display: flex;
-  justify-content: space-between;
-  padding: var(--sp-3) 0 0;
-}
-
 .table-pagination div {
   align-items: center;
   display: inline-flex;
   gap: var(--sp-2);
-}
-
-.segmentation-preview {
-  background: var(--surface-dark);
-  border-radius: var(--radius-card);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 190px;
-  overflow: hidden;
 }
 
 .segmentation-preview img {
@@ -3410,12 +3037,6 @@ body {
 .patient-overview-grid > .panel-card:nth-child(3) {
   grid-column: 2;
 }
-.patient-side-stack {
-  display: grid;
-  gap: var(--sp-4);
-  grid-column: 3;
-  grid-row: 1 / span 2;
-}
 .honest-empty-state {
   align-content: center;
   min-height: 118px;
@@ -3430,12 +3051,6 @@ body {
 }
 .patient-timeline article {
   grid-template-columns: auto 1fr auto auto;
-}
-.trend-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  margin: 0;
-  padding: var(--sp-3);
 }
 .trend-card figcaption {
   align-items: center;
@@ -3452,9 +3067,6 @@ body {
   color: var(--text-muted);
   display: block;
   margin-top: var(--sp-1);
-}
-.study-library-card {
-  grid-column: 1 / -1;
 }
 
 /* FE-RD-006 honest generic 3D atlas */
@@ -3621,11 +3233,6 @@ body {
 .spine-level-labels button:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
-}
-.recent-activity-card {
-  display: grid;
-  justify-items: center;
-  text-align: center;
 }
 .recent-activity-card .timeline,
 .recent-activity-card .audit-list {

@@ -7,7 +7,6 @@ import { SESSION_INVALIDATED_EVENT, onCrossTabSessionSync } from "./security/ses
 import { AnalysisTimelineView } from "./components/AnalysisTimelineView";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
-import { DashboardView } from "./components/DashboardView";
 import { HelpSupportView } from "./components/HelpSupportView";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { PatientHistoryView } from "./components/PatientHistoryView";
@@ -15,7 +14,7 @@ import { PatientsView } from "./components/PatientsView";
 import { PendingApprovalView } from "./components/PendingApprovalView";
 import { ProfessionalSettingsView } from "./components/ProfessionalSettingsView";
 import { StudyReviewView } from "./components/StudyReviewView";
-import { StudiesView } from "./components/StudiesView";
+import { Worklist } from "./features/worklist/Worklist";
 import { deriveSummary, isReviewQueueItem, mergeStudyRowsWithSelectedRun, normalizeSelectedRunForReview, selectReviewableRunFromDetail, shouldFetchSubjectHistory, toSelectedStudyReference } from "./appDataGuards";
 import { isDemoDataMode, validateVisibleDataOrigin } from "./dataMode";
 import { appendBackendAudit, getBackendReviewSnapshot } from "./reviewPersistenceApi";
@@ -517,12 +516,18 @@ function App() {
     }
   }
 
+  // "dashboard", "studies" and "queue" all resolve to the single worklist; the old
+  // keys stay valid so existing navigation calls keep working while the redesign
+  // migrates screen by screen.
+  const isWorklistView = activeView === "dashboard" || activeView === "studies" || activeView === "queue";
+  const worklistNavView: ViewKey = isWorklistView || activeView === "review" ? "dashboard" : activeView;
+
   if (authBootstrapping) return <LoadingState title="Restaurando sesión" detail="Validando credenciales guardadas." />;
   if (!session) return <AuthView onAuthenticated={setSession} />;
   if (pendingApproval) return <PendingApprovalView session={session} onLogout={logout} />;
 
   return (
-    <AppShell activeView={activeView} activeNavView={activeView === "review" ? lastStudyNavView : activeView} onChangeView={changeView} health={health} modelCount={models.length} aiModuleAvailable={safeRun?.aiModuleAvailable ?? false} degradedMode={safeRun?.degradedMode ?? false} currentRunId={safeRun?.runId} onNewAnalysis={() => changeView("analysis")} loading={false} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
+    <AppShell activeView={activeView} activeNavView={worklistNavView} onChangeView={changeView} health={health} modelCount={models.length} aiModuleAvailable={safeRun?.aiModuleAvailable ?? false} degradedMode={safeRun?.degradedMode ?? false} currentRunId={safeRun?.runId} onNewAnalysis={() => changeView("analysis")} loading={false} userName={session.user.fullName} onLogout={logout} reviewQueueCount={reviewQueueCount}>
       {needsOnboarding && <OnboardingTutorial saving={onboardingSaving} onComplete={() => void completeOnboarding()} />}
       {error && (
         <div className="toast error app-error-toast" role="alert">
@@ -540,10 +545,8 @@ function App() {
       {aiModuleStatus === "error" && <div className="toast warning">AI Module no disponible. Los estudios persistidos siguen visibles si PostgreSQL responde.</div>}
       {reviewSnapshotStatus === "error" && <div className="toast warning">No se pudo consultar el snapshot de revisión; no bloquea la lista de trabajo.</div>}
       {info && <div className="toast info">{info}</div>}
-      {activeView === "dashboard" && (shouldShowDataLoading ? <LoadingState title="Cargando estudios" detail="Consultando estudios deidentificados desde backend/Postgres." /> : <DashboardView studies={studies} summary={studiesSummary} auditTrail={auditTrail} health={health} aiModuleAvailable={aiModuleStatus !== "error"} degradedMode={safeRun?.degradedMode ?? false} onOpenDiagnostics={() => changeView("settings")} onOpenReview={handleOpenReview} />)}
-      {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} onViewSavedStudy={handleViewSavedAnalysis} onBackToStudies={() => changeView("studies")} />}
-      {activeView === "studies" && <StudiesView studies={realStudyRows} mode="all" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
-      {activeView === "queue" && <StudiesView studies={realStudyRows} mode="queue" loading={shouldShowDataLoading} onOpenReview={handleOpenReview} />}
+      {isWorklistView && <Worklist studies={realStudyRows} loading={shouldShowDataLoading} onOpenReview={handleOpenReview} onNewAnalysis={() => changeView("analysis")} />}
+      {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} onViewSavedStudy={handleViewSavedAnalysis} onBackToStudies={() => changeView("dashboard")} />}
       {activeView === "review" && (reviewLoading ? <LoadingState title="Cargando corrida" detail={`Consultando corridas persistidas para ${selectedStudy?.caseId ?? "el estudio seleccionado"}.`} /> : contractIssue ? <ContractErrorState detail={`${contractIssue.message}${contractIssue.path ? ` (${contractIssue.path})` : ""}${contractIssue.traceId ? ` · trace ${contractIssue.traceId}` : ""}`} onBackToStudies={() => changeView(lastStudyNavView)} /> : reviewError ? <ContractErrorState detail={reviewError} onBackToStudies={() => changeView(lastStudyNavView)} /> : safeRun ? <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} onStudyMetadataUpdated={handleStudyMetadataUpdated} /> : <EmptyReviewState onBackToStudies={() => changeView(lastStudyNavView)} />)}
       {activeView === "patients" && <PatientsView studies={realStudyRows} loading={shouldShowDataLoading} onOpenHistory={handleOpenPatientHistory} />}
       {activeView === "history" && (historyLoading ? <LoadingState title="Cargando historial" detail={historyTarget?.kind === "study" ? "Consultando trazabilidad real del estudio." : "Consultando historial longitudinal de-identificado."} /> : <PatientHistoryView studies={visiblePatientStudies} target={historyTarget} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (historyTarget?.kind === "study" ? "study-traceability" : "postgres-domain")} summary={patientHistoryResponse?.summary} error={historyError} onOpenStudyReview={(caseId) => {
