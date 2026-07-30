@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { exportReviewReport } from "../api";
 import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudyMetadataInput, StudySeries } from "../appTypes";
@@ -6,7 +6,8 @@ import { parseThreeD } from "../adapters/multiplanarRunAdapter";
 import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
 import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
 import { BackendApiError, fetchThreeDProxyAsset } from "../multiplanarApi";
-import { displayInferenceMode, displayMeasurementLabel, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayTechnicalReadiness, displayUnit } from "../clinicalDisplay";
+import { displayInferenceMode, displayMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayTechnicalReadiness, displayUnit } from "../clinicalDisplay";
+import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
 import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
 import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
@@ -15,10 +16,7 @@ import { studyRunToMriViewerModel } from "../viewModels/mriViewerViewModel";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
 import { MriSliceViewer } from "./MriSliceViewer";
-import { PrivacyBanner } from "./PrivacyBanner";
-import { ReviewBadge, StatusBadge } from "./StatusBadge";
 import { SpineReconstructionPreview } from "./SpineReconstructionPreview";
-import { VisibilityIcon } from "./VisibilityIcon";
 
 const fallbackSeries: StudySeries[] = [
   { id: "series-sag-t2", name: "Sagital T2", plane: "sagittal", sequence: "T2", sliceCount: 96, selectedSlice: 58, status: "ai_output_pending" },
@@ -71,15 +69,6 @@ function traceabilityTone(inferenceMode?: string, artifact?: AiModelArtifact) {
   if (inferenceMode === "real_baseline" && artifact?.exists) return "green";
   if (inferenceMode === "contract") return "amber";
   return "blue";
-}
-
-function maskTokenVar(mask: StudyMask) {
-  const key = `${mask.id} ${mask.className} ${mask.label}`.toLowerCase();
-  if (key.includes("disc")) return "var(--mask-disc)";
-  if (key.includes("canal") || key.includes("spinal")) return "var(--mask-spinal-canal)";
-  if (key.includes("root") || key.includes("raiz") || key.includes("raíz")) return "var(--mask-nerve-root)";
-  if (key.includes("foramen") || key.includes("soft")) return "var(--mask-foramen-other-soft-tissue)";
-  return "var(--mask-vertebral-body)";
 }
 
 function asNumber(value: unknown): number | null {
@@ -161,13 +150,6 @@ function formatDelta(delta: number | null, unit: string) {
   if (delta === null) return "—";
   const sign = delta > 0 ? "+" : "";
   return `${sign}${delta.toFixed(2)} ${displayUnit(unit)}`;
-}
-
-function confidenceToneClass(confidence?: number) {
-  if (confidence === undefined) return "confidence-muted";
-  if (confidence >= 0.85) return "confidence-high";
-  if (confidence >= 0.7) return "confidence-medium";
-  return "confidence-low";
 }
 
 function coordinateSpaceFrom(series?: any, landmarks?: StudyLandmark[]) {
@@ -261,9 +243,7 @@ function metadataPayloadEqual(next: StudyMetadataInput, current: StudyMetadataDr
 export function StudyReviewView({ run, studyReview, measurements, auditTrail, saving, onBackToStudies, onMeasurementsChange, onSaveReview, onStudyMetadataUpdated }: StudyReviewViewProps) {
   const [tab, setTab] = useState<"Sagittal" | "Axial" | "3D Reconstruction">("Sagittal");
   const [selectedSeriesId, setSelectedSeriesId] = useState("");
-  const [maskVisibility, setMaskVisibility] = useState<Record<string, boolean>>({});
   const [editMode, setEditMode] = useState(false);
-  const [selectedMask, setSelectedMask] = useState("mask-disc");
   const [selectedLandmark, setSelectedLandmark] = useState("L4");
   const [overlayAvailableByPlano, setOverlayAvailableByPlano] = useState<Record<string, boolean>>({});
   const [reviewerValues, setReviewerValues] = useState<Record<string, string>>({});
@@ -272,7 +252,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? run.reviewStatus ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
   const [saveMessage, setSaveMessage] = useState("");
-  const [hiddenPanels, setHiddenPanels] = useState<Record<string, boolean>>({});
+  // Right panel of the reading room: clinical findings first, review second, and
+  // everything technical kept out of the clinical surface entirely.
+  const [panelTab, setPanelTab] = useState<"findings" | "review" | "technical">("findings");
+  const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<StudyDetailResponse | null>(() => loadSelectedStudyDetail());
   const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
   const [metadataDraft, setMetadataDraft] = useState<StudyMetadataDraft>(() => metadataDraftFromDetail(loadSelectedStudyDetail(), run));
@@ -441,10 +424,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const relevantChanges = resultRows.filter((row) => row.severity === "medium" || row.severity === "high").length;
   const outlierCount = resultRows.filter((row) => row.outlier).length;
   const confirmDisabled = saving || reviewStatus === "pendiente";
-
-  function toggleMask(maskId: string) {
-    setMaskVisibility((current) => ({ ...current, [maskId]: !(current[maskId] ?? true) }));
-  }
 
   function selectSeries(series: any) {
     setSelectedSeriesId(series.id);
@@ -670,66 +649,308 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     }
   }
 
-  function panelVisible(panelId: string) {
-    return !hiddenPanels[panelId];
-  }
-
-  function togglePanel(panelId: string) {
-    setHiddenPanels((current) => ({ ...current, [panelId]: !current[panelId] }));
-  }
-
-  function PanelTitle({ panelId, title, children }: { panelId: string; title: string; children?: ReactNode }) {
-    const visible = panelVisible(panelId);
-    return (
-      <div className="section-title">
-        <h2>{title}</h2>
-        <div className="panel-title-actions">
-          {children}
-          <button className={`visibility-toggle ${visible ? "is-visible" : "is-hidden"}`} onClick={() => togglePanel(panelId)} type="button" aria-label={visible ? `Ocultar ${title}` : `Mostrar ${title}`} title={visible ? `Ocultar ${title}` : `Mostrar ${title}`}>
-            <VisibilityIcon visible={visible} />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const hiddenPlaceholder = <div className="panel-hidden-placeholder">Información oculta. Usá el control de visualización para desplegarla.</div>;
+  const levelGroups = useMemo(
+    () => groupFindingsByLevel(resultRows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      level: row.level,
+      value: row.reviewerValue ?? row.aiValue,
+      unit: row.unit,
+      confidence: row.confidence,
+      outlier: row.outlier,
+    }))),
+    [resultRows],
+  );
+  const levelUnassigned = allFindingsUnassigned(levelGroups);
+  const activeGroup = levelGroups.find((group: LevelGroup) => String(group.level) === String(selectedLevel));
+  const visibleRows = activeGroup ? resultRows.filter((row) => activeGroup.findings.some((finding) => finding.id === row.id)) : resultRows;
+  const caseLabel = displayRun.caseId ?? studyReview?.caseId ?? "Caso sin identificador";
+  const subjectLabel = displaySubjectRef(selectedDetail?.study?.subjectRef ?? run.patientId ?? null);
+  const sliceLabel = currentSeries?.sliceCount ? `corte ${currentSeries.selectedSlice ?? 1}/${currentSeries.sliceCount}` : "corte único";
 
   return (
-    <div className="view-stack review-workspace clinical-quiet">
-      <section className="page-heading compact-heading">
-        <div>
-          <p>Espacio de revisión</p>
-          <button className="back-link" onClick={onBackToStudies} type="button">← Volver a estudios</button>
-          <div className="case-title-row">
-            <h1>{displayRun.caseId ?? studyReview?.caseId ?? "Caso sin identificador"}</h1>
-            <ReviewBadge status={review.status ?? "pendiente"} />
-            <button className="icon-button" aria-label="Más acciones del caso" title="Más acciones del caso" type="button">⋯</button>
-          </div>
-          <div className="review-mode-row">
-            <StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceModeLabel(inferenceMode)}</StatusBadge>
-            <StatusBadge tone="amber">Revisión humana requerida</StatusBadge>
-            <StatusBadge tone="purple">La salida IA puede ser inexacta</StatusBadge>
-          </div>
+    <div className="rr" data-theme="reading">
+      <header className="rr-topbar">
+        <button className="rr-back" onClick={onBackToStudies} type="button">← Lista de trabajo</button>
+        <div className="rr-case">
+          <strong>{caseLabel}</strong>
+          <span>
+            {displayModality(selectedDetail?.study?.modality ?? run.modality ?? null)}
+            {" · "}{displayStudyDate(selectedDetail?.study?.studyDate ?? run.studyDate ?? null)}
+            {" · "}{subjectLabel}
+          </span>
         </div>
-        <div className="safety-copy">
-          <strong>Requiere revisión profesional.</strong>
-          <span>Salida asistiva, no diagnóstico clínico.</span>
+        <div className="rr-topbar-right">
+          <span className="rr-status" data-status={review.status ?? "pendiente"}>
+            <i aria-hidden />{displayReviewStatus(review.status ?? "pendiente")}
+          </span>
+          <button className="rr-ghost" onClick={() => setMetadataDialogOpen(true)} type="button">Editar datos</button>
         </div>
-      </section>
+      </header>
+
+      <div className="rr-body">
+        <aside className="rr-series" aria-label="Series del estudio">
+          <p className="rr-rail-title">Series</p>
+          {seriesList.length ? seriesList.map((item: any, index: number) => (
+            <button className={`rr-serie ${currentSeries?.id === item.id ? "is-active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
+              <span className="rr-thumb">
+                {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <em>{String(index + 1).padStart(2, "0")}</em>}
+              </span>
+              <span className="rr-serie-name">{item.name}</span>
+              <span className="rr-serie-meta">{item.sliceCount ? `${item.sliceCount} corte${item.sliceCount === 1 ? "" : "s"}` : item.available ? "1 corte" : "sin asset"}</span>
+            </button>
+          )) : <p className="rr-note">Sin planos persistidos.</p>}
+
+          <button className={`rr-serie ${tab === "3D Reconstruction" ? "is-active" : ""}`} onClick={() => setTab("3D Reconstruction")} type="button">
+            <span className="rr-thumb"><em>3D</em></span>
+            <span className="rr-serie-name">Proxy 3D</span>
+            <span className="rr-serie-meta">experimental</span>
+          </button>
+        </aside>
+
+        <main className="rr-stage">
+          <div className="rr-viewport">
+            {tab === "3D Reconstruction" ? (
+              <SpineReconstructionPreview proxy={threeDProxyViewModel} />
+            ) : (
+              <>
+                {/* DICOM-style corner annotations burned over the image. */}
+                <div className="rr-corner rr-corner-tl">
+                  <strong>{caseLabel}</strong>
+                </div>
+                <div className="rr-corner rr-corner-tr">
+                  <strong>{currentSeries?.name ?? displayPrimaryPlane(activePlano)}</strong>
+                  {sliceLabel}
+                </div>
+                <div className="rr-corner rr-corner-bl">
+                  {displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}
+                  {"\n"}{inferenceModeLabel(inferenceMode)}
+                </div>
+                <div className="rr-corner rr-corner-br">
+                  {quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm/px` : "escala no informada"}
+                  {"\n"}<span className="rr-disclaimer">No apto para diagnóstico clínico</span>
+                </div>
+                <MriSliceViewer
+                  model={viewerModel}
+                  selectedLandmarkId={selectedLandmark}
+                  onSelectLandmark={setSelectedLandmark}
+                  readonly={!editMode}
+                  addMode={landmarkAddMode}
+                  onMoveLandmark={(landmarkId, point) => {
+                    const landmark = displayLandmarks.find((item) => item.id === landmarkId);
+                    if (!landmark) return;
+                    updateLandmarkDraft({ ...landmark, x: point.x, y: point.y, editable: true });
+                  }}
+                  onAddLandmark={(point) => {
+                    const landmark: StudyLandmark = {
+                      id: `reviewer-landmark-${Date.now()}`,
+                      label: `R${displayLandmarks.length + 1}`,
+                      seriesId: currentSeries?.id ?? `${activePlano}-asset`,
+                      sliceIndex: currentSeries?.selectedSlice ?? 1,
+                      x: point.x,
+                      y: point.y,
+                      editable: true,
+                    };
+                    updateLandmarkDraft(landmark);
+                  }}
+                  onLandmarkAddComplete={() => setLandmarkAddMode(false)}
+                  overlayEnabled
+                  onOverlayAvailableChange={(available) => setOverlayAvailableByPlano((current) => ({ ...current, [activePlano]: available }))}
+                />
+              </>
+            )}
+          </div>
+        </main>
+
+        <aside className="rr-panel" aria-label="Panel de revisión">
+          <div className="rr-tabs" role="tablist">
+            <button className={panelTab === "findings" ? "is-active" : ""} onClick={() => setPanelTab("findings")} role="tab" aria-selected={panelTab === "findings"} type="button">Hallazgos</button>
+            <button className={panelTab === "review" ? "is-active" : ""} onClick={() => setPanelTab("review")} role="tab" aria-selected={panelTab === "review"} type="button">Revisión</button>
+            <button className={panelTab === "technical" ? "is-active" : ""} onClick={() => setPanelTab("technical")} role="tab" aria-selected={panelTab === "technical"} type="button">Técnico</button>
+          </div>
+
+          <div className="rr-panel-body">
+            {panelTab === "findings" && (
+              <>
+                <p className="rr-section-title">Niveles</p>
+                <div className="rr-levels">
+                  {levelGroups.map((group: LevelGroup) => {
+                    const key = String(group.level);
+                    const active = String(selectedLevel) === key;
+                    return (
+                      <button
+                        key={key}
+                        className={`rr-level${active ? " is-active" : ""}${group.findings.length ? "" : " is-empty"}`}
+                        onClick={() => setSelectedLevel(active ? null : key)}
+                        type="button"
+                      >
+                        <span className="rr-level-name">{group.label}</span>
+                        <span className="rr-level-count">{group.findings.length ? `${group.findings.length}` : "—"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {levelUnassigned && (
+                  <p className="rr-note">
+                    El modelo todavía no informa el nivel vertebral de cada medición, por lo que
+                    ninguna puede atribuirse a L1-L2…L5-S1. Se listan sin nivel asignado en vez de
+                    repartirlas por suposición.
+                  </p>
+                )}
+
+                <p className="rr-section-title">
+                  Mediciones{activeGroup ? ` · ${activeGroup.label}` : ""}
+                </p>
+                {visibleRows.length ? (
+                  <div className="rr-measures">
+                    {visibleRows.map((item) => (
+                      <div className={`rr-measure${item.draftValue !== undefined && item.draftValue !== "" ? " rr-measure-edited" : ""}`} key={item.id}>
+                        <span className="rr-measure-label" title={displayMeasurementLabel(item.label)}>{displayMeasurementLabelShort(item.label)}</span>
+                        <span className="rr-measure-value">
+                          {String(item.reviewerValue ?? item.aiValue ?? "—")}<u>{displayUnit(item.unit)}</u>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="rr-note">Sin mediciones en este nivel.</p>}
+              </>
+            )}
+
+            {panelTab === "review" && (
+              <>
+                <p className="rr-section-title">Mediciones del revisor</p>
+                {resultRows.length ? (
+                  <div className="rr-measures">
+                    {resultRows.map((item) => (
+                      <label className="rr-measure" key={item.id}>
+                        <span className="rr-measure-label" title={displayMeasurementLabel(item.label)}>
+                          {displayMeasurementLabelShort(item.label)}
+                          <u style={{ display: "block", opacity: .7 }}>IA {String(item.aiValue ?? "—")} {displayUnit(item.unit)}</u>
+                        </span>
+                        <input
+                          aria-label={`Valor del revisor para ${displayMeasurementLabel(item.label)}`}
+                          inputMode="decimal"
+                          onChange={(event) => updateReviewerValue(item, event.target.value)}
+                          placeholder={String(item.aiValue ?? "")}
+                          value={String(item.reviewerValue ?? "")}
+                          style={{ width: "88px", textAlign: "right", fontFamily: "var(--font-mono)" }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                ) : <p className="rr-note">La corrida no devolvió mediciones.</p>}
+
+                <label className="rr-field">
+                  <span>Notas de revisión</span>
+                  <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Hallazgos, observaciones o motivo del estado…" />
+                </label>
+
+                <label className="rr-field">
+                  <span>Estado</span>
+                  <select aria-label="Estado de revisión" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="observado">Observado</option>
+                    <option value="aceptado">Finalizado</option>
+                    <option value="descartado">Descartado</option>
+                  </select>
+                </label>
+
+                <div className="rr-actions">
+                  <button className="rr-ghost rr-secondary" disabled={saving} onClick={() => void save("pendiente")} type="button">Guardar borrador</button>
+                  <button className="rr-primary" disabled={confirmDisabled} onClick={() => void save(reviewStatus)} title={reviewStatus === "pendiente" ? "Usá Guardar borrador para conservar una revisión pendiente." : undefined} type="button">Confirmar</button>
+                </div>
+                {saveMessage && <p className="rr-ok" role="status">{saveMessage}</p>}
+
+                <AgentSummary agentDecision={run.aiOutput?.agentDecision ?? studyReview?.aiOutput?.agentDecision ?? run.agentDecision} />
+
+                <p className="rr-section-title">Auditoría</p>
+                <AuditTrail events={auditTrail.slice(0, 4)} />
+              </>
+            )}
+
+            {panelTab === "technical" && (
+              <>
+                <p className="rr-section-title">Inferencia</p>
+                <dl className="rr-tech">
+                  <dt>Modo efectivo</dt><dd>{inferenceModeLabel(inferenceMode)}</dd>
+                  <dt>Solicitado</dt><dd>{inferenceModeLabel(requestedInferenceMode)}</dd>
+                  <dt>Preparación</dt><dd>{readinessLabel(modelReadiness)}</dd>
+                  <dt>Modelo</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}</dd>
+                </dl>
+
+                <p className="rr-section-title">Plano activo</p>
+                <dl className="rr-tech">
+                  <dt>Plano</dt><dd>{currentSeries?.name ?? "sin plano persistido"}</dd>
+                  <dt>Run de plano</dt><dd>{activeWorkspace.planeRunId ?? "no informado"}</dd>
+                  <dt>Storage</dt><dd>{activeWorkspace.storageStatus}</dd>
+                  <dt>Superposición</dt><dd>{overlayAvailable ? "overlay.png" : activeWorkspace.overlayUrl ? "verificando" : "no disponible"}</dd>
+                  <dt>Borradores</dt><dd>{reviewerDraftCount} med · {landmarkDraftCount} lm</dd>
+                </dl>
+
+                <p className="rr-section-title">Estudio de-identificado</p>
+                <dl className="rr-tech">
+                  <dt>Edad</dt><dd>{String(patientSafe.ageAtStudy ?? patientSafe.age ?? "desconocida")}</dd>
+                  <dt>Sexo</dt><dd>{String(patientSafe.sex ?? "desconocido")}</dd>
+                  <dt>Región</dt><dd>{String(patientSafe.bodyRegion ?? "no informada")}</dd>
+                  <dt>Resolución</dt><dd>{String(patientSafe.imageResolution ?? (quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm` : "sin datos"))}</dd>
+                  <dt>Revisor</dt><dd>{reviewerName}</dd>
+                </dl>
+
+                <p className="rr-section-title">Segmentación</p>
+                <p className="rr-note">
+                  {masks.length
+                    ? "El backend entrega una superposición combinada; todavía no hay máscaras por clase, por eso no se pueden encender ni apagar individualmente."
+                    : "No hay máscaras por clase persistidas: solo se muestra la superposición combinada."}
+                </p>
+                <p className="rr-note">
+                  Los landmarks del revisor son borradores locales y aún no se persisten.
+                </p>
+              </>
+            )}
+          </div>
+        </aside>
+      </div>
+
+      <footer className="rr-toolbar" role="toolbar" aria-label="Herramientas de lectura">
+        <button
+          className={`rr-tool${editMode ? " is-active" : ""}`}
+          disabled={!activeCoordinateSpace}
+          onClick={() => { setEditMode((value) => !value); setLandmarkAddMode(false); }}
+          title={activeCoordinateSpace ? "Mover landmarks de IA como borrador del revisor" : "El backend no informó el espacio de coordenadas"}
+          type="button"
+        >
+          Editar landmark
+        </button>
+        <button
+          className={`rr-tool${landmarkAddMode ? " is-active" : ""}`}
+          disabled={!editMode || !activeCoordinateSpace}
+          onClick={() => setLandmarkAddMode((value) => !value)}
+          title={!activeCoordinateSpace ? "El backend no informó el espacio de coordenadas" : editMode ? "Clic sobre la imagen para agregar un landmark" : "Activá Editar landmark primero"}
+          type="button"
+        >
+          Agregar landmark
+        </button>
+        <span className="rr-toolbar-sep" aria-hidden />
+        <button className="rr-tool" disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores"} type="button">
+          Deshacer
+        </button>
+        <button className="rr-tool" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Volver a los valores persistidos" : "No hay mediciones editadas"} type="button">
+          Restaurar mediciones
+        </button>
+
+        <span className="rr-toolbar-end">
+          {hasReviewerDrafts ? <span>{reviewerDraftCount} med · {landmarkDraftCount} lm en borrador</span> : null}
+          <span className="rr-kbd">?</span>
+          <span>Revisión humana requerida</span>
+        </span>
+      </footer>
 
       {metadataDialogOpen && (
-        <div className="metadata-dialog-backdrop" role="presentation">
-          <section className="metadata-dialog panel-card compact-card" role="dialog" aria-modal="true" aria-labelledby="metadata-dialog-title">
-            <div className="section-title">
-              <div>
-                <h2 id="metadata-dialog-title">Editar metadata del estudio</h2>
-                <p className="muted compact-copy">Uso académico con datos de-identificados.</p>
-              </div>
-              <button className="icon-button" onClick={() => setMetadataDialogOpen(false)} disabled={metadataSaving} type="button" aria-label="Cerrar edición de metadata">×</button>
-            </div>
-            <div className="settings-form-grid">
-              <label>
+        <div className="rr-dialog-backdrop" role="presentation">
+          <section className="rr-dialog" role="dialog" aria-modal="true" aria-labelledby="metadata-dialog-title">
+            <h2 id="metadata-dialog-title">Editar datos del estudio</h2>
+            <div className="rr-dialog-grid">
+              <label className="rr-field rr-span-all">
                 <span>Referencia de paciente de-identificada</span>
                 <input
                   value={subjectRefLocked ? currentSubjectRef : metadataDraft.subjectRef}
@@ -744,19 +965,19 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   aria-invalid={Boolean(metadataError)}
                 />
               </label>
-              {subjectRefLocked && <p className="settings-persistence-note form-span-all">La referencia de-identificada ya fue asignada y no puede reemplazarse. Esto evita vincular estudios de personas distintas.</p>}
-              <label>
+              {subjectRefLocked && <p className="rr-note rr-span-all">La referencia de-identificada ya fue asignada y no puede reemplazarse. Esto evita vincular estudios de personas distintas.</p>}
+              <label className="rr-field">
                 <span>Fecha del estudio</span>
                 <input type="date" value={metadataDraft.studyDate} onChange={(event) => setMetadataDraft((current) => ({ ...current, studyDate: event.target.value }))} />
               </label>
-              <label>
+              <label className="rr-field">
                 <span>Modalidad</span>
                 <select value={metadataDraft.modality} onChange={(event) => setMetadataDraft((current) => ({ ...current, modality: event.target.value }))}>
                   <option value="">No informada</option>
                   <option value="MRI">Resonancia magnética</option>
                 </select>
               </label>
-              <label>
+              <label className="rr-field">
                 <span>Prioridad</span>
                 <select value={metadataDraft.reviewPriority} onChange={(event) => setMetadataDraft((current) => ({ ...current, reviewPriority: event.target.value as StudyMetadataDraft["reviewPriority"] }))}>
                   <option value="low">{displayReviewPriority("low")}</option>
@@ -764,229 +985,20 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   <option value="high">{displayReviewPriority("high")}</option>
                 </select>
               </label>
-              <label className="form-span-all">
+              <label className="rr-field rr-span-all">
                 <span>Descripción</span>
                 <input maxLength={200} value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} placeholder="RM lumbar sagital T2" />
               </label>
             </div>
-            <p className="settings-persistence-note">No ingreses nombre, DNI, correo, teléfono, domicilio ni historia clínica real.</p>
-            {metadataError && <div className="toast error" role="alert">{metadataError}</div>}
-            <div className="analysis-actions">
-              <button className="ghost-button" onClick={() => setMetadataDialogOpen(false)} disabled={metadataSaving} type="button">Cancelar</button>
-              <button className="primary-button" onClick={() => void saveStudyMetadata()} disabled={metadataSaving} type="button">{metadataSaving ? "Guardando..." : "Guardar metadata"}</button>
+            <p className="rr-note">No ingreses nombre, DNI, correo, teléfono, domicilio ni historia clínica real.</p>
+            {metadataError && <p className="rr-error" role="alert">{metadataError}</p>}
+            <div className="rr-actions">
+              <button className="rr-ghost rr-secondary" onClick={() => setMetadataDialogOpen(false)} disabled={metadataSaving} type="button">Cancelar</button>
+              <button className="rr-primary" onClick={() => void saveStudyMetadata()} disabled={metadataSaving} type="button">{metadataSaving ? "Guardando…" : "Guardar"}</button>
             </div>
           </section>
         </div>
       )}
-
-      <section className="review-grid">
-        <aside className="left-column case-review-left">
-          <article className="panel-card compact-card">
-            <PanelTitle panelId="case-summary" title="Información del caso"><button className="inline-edit-button" onClick={() => setMetadataDialogOpen(true)} type="button">Editar</button></PanelTitle>
-            {panelVisible("case-summary") ? (
-              <dl className="info-list compact-info">
-                <div><dt>ID de caso</dt><dd>{displayRun.caseId ?? studyReview?.caseId}</dd></div>
-                <div><dt>Fecha de estudio</dt><dd>{displayStudyDate(selectedDetail?.study?.studyDate ?? run.studyDate ?? studyReview?.studyDate ?? null)}</dd></div>
-                <div><dt>Modalidad</dt><dd>{displayModality(selectedDetail?.study?.modality ?? run.modality ?? null)}</dd></div>
-                <div><dt>Referencia de paciente de-identificada</dt><dd>{displaySubjectRef(selectedDetail?.study?.subjectRef ?? run.patientId ?? null)}</dd></div>
-                <div><dt>Descripción</dt><dd>{selectedDetail?.study?.description ?? "No informada"}</dd></div>
-                <div><dt>Plano</dt><dd>{displayPrimaryPlane(currentSeries?.plane ?? displayRun.plane ?? null)}</dd></div>
-                <div><dt>Versión del modelo</dt><dd>{displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}</dd></div>
-                <div><dt>Estado de revisión</dt><dd><ReviewBadge status={review.status ?? "pendiente"} />{(review.status ?? "pendiente") === "aceptado" && <small>Finalizado · aprobado por revisor</small>}</dd></div>
-                <div><dt>Prioridad</dt><dd>{displayReviewPriority(selectedDetail?.study?.priority ?? null)}</dd></div>
-                <div><dt>Revisor</dt><dd>{reviewerName}</dd></div>
-              </dl>
-            ) : hiddenPlaceholder}
-          </article>
-
-          <article className="panel-card compact-card">
-            <PanelTitle panelId="patient-safe" title="Metadatos deidentificados" />
-            {panelVisible("patient-safe") ? (
-              <>
-                <dl className="info-list compact-info">
-                  <div><dt>Edad al estudio</dt><dd>{String(patientSafe.ageAtStudy ?? patientSafe.age ?? "Desconocido")}</dd></div>
-                  <div><dt>Sexo</dt><dd>{String(patientSafe.sex ?? "Desconocido")}</dd></div>
-                  <div><dt>Región corporal</dt><dd>{String(patientSafe.bodyRegion ?? "No informado")}</dd></div>
-                  <div><dt>Descripción</dt><dd>{String(patientSafe.studyDescription ?? "No informado")}</dd></div>
-                  <div><dt>Planos disponibles</dt><dd>{seriesList.length ? `${seriesList.length} plano${seriesList.length === 1 ? "" : "s"}` : "No informado"}</dd></div>
-                  <div><dt>Resolución de imagen</dt><dd>{String(patientSafe.imageResolution ?? (quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm de espaciado` : "sin datos"))}</dd></div>
-                </dl>
-                <button className="text-link-button" type="button">Show more</button>
-              </>
-            ) : hiddenPlaceholder}
-          </article>
-
-          <article className="panel-card compact-card">
-            <PanelTitle panelId="series-nav" title="Navegador de series"><span className="muted">{seriesList.length ? `${seriesList.length} plano${seriesList.length === 1 ? "" : "s"}` : "sin planos persistidos"}</span></PanelTitle>
-            {panelVisible("series-nav") ? (
-              <div className="series-list compact-list">
-                {seriesList.length ? seriesList.map((item: any, index: number) => (
-                  <button className={`series-item ${currentSeries?.id === item.id ? "active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
-                    <span className="thumbnail neutral-thumbnail" aria-hidden="true"><em>{String(index + 1).padStart(2, "0")}</em></span>
-                    <span><strong>{item.name}</strong><small>{item.available ? "input.png persistido" : `asset ${item.storageStatus ?? "no disponible"}`}</small></span>
-                  </button>
-                )) : <div className="panel-hidden-placeholder">El estudio no declara planos persistidos revisables.</div>}
-              </div>
-            ) : hiddenPlaceholder}
-          </article>
-
-          <article className="panel-card compact-card inference-card">
-            <PanelTitle panelId="inference" title="Modo de inferencia"><StatusBadge tone={traceabilityTone(inferenceMode, artifact)}>{inferenceModeLabel(inferenceMode)}</StatusBadge></PanelTitle>
-            {panelVisible("inference") ? (
-              <dl className="info-list compact-info">
-                <div><dt>Solicitado</dt><dd>{inferenceModeLabel(requestedInferenceMode)}</dd></div>
-                <div><dt>Preparación</dt><dd>{readinessLabel(modelReadiness)}</dd></div>
-                <div><dt>Revisión humana</dt><dd>Requerida</dd></div>
-                <div><dt>Uso clínico</dt><dd>No apto para diagnóstico</dd></div>
-              </dl>
-            ) : hiddenPlaceholder}
-          </article>
-        </aside>
-
-        <section className="center-column">
-          <div className="workspace-tabs">
-            {(["Sagittal", "Axial", "3D Reconstruction"] as const).map((item) => {
-              // El tab 3D nunca se deshabilita: cada estado (bloqueado, cargando,
-              // error, disponible) tiene su propio mensaje claro dentro del panel.
-              const disabled = item === "Axial" ? !axialWorkspace.available : item === "3D Reconstruction" ? false : !sagittalWorkspace.planeRunId;
-              return <button aria-disabled={disabled} className={tab === item ? "active" : ""} disabled={disabled} key={item} onClick={() => setTab(item)} title={disabled ? item === "Axial" ? "Axial opcional no disponible para esta revisión sagital." : "Sagital persistido no disponible." : undefined} type="button">{item === "3D Reconstruction" ? "Proxy 3D experimental" : item === "Sagittal" ? "Sagital" : "Axial"}</button>;
-            })}
-          </div>
-          <div className="toolbar compact-toolbar review-toolbar" role="toolbar" aria-label="Herramientas de revisión">
-            <button disabled title={futureFeatureTitle} type="button">Editar máscara</button>
-            <button className={editMode ? "active" : ""} disabled={!activeCoordinateSpace} onClick={() => {
-              setEditMode((value) => !value);
-              setLandmarkAddMode(false);
-            }} title={activeCoordinateSpace ? "Habilita mover landmarks IA como borrador del revisor" : "Espacio de coordenadas no informado por backend"} type="button">Editar landmark</button>
-            <button className={landmarkAddMode ? "active" : ""} disabled={!editMode || !activeCoordinateSpace} onClick={() => setLandmarkAddMode((value) => !value)} title={!activeCoordinateSpace ? "Espacio de coordenadas no informado por backend" : editMode ? "Clic sobre la imagen real para agregar landmark del revisor" : "Activar Editar landmark primero"} type="button">Agregar landmark</button>
-            <button disabled title={futureFeatureTitle} type="button">Recalcular</button>
-            <button disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores del revisor"} type="button">Deshacer</button>
-          </div>
-          <div className="edit-state compact-copy">Plano: <strong>{currentSeries?.name ?? "sin plano persistido"}</strong> · Run de plano: <strong>{activeWorkspace.planeRunId ?? "no informado"}</strong> · Storage: <strong>{activeWorkspace.storageStatus}</strong> · Superposición: <strong>{overlayAvailable ? "overlay.png real" : activeWorkspace.overlayUrl ? "verificando overlay.png" : "no disponible"}</strong> · Borradores del revisor: <strong>{reviewerDraftCount} medición/es, {landmarkDraftCount} landmark/s</strong> · Landmarks: <strong>no persistido - pendiente BE-008/FE-010 + AI-011</strong></div>
-          {tab === "3D Reconstruction" ? (
-            <article className="panel-card full-viewer"><SpineReconstructionPreview proxy={threeDProxyViewModel} /></article>
-          ) : (
-            <div className="viewer-stack compact-viewer-stack">
-              <MriSliceViewer
-                model={viewerModel}
-                selectedLandmarkId={selectedLandmark}
-                onSelectLandmark={setSelectedLandmark}
-                readonly={!editMode}
-                addMode={landmarkAddMode}
-                onMoveLandmark={(landmarkId, point) => {
-                  const landmark = displayLandmarks.find((item) => item.id === landmarkId);
-                  if (!landmark) return;
-                  updateLandmarkDraft({ ...landmark, x: point.x, y: point.y, editable: true });
-                }}
-                onAddLandmark={(point) => {
-                  const landmark: StudyLandmark = {
-                    id: `reviewer-landmark-${Date.now()}`,
-                    label: `R${displayLandmarks.length + 1}`,
-                    seriesId: currentSeries?.id ?? `${activePlano}-asset`,
-                    sliceIndex: currentSeries?.selectedSlice ?? 1,
-                    x: point.x,
-                    y: point.y,
-                    editable: true,
-                  };
-                  updateLandmarkDraft(landmark);
-                }}
-                onLandmarkAddComplete={() => setLandmarkAddMode(false)}
-                overlayEnabled
-                onOverlayAvailableChange={(available) => setOverlayAvailableByPlano((current) => ({ ...current, [activePlano]: available }))}
-              />
-              <article className="panel-card compact-card legend-card">
-                <PanelTitle panelId="legend" title="Leyenda" />
-                {panelVisible("legend") ? (
-                  <>
-                    <div className="legend-grid layer-legend-grid">
-                      {masks.length ? masks.map((mask: any) => (
-                        <button disabled key={mask.id} title="Requiere máscaras por clase desde backend (FE-007/AI-017); hoy solo hay overlay.png combinado." type="button">
-                          <i style={{ background: maskTokenVar(mask) }} />{mask.label}
-                        </button>
-                      )) : <button disabled title="El backend declaró overlay.png combinado, sin máscaras por clase persistidas." type="button"><i style={{ background: "var(--mask-disc)" }} />Superposición combinada</button>}
-                    </div>
-                    <p className="viewer-limit-note">{masks.length ? "La visibilidad por clase requiere máscaras por clase desde backend. El visor actual usa overlay.png combinado cuando está disponible." : "No hay máscaras por clase persistidas; se muestra solo la superposición combinada si overlay.png está disponible."}</p>
-                  </>
-                ) : hiddenPlaceholder}
-              </article>
-            </div>
-          )}
-        </section>
-
-        <aside className="right-column">
-          <section className="panel-card notes-card compact-card decision-panel">
-            <PanelTitle panelId="decision-visible" title="Notas" />
-            {panelVisible("decision-visible") ? (
-              <>
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Agregar notas sobre mediciones o hallazgos..." />
-                <div className="review-actions compact-actions decision-actions">
-                  <label className="decision-status-field">
-                    <span>Estado de revisión</span>
-                    <select aria-label="Estado de revisión" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
-                      <option value="pendiente">Pendiente</option>
-                      <option value="observado">Observado</option>
-                      <option value="aceptado">Finalizado</option>
-                      <option value="descartado">Descartado</option>
-                    </select>
-                  </label>
-                  <button className="ghost-button" disabled={saving} onClick={() => void save("pendiente")} type="button">Guardar borrador</button>
-                  <button className="primary-button" disabled={confirmDisabled} onClick={() => void save(reviewStatus)} title={reviewStatus === "pendiente" ? "Usá Guardar borrador para conservar una revisión pendiente." : undefined} type="button">Confirmar estado</button>
-                  {reviewStatus === "pendiente" && <p className="viewer-limit-note decision-help">Usá Guardar borrador para conservar una revisión pendiente.</p>}
-                  {saveMessage && <p className="review-save-result" role="status">{saveMessage}</p>}
-                </div>
-              </>
-            ) : hiddenPlaceholder}
-          </section>
-
-          <AgentSummary agentDecision={run.aiOutput?.agentDecision ?? studyReview?.aiOutput?.agentDecision ?? run.agentDecision} />
-
-          <section className="panel-card compact-card collapsible-audit">
-            <PanelTitle panelId="audit" title="Auditoría" />
-            {panelVisible("audit") ? <AuditTrail events={auditTrail.slice(0, 4)} /> : hiddenPlaceholder}
-          </section>
-        </aside>
-
-        <section className="panel-card results-panel measurements-review-panel measurements-wide-panel">
-          <div className="section-title">
-            <h2>Mediciones</h2>
-            <button className="text-link-button" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Descartar borradores locales y volver a los valores persistidos" : "No hay mediciones del revisor editadas"} type="button">Descartar borradores</button>
-          </div>
-          <p className="muted compact-copy">IA original y revisor se mantienen separados. La confianza y el valor atípico pertenecen a IA; no se inventan para la corrección del revisor.</p>
-          <table className="measurement-review-table" aria-label="Mediciones">
-            <thead>
-              <tr className="measurement-review-head">
-                <th scope="col">Métrica</th>
-                <th scope="col">Valor IA original</th>
-                <th scope="col">Valor del revisor</th>
-                <th scope="col">Diferencia</th>
-                <th scope="col">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {resultRows.map((item) => (
-                <tr className={`measurement-review-row ${item.draftValue !== undefined && item.draftValue !== "" ? "is-draft" : ""}`} key={item.id}>
-                  <td className="measurement-metric-cell" data-label="Métrica">
-                    <strong title={item.label}>{displayMeasurementLabel(item.label)}</strong>
-                    <small>{displayMeasurementLevel(item.level)}</small>
-                    <span className={`confidence-pill ${confidenceToneClass(item.confidence)}`}>{item.confidence !== undefined ? `Confianza IA ${Math.round(item.confidence * 100)}%` : "Confianza IA N/D"}</span>
-                    {item.outlier && <StatusBadge tone="amber">Atípico IA</StatusBadge>}
-                  </td>
-                  <td className="tabular-value" data-label="Valor IA original"><em>IA</em>{item.aiValue} {displayUnit(item.unit)}</td>
-                  <td className="reviewer-input-cell" data-label="Valor del revisor">
-                    <input aria-label={`Valor del revisor para ${item.label}. Valor IA original ${item.aiValue} ${displayUnit(item.unit)}`} className="reviewer-value-input" inputMode="decimal" onChange={(event) => updateReviewerValue(item, event.target.value)} placeholder={String(item.aiValue ?? "")} value={String(item.reviewerValue ?? "")} />
-                    <button className="measurement-reset-button" disabled={item.draftValue === undefined && (item.persistedValue === undefined || item.persistedValue === null || item.persistedValue === "")} onClick={() => resetReviewerValue(item.id)} title={item.persistedValue !== undefined && item.persistedValue !== null && item.persistedValue !== "" ? "Restaurar en borrador: enviará el valor IA como corrección explícita" : "Restaurar valor IA para esta medición"} type="button">Restaurar</button>
-                    {item.draftValue !== undefined && item.draftValue !== "" && <span className="draft-chip">Borrador</span>}
-                  </td>
-                  <td data-label="Diferencia"><span className={`delta-chip delta-${item.severity}`}>{formatDelta(item.delta, item.unit)}</span></td>
-                  <td data-label="Estado"><StatusBadge tone={item.status === "guardado" ? "green" : item.status === "draft" ? "blue" : "slate"}>{item.status === "draft" ? "Borrador" : item.status === "guardado" ? "Guardado" : "Sin cambios"}</StatusBadge></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {hasReviewerDrafts && <p className="viewer-limit-note">{reviewerDraftCount} medición/es y {landmarkDraftCount} landmark/s en borrador. Mediciones se envían en la revisión canónica; landmarks quedan en borrador local no persistido, pendiente BE-008/FE-010 + AI-011.</p>}
-        </section>
-      </section>
-      <PrivacyBanner />
     </div>
   );
 }

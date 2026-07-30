@@ -32,6 +32,9 @@
     --control-h: 28px;
     --toolbar-h: 40px;
     --topbar-h: 36px;
+    /* Single source of truth for the shell width: the layout grid and the reading
+       room both read it, so collapsing the rail widens the workspace with it. */
+    --sidebar-w: 248px;
     /* Spacing */
     --sp-1: 4px;
     --sp-2: 8px;
@@ -88,6 +91,12 @@
     --shadow-card: 0 18px 50px rgba(15, 23, 42, .08);
     --shadow-float: 0 24px 70px rgba(15, 23, 42, .14);
     --shadow-modal: 0 28px 90px rgba(15, 23, 42, .22);
+  }
+
+  /* Collapsed navigation rail: only the width changes, so the layout grid and the
+     reading-room overlay both follow from the single --sidebar-w declaration. */
+  .app-layout.is-rail {
+    --sidebar-w: 56px;
   }
 
   /*

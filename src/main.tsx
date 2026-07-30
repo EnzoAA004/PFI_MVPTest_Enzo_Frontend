@@ -6,7 +6,9 @@ import "./design/base.css";
 import "./design/components.css";
 // Feature stylesheets: each migrated screen owns its CSS instead of adding another
 // override layer to components.css.
+import "./design/shell.css";
 import "./features/worklist/worklist.css";
+import "./features/reading/reading.css";
 import "./design/utilities.css";
 import "./a11yDev";
 

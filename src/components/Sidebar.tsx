@@ -1,6 +1,6 @@
 import type { ViewKey } from "../appTypes";
 import type { ComponentType } from "react";
-import { HelpCircle, ListChecks, Settings, ShieldCheck, UploadCloud, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, HelpCircle, ListChecks, Settings, ShieldCheck, UploadCloud, Users } from "lucide-react";
 
 /**
  * Navigation follows the reading workflow, not the module structure.
@@ -22,9 +22,11 @@ interface SidebarProps {
   onChangeView: (view: ViewKey) => void;
   reviewQueueCount: number;
   systemOnline?: boolean;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
-export function Sidebar({ activeView, activeNavView = activeView, onChangeView, reviewQueueCount, systemOnline = true }: SidebarProps) {
+export function Sidebar({ activeView, activeNavView = activeView, onChangeView, reviewQueueCount, systemOnline = true, collapsed = false, onToggleCollapsed }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -46,7 +48,7 @@ export function Sidebar({ activeView, activeNavView = activeView, onChangeView, 
           const Icon = item.icon;
           const selected = activeNavView === item.key;
           return (
-            <button className={selected ? "active" : ""} key={item.key} onClick={() => onChangeView(item.key)} type="button" aria-current={selected ? "page" : undefined}>
+            <button className={selected ? "active" : ""} key={item.key} onClick={() => onChangeView(item.key)} type="button" aria-current={selected ? "page" : undefined} title={collapsed ? item.label : undefined}>
               <span className="side-nav-label"><Icon aria-hidden size={18} />{item.label}</span>
               {item.badge && <em>{reviewQueueCount}</em>}
             </button>
@@ -54,8 +56,20 @@ export function Sidebar({ activeView, activeNavView = activeView, onChangeView, 
         })}
       </nav>
       <div className="sidebar-footer">
-        <button className={activeNavView === "help" ? "active" : ""} type="button" onClick={() => onChangeView("help")} aria-current={activeNavView === "help" ? "page" : undefined}><HelpCircle aria-hidden size={16} />Ayuda y soporte</button>
+        <button className={activeNavView === "help" ? "active" : ""} type="button" onClick={() => onChangeView("help")} aria-current={activeNavView === "help" ? "page" : undefined} title={collapsed ? "Ayuda y soporte" : undefined}><HelpCircle aria-hidden size={16} />Ayuda y soporte</button>
         <span className={systemOnline ? "system-status is-online" : "system-status is-degraded"}><ShieldCheck aria-hidden size={16} />v1.3.2</span>
+        {onToggleCollapsed && (
+          <button
+            className="sidebar-collapse"
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? "Expandir menú" : "Contraer menú"}
+            title={collapsed ? "Expandir menú" : "Contraer menú"}
+          >
+            {collapsed ? <ChevronRight aria-hidden size={16} /> : <ChevronLeft aria-hidden size={16} />}
+            <span className="side-nav-label">Contraer</span>
+          </button>
+        )}
       </div>
     </aside>
   );

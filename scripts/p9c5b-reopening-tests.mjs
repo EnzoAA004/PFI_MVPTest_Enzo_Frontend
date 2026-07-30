@@ -105,9 +105,13 @@ test("6 asset invalido o error de descarga durante la reapertura produce un esta
   assert.match(source, /setThreeDAssetState\(\{ status: "error"/);
 });
 
-test("7 el tab 3D nunca queda deshabilitado: cada estado tiene su propio mensaje dentro del panel", () => {
+test("7 la entrada 3D nunca queda deshabilitada: cada estado tiene su propio mensaje dentro del panel", () => {
   const source = readSource("src/components/StudyReviewView.tsx");
-  assert.match(source, /item === "3D Reconstruction" \? false/);
+  // En la sala de lectura el proxy 3D es una entrada mas del rail de series, y es
+  // seleccionable siempre: bloqueado, cargando, con error o disponible, el estado
+  // se explica dentro del panel en vez de dejar un control muerto.
+  assert.match(source, /setTab\("3D Reconstruction"\)/);
+  assert.equal(/disabled[^\n]*3D Reconstruction/.test(source), false, "la entrada 3D no debe deshabilitarse");
 });
 
 // 8. el mesh solo acepta /api/... o un origin que coincide exactamente con API_BASE_URL
@@ -145,7 +149,8 @@ test("10 fetchThreeDProxyAsset valida el origin de forma independiente antes de 
 // 11. el tab de reapertura se llama "Proxy 3D experimental", sin frases de reconstruccion paciente-especifica
 test("11 el tab de StudyReviewView se llama Proxy 3D experimental y no queda ningun texto de reconstruccion paciente-especifica", () => {
   const source = readSource("src/components/StudyReviewView.tsx");
-  assert.match(source, /\{item === "3D Reconstruction" \? "Proxy 3D experimental" : /);
+  assert.match(source, /Proxy 3D/);
+  assert.match(source, /experimental/);
   assert.ok(!source.includes("paciente-específico"), "StudyReviewView no debe contener texto de reconstruccion paciente-especifica");
   assert.ok(!source.includes("paciente-especifico"), "StudyReviewView no debe contener texto de reconstruccion paciente-especifica");
 });

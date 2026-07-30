@@ -128,18 +128,26 @@ test("G StudyReviewView no conserva opacidad duplicada ni aprobacion en toolbar"
   assert.equal(source.includes(">Aprobar</button>"), false);
 });
 
-test("H panel de decision usa Guardar borrador y Confirmar estado", () => {
+test("H la decision se guarda como borrador o se confirma, nunca se 'aprueba'", () => {
   const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
   assert.match(source, /Guardar borrador/);
-  assert.match(source, /Confirmar estado/);
+  assert.match(source, /Confirmar/);
+  // La herramienta es asistiva: el profesional confirma un estado de revision,
+  // no "aprueba" un diagnostico.
   assert.equal(source.includes("Aprobar y completar"), false);
+  assert.equal(source.includes(">Aprobar</button>"), false);
 });
 
-test("I tabla de mediciones queda en panel ancho", () => {
+test("I el valor de IA y el del revisor se muestran separados", () => {
   const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
-  assert.match(source, /measurements-wide-panel/);
-  assert.match(source, /Valor IA original/);
-  assert.match(source, /Valor del revisor/);
+  // En la sala de lectura las mediciones viven en el panel derecho: cada fila
+  // muestra el valor de IA y ofrece un campo aparte para el del revisor, de modo
+  // que la correccion nunca pisa el original.
+  assert.match(source, /Valor del revisor para/);
+  // El valor de IA se muestra como referencia y ademas como placeholder del campo,
+  // de modo que el original permanece visible mientras se corrige.
+  assert.match(source, /item\.aiValue/);
+  assert.match(source, /placeholder=\{String\(item\.aiValue/);
 });
 
 console.log(`P8-D3 corrections rehydration tests passed: ${count}`);

@@ -1,0 +1,723 @@
+/*
+ * Reading room — dark, image-first workspace.
+ *
+ * It deliberately breaks out of the page flow: reading a study is a mode, not a
+ * page section. The room covers the viewport to the right of the sidebar (which
+ * stays available for navigation) so the image gets the whole screen instead of
+ * being a card in the middle column, below the fold.
+ *
+ * Namespaced under .rr and self-contained. Dark values come from the
+ * [data-theme="reading"] token scope, which .rr sets on itself.
+ */
+@layer components {
+  .rr {
+    position: fixed;
+    inset: 0 0 0 var(--sidebar-w);
+    z-index: 40;
+    display: grid;
+    grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--toolbar-h);
+    background: var(--bg-app);
+    color: var(--text);
+    font-size: var(--fs-small);
+  }
+
+  @media (max-width: 1180px) {
+    .rr { inset: 0; }
+  }
+
+  /* Top bar ------------------------------------------------------------- */
+  .rr-topbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: 0 var(--sp-3);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    min-width: 0;
+  }
+
+  .rr-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 var(--sp-2);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    cursor: pointer;
+    flex: none;
+  }
+
+  .rr-back:hover { color: var(--text); border-color: var(--border-strong); }
+
+  .rr-case {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .rr-case strong {
+    font-size: var(--fs-body);
+    font-weight: var(--fw-semibold);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .rr-case span {
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rr-topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: none;
+  }
+
+  .rr-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+  }
+
+  .rr-status i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--primary);
+  }
+
+  .rr-status[data-status="observado"] i { background: var(--warning); }
+  .rr-status[data-status="aceptado"] i { background: var(--success); }
+  .rr-status[data-status="descartado"] i { background: var(--border-strong); }
+
+  .rr-ghost {
+    height: 24px;
+    padding: 0 var(--sp-2);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    cursor: pointer;
+  }
+
+  .rr-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); }
+  .rr-ghost:disabled { opacity: .4; cursor: default; }
+
+  /* Body ---------------------------------------------------------------- */
+  .rr-body {
+    display: grid;
+    grid-template-columns: 124px minmax(0, 1fr) 340px;
+    min-height: 0;
+  }
+
+  @media (max-width: 1320px) {
+    .rr-body { grid-template-columns: 104px minmax(0, 1fr) 300px; }
+  }
+
+  /* Series rail ---------------------------------------------------------- */
+  .rr-series {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: var(--sp-2);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .rr-rail-title {
+    font-size: var(--fs-micro);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 2px;
+  }
+
+  .rr-serie {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-chip);
+    cursor: pointer;
+    text-align: left;
+    color: var(--text-muted);
+  }
+
+  .rr-serie:hover { color: var(--text); }
+  .rr-serie.is-active { color: var(--text); }
+
+  .rr-thumb {
+    position: relative;
+    aspect-ratio: 1;
+    background: var(--viewport-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-chip);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+  }
+
+  .rr-serie.is-active .rr-thumb {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+  }
+
+  .rr-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+  .rr-thumb em {
+    font-style: normal;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+    opacity: .6;
+  }
+
+  .rr-serie-name {
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-medium);
+    line-height: 1.2;
+  }
+
+  .rr-serie-meta {
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    opacity: .8;
+  }
+
+  /* Stage / viewport ----------------------------------------------------- */
+  .rr-stage {
+    position: relative;
+    background: var(--viewport-bg);
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rr-viewport {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    /* Height of each viewer control strip; the bottom corner annotations sit
+       above the two of them. */
+    --rr-strip-h: 30px;
+  }
+
+  /*
+   * The shared 2D viewer (MriSliceViewer) is reused as-is, but in the reading room
+   * only the image matters: its card chrome is stripped, the image frame takes the
+   * whole stage, and its control rows float over the image instead of stacking
+   * above it and pushing the scan below the fold.
+   *
+   * Its caption, class legend and footnotes are hidden here — that content now
+   * lives in the "Técnico" tab of the right panel, so the clinical surface stays
+   * free of storage states and internal ticket codes.
+   */
+  .rr-viewport .viewer-stack,
+  .rr-viewport .panel-card,
+  .rr-viewport .mri-viewer {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .rr-viewport .viewer-caption,
+  .rr-viewport .segmentation-legend-panel,
+  .rr-viewport .viewer-footer,
+  .rr-viewport .viewer-limit-note,
+  .rr-viewport .panel-hidden-placeholder {
+    display: none;
+  }
+
+  .rr-viewport .real-slice-frame {
+    flex: 1;
+    min-height: 0;
+    background: var(--viewport-bg);
+    border: 0;
+    border-radius: 0;
+  }
+
+  .rr-viewport .asset-empty-state {
+    background: transparent;
+    color: var(--text-muted);
+  }
+
+  /*
+   * Controls sit below the image as one flat instrument strip, not as floating
+   * bubbles over the scan: anything hovering over the image competes with it and
+   * covers pixels the reader may need. Flex `order` puts the frame first even
+   * though the viewer renders its controls before it in the DOM.
+   */
+  .rr-viewport .real-slice-frame { order: 1; }
+  .rr-viewport .viewer-controls { order: 2; }
+  .rr-viewport .plane-controls-panel { order: 3; }
+
+  .rr-viewport .viewer-controls,
+  .rr-viewport .plane-controls-panel {
+    position: static;
+    z-index: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    width: 100%;
+    max-width: none;
+    padding: 0 var(--sp-3);
+    margin: 0;
+    height: var(--rr-strip-h);
+    flex: none;
+    background: var(--surface);
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    /* Fixed height, scrolled instead of wrapped: the strips must not change height,
+       because the bottom corner annotations are anchored just above them. */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+
+  .rr-viewport .viewer-controls button,
+  .rr-viewport .plane-controls-panel button {
+    height: 22px;
+    min-height: 0;
+    padding: 0 var(--sp-2);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-btn);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+  }
+
+  .rr-viewport .viewer-controls button:hover:not(:disabled),
+  .rr-viewport .plane-controls-panel button:hover:not(:disabled) {
+    background: var(--surface-subtle);
+    color: var(--text);
+  }
+
+  .rr-viewport .viewer-controls button.active {
+    background: var(--info-bg);
+    border-color: var(--border-info);
+    color: var(--text-primary-strong);
+  }
+
+  .rr-viewport .viewer-controls select {
+    height: 22px;
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    color: var(--text);
+    font-size: var(--fs-micro);
+    padding: 0 4px;
+  }
+
+  .rr-viewport .control-field,
+  .rr-viewport .toggle-row,
+  .rr-viewport .opacity-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+  }
+
+  .rr-viewport .control-field > span,
+  .rr-viewport .zoom-readout {
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .rr-viewport .opacity-control input[type="range"] { width: 90px; }
+
+  /*
+   * Corner annotations, burned over the image like a DICOM viewer: case at the
+   * top-left, series and slice at the top-right, display parameters at the
+   * bottom-left, and the scale plus the non-diagnostic notice at the
+   * bottom-right. pointer-events:none so they never intercept a drag.
+   */
+  .rr-corner {
+    position: absolute;
+    z-index: 4;
+    pointer-events: none;
+    max-width: 26ch;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    line-height: 1.45;
+    color: var(--viewport-annotation);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
+    white-space: pre-line;
+  }
+
+  .rr-corner strong {
+    display: block;
+    color: var(--viewport-annotation-strong);
+    font-weight: var(--fw-medium);
+  }
+
+  .rr-corner-tl { top: var(--sp-2); left: var(--sp-3); }
+  .rr-corner-tr { top: var(--sp-2); right: var(--sp-3); text-align: right; }
+  /* Offset by the two control strips so the annotations stay over the image. */
+  .rr-corner-bl { bottom: calc(2 * var(--rr-strip-h) + var(--sp-2)); left: var(--sp-3); }
+  .rr-corner-br { bottom: calc(2 * var(--rr-strip-h) + var(--sp-2)); right: var(--sp-3); text-align: right; }
+
+  .rr-corner-br .rr-disclaimer {
+    color: var(--warning);
+    opacity: .85;
+  }
+
+  /* Right panel ---------------------------------------------------------- */
+  .rr-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .rr-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rr-tabs button {
+    flex: 1;
+    height: var(--control-h);
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-medium);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .rr-tabs button:hover { color: var(--text); }
+
+  .rr-tabs button.is-active {
+    color: var(--text);
+    border-bottom-color: var(--primary);
+  }
+
+  .rr-panel-body {
+    overflow-y: auto;
+    padding: var(--sp-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    min-height: 0;
+  }
+
+  .rr-section-title {
+    margin: 0;
+    font-size: var(--fs-micro);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: var(--fw-medium);
+  }
+
+  .rr-note {
+    margin: 0;
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  /* Findings by level ---------------------------------------------------- */
+  .rr-levels {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-chip);
+    overflow: hidden;
+  }
+
+  .rr-level {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    height: var(--row-h);
+    padding: 0 var(--sp-2);
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+  }
+
+  .rr-level:last-child { border-bottom: 0; }
+  .rr-level:hover { background: var(--surface-subtle); color: var(--text); }
+
+  .rr-level.is-active {
+    background: var(--info-bg);
+    color: var(--text);
+    box-shadow: inset 2px 0 0 var(--primary);
+  }
+
+  .rr-level-name {
+    font-family: var(--font-mono);
+    font-weight: var(--fw-medium);
+  }
+
+  .rr-level-count {
+    font-size: var(--fs-micro);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rr-level.is-empty .rr-level-count { opacity: .45; }
+
+  /* Measurement readout -------------------------------------------------- */
+  .rr-measures {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .rr-measure {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--sp-2);
+    padding: 5px var(--sp-2);
+    border-radius: var(--radius-chip);
+  }
+
+  .rr-measure:nth-child(odd) { background: var(--surface-subtle); }
+
+  .rr-measure-label {
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rr-measure-value {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .rr-measure-value u {
+    text-decoration: none;
+    color: var(--text-muted);
+    margin-left: 3px;
+  }
+
+  .rr-measure-edited .rr-measure-value { color: var(--text-warning-strong); }
+
+  /* Review form ---------------------------------------------------------- */
+  .rr-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .rr-field > span {
+    font-size: var(--fs-micro);
+    color: var(--text-muted);
+  }
+
+  .rr-panel textarea,
+  .rr-panel select,
+  .rr-panel input[type="text"],
+  .rr-panel input:not([type]) {
+    background: var(--surface-subtle);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    color: var(--text);
+    padding: 6px 8px;
+    font: inherit;
+    font-size: var(--fs-small);
+    width: 100%;
+  }
+
+  .rr-panel textarea { min-height: 84px; resize: vertical; }
+
+  .rr-panel textarea:focus,
+  .rr-panel select:focus,
+  .rr-panel input:focus {
+    outline: 0;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+  }
+
+  .rr-actions { display: flex; gap: var(--sp-2); }
+
+  .rr-primary {
+    flex: 1;
+    height: var(--control-h);
+    background: var(--primary);
+    border: 1px solid var(--primary);
+    border-radius: var(--radius-btn);
+    color: #08121f;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-semibold);
+    cursor: pointer;
+  }
+
+  .rr-primary:disabled { opacity: .4; cursor: default; }
+  .rr-secondary { flex: 1; }
+
+  /* Technical details ---------------------------------------------------- */
+  .rr-tech {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 3px var(--sp-3);
+    margin: 0;
+    font-size: var(--fs-micro);
+  }
+
+  .rr-tech dt { color: var(--text-muted); white-space: nowrap; }
+
+  .rr-tech dd {
+    margin: 0;
+    font-family: var(--font-mono);
+    color: var(--text);
+    overflow-wrap: anywhere;
+  }
+
+  /* Toolbar -------------------------------------------------------------- */
+  .rr-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: 0 var(--sp-3);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    min-width: 0;
+  }
+
+  .rr-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 var(--sp-2);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-btn);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    cursor: pointer;
+  }
+
+  .rr-tool:hover:not(:disabled) { background: var(--surface-subtle); color: var(--text); }
+
+  .rr-tool.is-active {
+    background: var(--info-bg);
+    border-color: var(--border-info);
+    color: var(--text-primary-strong);
+  }
+
+  .rr-tool:disabled { opacity: .35; cursor: default; }
+
+  .rr-toolbar-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    margin: 0 var(--sp-1);
+    flex: none;
+  }
+
+  .rr-toolbar-end {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rr-kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 3px;
+    color: var(--text-muted);
+    opacity: .8;
+  }
+
+  /* Dialog over the dark room -------------------------------------------- */
+  .rr-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgba(0, 0, 0, .66);
+    display: grid;
+    place-items: center;
+    padding: var(--sp-4);
+  }
+
+  .rr-dialog {
+    width: min(560px, 100%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: var(--sp-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    box-shadow: var(--shadow-modal);
+  }
+
+  .rr-dialog h2 { margin: 0; font-size: var(--fs-h3); }
+
+  .rr-dialog-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-3);
+  }
+
+  .rr-dialog-grid .rr-span-all { grid-column: 1 / -1; }
+
+  .rr-error {
+    margin: 0;
+    color: var(--text-danger-strong);
+    font-size: var(--fs-micro);
+  }
+
+  .rr-ok {
+    margin: 0;
+    color: var(--text-success-strong);
+    font-size: var(--fs-micro);
+  }
+}

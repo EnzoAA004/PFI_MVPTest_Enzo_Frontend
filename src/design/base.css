@@ -42,7 +42,7 @@
   }
   .app-layout {
     display: grid;
-    grid-template-columns: 248px minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
     min-height: 100vh;
   }
   .main-panel {
