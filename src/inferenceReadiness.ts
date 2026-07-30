@@ -133,6 +133,20 @@ export function readSpiderRuntimeMetadata(planeRun?: CanonicalPlaneRun | null): 
   };
 }
 
+/**
+ * True cuando la corrida no trajo ningún campo volumétrico. Se distingue de que
+ * los campos lleguen con valores inválidos: no es lo mismo "el volumen está mal"
+ * que "no se recibió información del volumen".
+ */
+export function isVolumetricMetadataAbsent(metadata: SpiderRuntimeMetadata) {
+  return metadata.inputShapeCanonical === undefined
+    && metadata.inputShapeNative === undefined
+    && metadata.sliceCount === undefined
+    && metadata.selectedAxis === undefined
+    && metadata.selectedSlice === undefined
+    && metadata.inputOrientationTransform === undefined;
+}
+
 export function evaluateSagittalReadiness(run?: CanonicalMultiplanarRun | null, requireFinalSpider = true): ReadinessResult {
   const reasons: string[] = [];
   const sagittal = run?.planes?.sagittal;
@@ -151,12 +165,24 @@ export function evaluateSagittalReadiness(run?: CanonicalMultiplanarRun | null, 
     if (sagittal.humanReviewRequired !== true) reasons.push("La revisión humana requerida sagital no está confirmada.");
     if (sagittal.notClinicalDiagnosis !== true) reasons.push("La restricción de no diagnóstico clínico sagital no está confirmada.");
     const metadata = readSpiderRuntimeMetadata(sagittal);
-    if (!metadata.canonicalShapeValid) reasons.push("La forma canónica sagital no informa 3 dimensiones.");
-    if (!metadata.selectedAxisValid) reasons.push("El eje sagital seleccionado no es válido.");
-    if (!metadata.sliceCountValid) reasons.push("El conteo de cortes sagitales no es válido.");
-    if (!metadata.sliceCountMatchesAxis) reasons.push("El conteo de cortes no coincide con la dimensión canónica del eje seleccionado.");
-    if (!metadata.selectedSliceInRange) reasons.push("El corte sagital seleccionado está fuera de rango.");
-    if (!metadata.supportedTransform) reasons.push("La transformación de orientación sagital no está soportada.");
+    if (isVolumetricMetadataAbsent(metadata)) {
+      /*
+       * Ninguno de los campos volumétricos llegó. Reportar los seis chequeos por
+       * separado describía el volumen como inválido ("la forma canónica no informa
+       * 3 dimensiones", "el eje no es válido", ...) cuando en realidad no se recibió
+       * nada que evaluar — el estudio puede estar perfecto. La causa habitual es que
+       * el backend esté consumiendo el contrato v1 del AI Module, que no transporta
+       * esta metadata; el detalle técnico vive en el panel Técnico de la lectura.
+       */
+      reasons.push("La corrida no informa la metadata volumétrica del estudio (dimensiones, cantidad de cortes y eje). Sin ella no se puede evaluar el volumen sagital, aunque el estudio sea válido.");
+    } else {
+      if (!metadata.canonicalShapeValid) reasons.push("La forma canónica sagital no informa 3 dimensiones.");
+      if (!metadata.selectedAxisValid) reasons.push("El eje sagital seleccionado no es válido.");
+      if (!metadata.sliceCountValid) reasons.push("El conteo de cortes sagitales no es válido.");
+      if (!metadata.sliceCountMatchesAxis) reasons.push("El conteo de cortes no coincide con la dimensión canónica del eje seleccionado.");
+      if (!metadata.selectedSliceInRange) reasons.push("El corte sagital seleccionado está fuera de rango.");
+      if (!metadata.supportedTransform) reasons.push("La transformación de orientación sagital no está soportada.");
+    }
   }
   return { ready: reasons.length === 0, reasons };
 }
