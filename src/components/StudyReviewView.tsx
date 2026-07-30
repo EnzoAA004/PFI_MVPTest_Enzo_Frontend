@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportReviewReport } from "../api";
 import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudyMetadataInput, StudySeries } from "../appTypes";
@@ -13,6 +13,7 @@ import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { emptyStudyMetadataDraft, normalizeStudyMetadataInput, priorityToBackend, subjectRefErrorMessage, validateSubjectRef, type StudyMetadataDraft } from "../studyMetadata";
 import { studyRunToMriViewerModel } from "../viewModels/mriViewerViewModel";
+import { useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
 import { MriSliceViewer } from "./MriSliceViewer";
@@ -133,6 +134,19 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
 
 function readinessLabel(value?: string) {
   return displayTechnicalReadiness(value);
+}
+
+/**
+ * Miniatura del rail de series.
+ *
+ * Los assets del backend exigen Authorization, así que un <img src> directo se
+ * pide sin cabeceras y recibe 401. Se carga con el mismo fetch autenticado que el
+ * visor, que entrega un blob URL; mientras no haya imagen se muestra el índice.
+ */
+function SeriesThumbnail({ url, index }: { url?: string | null; index: number }) {
+  const asset = useAuthenticatedImageUrl(url ?? undefined);
+  if (asset.state === "loaded" && asset.url) return <img src={asset.url} alt="" />;
+  return <em>{String(index + 1).padStart(2, "0")}</em>;
 }
 
 function deltaSeverity(delta: number | null, outlier?: boolean): DeltaSeverity {
@@ -366,6 +380,21 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const activeWorkspace = activePlano === "axial" ? axialWorkspace : sagittalWorkspace;
   const overlayAvailable = overlayAvailableByPlano[activePlano] === true;
   const activeCoordinateSpace = coordinateSpaceFrom(currentSeries, displayLandmarks);
+  /*
+   * MriSliceViewer avisa la disponibilidad del overlay desde un efecto que depende
+   * de esta callback. Si se pasa una arrow inline, su identidad cambia en cada
+   * render y el efecto vuelve a ejecutarse; si además el setter devuelve siempre un
+   * objeto nuevo, el estado "cambia" y el padre re-renderiza, realimentando el
+   * ciclo. Ese bucle de render abortaba el AbortController del visor en cada vuelta
+   * y la imagen nunca llegaba a cargarse.
+   *
+   * Se corta por los dos lados: identidad estable con useCallback y bail-out
+   * devolviendo la misma referencia cuando el valor no cambió.
+   */
+  const handleOverlayAvailableChange = useCallback((available: boolean) => {
+    setOverlayAvailableByPlano((current) => (current[activePlano] === available ? current : { ...current, [activePlano]: available }));
+  }, [activePlano]);
+
   const viewerModel = useMemo(
     () => studyRunToMriViewerModel({
       plane: activePlano,
@@ -376,6 +405,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     }),
     [activePlano, activeWorkspace.planeRunId, currentSeries, masks, displayLandmarks],
   );
+
 
   const studyMeasurements: MeasurementRow[] = hasPipelineVisualContract && pipelineMeasurements.length
     ? pipelineMeasurements.map((item) => normalizeRow({ ...item, aiValue: item.aiValue ?? item.value, reviewerValue: item.reviewerValue ?? null, confidence: item.confidence ?? 0.72 }))
@@ -700,7 +730,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           {seriesList.length ? seriesList.map((item: any, index: number) => (
             <button className={`rr-serie ${currentSeries?.id === item.id ? "is-active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
               <span className="rr-thumb">
-                {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <em>{String(index + 1).padStart(2, "0")}</em>}
+                <SeriesThumbnail url={item.imageUrl} index={index} />
               </span>
               <span className="rr-serie-name">{item.name}</span>
               <span className="rr-serie-meta">{item.sliceCount ? `${item.sliceCount} corte${item.sliceCount === 1 ? "" : "s"}` : item.available ? "1 corte" : "sin asset"}</span>
@@ -761,7 +791,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   }}
                   onLandmarkAddComplete={() => setLandmarkAddMode(false)}
                   overlayEnabled
-                  onOverlayAvailableChange={(available) => setOverlayAvailableByPlano((current) => ({ ...current, [activePlano]: available }))}
+                  onOverlayAvailableChange={handleOverlayAvailableChange}
                 />
               </>
             )}

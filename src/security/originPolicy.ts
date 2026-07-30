@@ -16,10 +16,23 @@ const BLOCKED_URL_PATTERNS: RegExp[] = [
   /^\/tmp\//,
   /^\/app\//,
   /\.internal(\/|$)/i,
-  /localhost/i,
-  /127\.0\.0\.1/,
   /trycloudflare\.com/i,
 ];
+
+/**
+ * Hosts que solo se aceptan cuando son exactamente el backend configurado.
+ *
+ * Bloquearlos por patrón impedía que el token viajara a un servicio local ajeno,
+ * pero también rechazaba el propio backend en desarrollo, donde API_BASE_URL es
+ * http://localhost:8080: los assets de la corrida nunca se pedían y el visor
+ * quedaba en "imagen no disponible" con el estudio correctamente persistido.
+ *
+ * La comparación por origen exacto contra API_BASE_URL, que ya se hace más abajo,
+ * es una garantía más fuerte que la coincidencia por substring: "localhost" dentro
+ * de la URL no implica que el origen sea el backend (por ejemplo
+ * https://localhost.evil.com), y esa distinción la resuelve `parsed.origin`.
+ */
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 const UNSAFE_SCHEMES = /^(file|data|blob|javascript|ftp):/i;
 
@@ -52,6 +65,9 @@ export function isAuthorizedBackendUrl(value: unknown): string | undefined {
     const origin = backendOrigin();
     const backendIsHttps = origin?.startsWith("https:");
     if (backendIsHttps && parsed.protocol !== "https:") return undefined;
+    // Un host local solo se acepta si ES el backend configurado, nunca por el mero
+    // hecho de llamarse localhost.
+    if (LOCAL_HOSTNAMES.has(parsed.hostname) && parsed.origin !== origin) return undefined;
     if (origin && parsed.origin === origin && parsed.pathname.startsWith("/api/")) return url;
   } catch {
     return undefined;
