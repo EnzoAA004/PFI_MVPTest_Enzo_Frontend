@@ -24,10 +24,26 @@ export function loadAuthSession(): AuthSession | null {
   return cachedSession;
 }
 
+/**
+ * La sesión se guarda en IndexedDB, que es asíncrono: entre el arranque y el fin
+ * de la hidratación la caché está vacía. Sin esperar aquí, cualquier request
+ * protegido que salga en esa ventana viaja sin Authorization, recibe 401 y dispara
+ * un refresh que tampoco encuentra refresh token, de modo que la sesión se
+ * invalida y el usuario queda deslogueado en la práctica aunque su token siga
+ * siendo válido.
+ *
+ * La promesa se memoriza para que N llamantes concurrentes hidraten una sola vez.
+ */
+let hydration: Promise<AuthSession | null> | null = null;
+
+export function ensureAuthSession(): Promise<AuthSession | null> {
+  if (cachedSession) return Promise.resolve(cachedSession);
+  hydration ??= asyncGetItem(AUTH_KEY).then(parseSession);
+  return hydration;
+}
+
 export async function hydrateAuthSession(): Promise<AuthSession | null> {
-  if (cachedSession) return cachedSession;
-  const raw = await asyncGetItem(AUTH_KEY);
-  return parseSession(raw);
+  return ensureAuthSession();
 }
 
 export function saveAuthSession(tokens: AuthTokenResponse): AuthSession {
@@ -39,5 +55,8 @@ export function saveAuthSession(tokens: AuthTokenResponse): AuthSession {
 
 export function clearAuthSession() {
   cachedSession = null;
+  // Se descarta la hidratación memorizada: si no, un login posterior seguiría
+  // resolviendo la sesión vieja que quedó en la promesa.
+  hydration = null;
   void asyncRemoveItem(AUTH_KEY);
 }

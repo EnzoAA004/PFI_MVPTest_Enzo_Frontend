@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { authHeaders, refreshDoctorSession } from "./authClient";
+import { ensureAuthSession } from "./authStorage";
 import { isAuthorizedBackendUrl } from "./security/originPolicy";
 
 export type AuthenticatedImageState = "idle" | "loading" | "loaded" | "failed";
@@ -34,11 +35,17 @@ export class AiAssetFetchError extends Error {
 }
 
 async function requestAsset(url: string, signal?: AbortSignal) {
-  return fetch(url, {
-    method: "GET",
-    headers: authHeaders(),
-    signal,
-  });
+  /*
+   * El header se arma con la sesión que devuelve la hidratación, no con la caché
+   * síncrona: la sesión vive en IndexedDB y, hasta que termina de cargarse,
+   * authHeaders() devuelve un objeto vacío. Un asset pedido en esa ventana llega
+   * sin Authorization, el backend responde 401 y el reintento dispara un refresh
+   * que tampoco encuentra token, de modo que la imagen nunca se muestra aunque
+   * esté persistida y la sesión sea válida.
+   */
+  const session = await ensureAuthSession();
+  const headers = session?.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : authHeaders();
+  return fetch(url, { method: "GET", headers, signal });
 }
 
 function validateImageResponse(response: Response, url: string) {

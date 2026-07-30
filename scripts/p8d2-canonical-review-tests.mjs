@@ -13,6 +13,9 @@ function loadApi() {
     .replace(/export /g, "");
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const sandbox = {
+  // api.ts espera la hidratacion de la sesion (IndexedDB) antes de cada request
+  // autenticado; el harness borra los imports, asi que se stubea aqui.
+  ensureAuthSession: async () => null,
     exports: {},
     window: undefined,
     console,

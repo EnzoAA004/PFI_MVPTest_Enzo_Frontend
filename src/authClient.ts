@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "./api";
-import { getCachedAuthSession, saveAuthSession } from "./authStorage";
+import { ensureAuthSession, getCachedAuthSession, saveAuthSession } from "./authStorage";
 import { coordinateRefresh } from "./security/refreshCoordinator";
 import { clearAllProtectedData, notifySessionInvalidated } from "./security/sessionCleanup";
 import { generateTraceId } from "./security/traceId";
@@ -52,7 +52,10 @@ export async function createDemoDoctorSession() {
 
 export function refreshDoctorSession(): Promise<AuthSession> {
   return coordinateRefresh(async () => {
-    const session = getCachedAuthSession();
+    // Se espera la hidratación antes de concluir que no hay sesión: durante el
+    // arranque la caché todavía está vacía y darla por perdida aquí desloguea a un
+    // usuario cuyo token sigue siendo válido.
+    const session = getCachedAuthSession() ?? await ensureAuthSession();
     if (!session?.refreshToken) {
       notifySessionInvalidated();
       throw new Error("No hay refresh token disponible");

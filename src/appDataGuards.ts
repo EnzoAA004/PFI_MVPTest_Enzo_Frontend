@@ -195,11 +195,30 @@ export function shouldFetchSubjectHistory(subjectRef: string | null | undefined)
   return typeof subjectRef === "string" && subjectRef.trim().length > 0;
 }
 
+/**
+ * El backend envuelve cada corrida persistida como
+ * `{ summary, measurementsByPlane, artifactsByPlane, corrections, metricsSnapshot,
+ * canonicalRun }`: los identificadores (runId, sagittalRunId, ...) viven dentro de
+ * `summary`, no en la raíz. Leerlos de la raíz dejaba planeRunId indefinido y el
+ * visor descartaba assets que sí estaban persistidos y disponibles, de modo que la
+ * revisión abría sin imagen. Se acepta también la forma plana por compatibilidad.
+ */
+function runFields(run: PersistedStudyRun): PersistedStudyRun {
+  const summary = (run as unknown as { summary?: PersistedStudyRun }).summary;
+  return summary ? { ...summary, ...stripUndefined(run) } : run;
+}
+
+function stripUndefined(run: PersistedStudyRun): Partial<PersistedStudyRun> {
+  const entries = Object.entries(run as unknown as Record<string, unknown>).filter(([key, value]) => key !== "summary" && value !== undefined);
+  return Object.fromEntries(entries) as Partial<PersistedStudyRun>;
+}
+
 export function selectReviewableRunFromDetail(detail: StudyDetailResponse): ReviewableRun | null {
-  const runs = detail.runs ?? [];
-  if (!runs.length) return null;
+  const rawRuns = detail.runs ?? [];
+  if (!rawRuns.length) return null;
+  const runs = rawRuns.map((run) => runFields(run as PersistedStudyRun));
   const latestRunId = detail.study.latestRunId ?? detail.study.runId ?? null;
-  const firstRun = (latestRunId ? runs.find((run) => run.runId === latestRunId) : runs[0]) as PersistedStudyRun | undefined;
+  const firstRun = (latestRunId ? runs.find((run) => run.runId === latestRunId) : runs[0]) ?? runs[0];
   if (!firstRun) return null;
   const primaryPlane = firstRun.primaryPlane ?? firstRun.plane ?? firstRun.planes?.[0] ?? detail.study.primaryPlane ?? detail.study.plane ?? undefined;
   const modelKey = firstRun.modelKey ?? firstRun.sagittalModelKey ?? firstRun.axialModelKey ?? detail.study.modelKey ?? undefined;

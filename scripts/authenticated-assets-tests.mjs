@@ -58,6 +58,9 @@ const context = {
     if (id === "./security/originPolicy") return {
       isAuthorizedBackendUrl: (url) => (typeof url === "string" && url.trim() ? url : undefined),
     };
+    // El asset espera la hidratación de la sesión antes de pedir: en la app la
+    // sesión vive en IndexedDB y sin esperarla el request sale sin Authorization.
+    if (id === "./authStorage") return { ensureAuthSession: async () => null };
     return {};
   },
 };
@@ -131,6 +134,9 @@ await test("H cambio de runId cancela el fetch anterior", async () => {
   const first = new Promise((resolve) => { resolveFirst = resolve; });
   fetchQueue = [first, response(200)];
   const cleanupFirst = startAuthenticatedImageLoad("https://backend.example/api/ai/assets/run-a/sagittal/input.png", () => undefined);
+  // El fetch ahora espera la hidratación de la sesión, así que ya no sale de forma
+  // síncrona: se espera a que la llamada exista antes de inspeccionarla.
+  while (!calls.length) await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(calls[0].signal.aborted, false);
   cleanupFirst();
   assert.equal(calls[0].signal.aborted, true);

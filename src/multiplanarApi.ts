@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
+import { ensureAuthSession } from "./authStorage";
 import { isDurableMeshAssetUrl, parseMultiplanarRunResponse } from "./adapters/multiplanarRunAdapter";
 import { toSafeFrontendError } from "./security/safeError";
 import { generateTraceId } from "./security/traceId";
@@ -64,6 +65,8 @@ async function multiplanarRequest<T>(path: string, init?: RequestInit): Promise<
       ...(init?.headers ?? {}),
     },
   });
+  // Ver api.ts: la sesión se hidrata desde IndexedDB y el request no debe salir antes.
+  await ensureAuthSession();
   let response = await fetch(`${API_BASE_URL}${path}`, requestInit());
   if (response.status === 401) {
     await refreshDoctorSession();

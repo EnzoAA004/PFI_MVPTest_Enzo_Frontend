@@ -1,4 +1,5 @@
 import { authHeaders, refreshDoctorSession } from "./authClient";
+import { ensureAuthSession } from "./authStorage";
 import { appDataMode, isDemoDataMode, isRealDataMode, markDataOrigin } from "./dataMode";
 import { frontendLogger } from "./security/frontendLogger";
 import { toSafeFrontendError } from "./security/safeError";
@@ -444,6 +445,10 @@ async function request<T>(path: string, init?: RequestInit, fallback?: () => T |
     headers: { "Content-Type": "application/json", "X-Trace-Id": traceId, ...(includeAuth ? authHeaders() : {}), ...init?.headers },
   });
   const url = `${API_BASE_URL}${path}`;
+
+  // La sesión vive en IndexedDB: si el request sale antes de que termine de
+  // hidratarse viaja sin Authorization y el 401 resultante invalida la sesión.
+  if (includeAuth) await ensureAuthSession();
 
   try {
     let response = await fetch(url, requestInit());

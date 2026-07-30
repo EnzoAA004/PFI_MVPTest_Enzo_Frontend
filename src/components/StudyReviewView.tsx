@@ -95,9 +95,15 @@ function planeRunRecord(run: AiRunResponse, plane: "sagittal" | "axial") {
 
 function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspace): StudySeries | null {
   const planeRun = planeRunRecord(run, workspace.plane);
-  const metadata = asRecord(planeRun?.metadata);
-  const sliceCount = typeof metadata?.sliceCount === "number" && metadata.sliceCount > 0 ? metadata.sliceCount : 1;
-  const selectedSlice = typeof metadata?.selectedSlice === "number" && metadata.selectedSlice >= 0 ? metadata.selectedSlice : 0;
+  // El contrato v1 publica la metadata volumétrica bajo `metadata` y v2 bajo
+  // `input`; también se consulta el plano canónico persistido, que es de donde
+  // viene la corrida reabierta.
+  const canonicalPlane = asRecord(asRecord(run.canonicalRun?.planes)?.[workspace.plane]);
+  const metadata = { ...asRecord(canonicalPlane?.input), ...asRecord(canonicalPlane?.metadata), ...asRecord(planeRun?.input), ...asRecord(planeRun?.metadata) };
+  const rawSliceCount = metadata.sliceCount;
+  const rawSelectedSlice = metadata.selectedSlice ?? metadata.selectedSliceIndex;
+  const sliceCount = typeof rawSliceCount === "number" && rawSliceCount > 0 ? rawSliceCount : 1;
+  const selectedSlice = typeof rawSelectedSlice === "number" && rawSelectedSlice >= 0 ? rawSelectedSlice : 0;
   const coordinateSpace = typeof planeRun?.coordinateSpace === "string"
     ? planeRun.coordinateSpace
     : typeof planeRun?.measurements?.coordinateSpace === "string"
