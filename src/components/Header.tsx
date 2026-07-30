@@ -4,15 +4,21 @@ import { isAuthorizedBackendUrl } from "../security/originPolicy";
 import { toSafeFrontendError } from "../security/safeError";
 import { generateTraceId } from "../security/traceId";
 import type { ViewKey } from "../appTypes";
-import { ChevronDown, LogOut, Search, UserCircle, UserCog } from "lucide-react";
+import { ChevronDown, LogOut, UserCircle, UserCog } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * Global header: identity and session only.
+ *
+ * The global search box and the "Nuevo análisis" button were removed — both were
+ * duplicated by the worklist, and the search input had no value/onChange at all,
+ * so the most prominent control in the app filtered nothing. Starting an analysis
+ * lives in the sidebar and in the worklist, where the studies are.
+ */
 interface HeaderProps {
   activeView: ViewKey;
   onChangeView: (view: ViewKey) => void;
   currentRunId?: string;
-  onNewAnalysis: () => void;
-  loading: boolean;
   userName?: string;
   onLogout?: () => void;
 }
@@ -155,24 +161,11 @@ function renderTechnicalReportHtml(payload: any) {
 </html>`;
 }
 
-export function Header({ activeView, onChangeView, currentRunId, onNewAnalysis, loading, userName, onLogout }: HeaderProps) {
-  const searchRef = useRef<HTMLInputElement>(null);
+export function Header({ activeView, onChangeView, currentRunId, userName, onLogout }: HeaderProps) {
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const showTechnicalReport = activeView === "review" && Boolean(currentRunId);
   const technicalReportUrl = currentRunId ? `${API_BASE_URL}/api/ai/agent/report/${currentRunId}` : "";
-  const runButtonText = loading ? "Cargando..." : "Nuevo análisis";
-
-  useEffect(() => {
-    function handleShortcut(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        searchRef.current?.focus();
-      }
-    }
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, []);
 
   useEffect(() => {
     if (!profileMenuOpen) return undefined;
@@ -250,10 +243,6 @@ export function Header({ activeView, onChangeView, currentRunId, onNewAnalysis, 
 
   return (
     <header className="top-header">
-      <div className="search-box">
-        <Search aria-hidden size={18} />
-        <input ref={searchRef} placeholder="Buscar estudios, casos o pacientes..." aria-label="Buscar estudios, casos o pacientes" />
-      </div>
       <div className="header-actions">
         <div className="profile-menu" ref={profileMenuRef}>
           <button className="profile-chip" aria-expanded={profileMenuOpen} aria-haspopup="menu" onClick={() => setProfileMenuOpen((open) => !open)} type="button">
@@ -269,15 +258,10 @@ export function Header({ activeView, onChangeView, currentRunId, onNewAnalysis, 
           )}
         </div>
         {showTechnicalReport && (
-          <>
-            <button className="ghost-button" onClick={() => void openTechnicalReport()} title="Abrir reporte técnico autenticado" type="button">
-              Reporte técnico
-            </button>
-          </>
+          <button className="ghost-button" onClick={() => void openTechnicalReport()} title="Abrir reporte técnico autenticado" type="button">
+            Reporte técnico
+          </button>
         )}
-        <button className="primary-button" disabled={loading} onClick={onNewAnalysis} title="Abrir carga guiada de nuevo análisis" type="button">
-          {runButtonText}
-        </button>
       </div>
     </header>
   );
