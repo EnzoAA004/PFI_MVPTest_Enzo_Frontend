@@ -1,5 +1,6 @@
 import { authHeaders, refreshDoctorSession } from "./authClient";
 import { ensureAuthSession } from "./authStorage";
+import { resolveMeasurementLabel } from "./clinicalDisplay";
 import { appDataMode, isDemoDataMode, isRealDataMode, markDataOrigin } from "./dataMode";
 import { frontendLogger } from "./security/frontendLogger";
 import { toSafeFrontendError } from "./security/safeError";
@@ -192,16 +193,12 @@ function toMeasurement(value: unknown, index: number): Measurement {
       : "";
   const reviewerValue = typeof record.reviewerValue === "number" || typeof record.reviewerValue === "string" || record.reviewerValue === null ? record.reviewerValue : undefined;
   const linkedLandmarks = Array.isArray(record.linkedLandmarks) ? record.linkedLandmarks.filter((item): item is string => typeof item === "string") : undefined;
-  const label =
-    typeof record.label === "string" && record.label.trim()
-      ? record.label.trim()
-      : typeof record.labelKey === "string" && record.labelKey.trim()
-        ? record.labelKey.trim()
-        : "Medición revisable";
+  const label = resolveMeasurementLabel(record);
   return {
     id: typeof record.id === "string" ? record.id : `measurement-${index}`,
     label,
     level: typeof record.level === "string" ? record.level : undefined,
+    sliceIndex: typeof record.sliceIndex === "number" ? record.sliceIndex : undefined,
     value: baseValue,
     aiValue: typeof record.aiValue === "number" || typeof record.aiValue === "string" ? record.aiValue : baseValue,
     reviewerValue,
@@ -580,6 +577,26 @@ export async function updateReview(runId: string, payload: ReviewUpdateRequest):
     { method: "PUT", body: JSON.stringify(body) },
     isDemoDataMode ? () => normalizeReview(runId, { reviewStatus: body.reviewStatus, reviewer: body.reviewer, comments: body.comments, runId, updatedAt: new Date().toISOString() }) : undefined,
   ).then((review) => normalizeReview(runId, review));
+}
+
+/**
+ * Anotaciones del revisor de una corrida.
+ *
+ * El PUT reemplaza el conjunto completo, que es como la sala de lectura las edita:
+ * se agregan y se borran en pantalla y se guardan como una unidad. Un endpoint de
+ * solo-agregar dejaría el borrado sin forma de expresarse.
+ */
+export async function getRunAnnotations(runId: string): Promise<unknown[]> {
+  const response = await request<unknown>(`/api/ai/runs/${encodeURIComponent(runId)}/annotations`);
+  return Array.isArray(response) ? response : [];
+}
+
+export async function saveRunAnnotations(runId: string, annotations: unknown[]): Promise<unknown[]> {
+  const response = await request<unknown>(
+    `/api/ai/runs/${encodeURIComponent(runId)}/annotations`,
+    { method: "PUT", body: JSON.stringify(annotations) },
+  );
+  return Array.isArray(response) ? response : [];
 }
 
 export async function exportReviewReport(runId: string, payload: ReviewExportRequest): Promise<ReviewExportResponse> {

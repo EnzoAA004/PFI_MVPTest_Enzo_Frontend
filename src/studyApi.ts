@@ -1,5 +1,6 @@
 import { API_BASE_URL, ApiError, ContractError } from "./api";
 import { authHeaders, refreshDoctorSession } from "./authClient";
+import { resolveMeasurementLabel } from "./clinicalDisplay";
 import { toSafeFrontendError } from "./security/safeError";
 import { generateTraceId } from "./security/traceId";
 import type { DataOrigin, Measurement, PersistedArtifact, PersistedReviewCorrection, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyMetadataInput, StudyRow, StudyRun } from "./appTypes";
@@ -101,15 +102,14 @@ function normalizeMeasurement(value: unknown, index: number, plane?: Plane): Mea
   const reviewerValue = typeof item.reviewerValue === "number" || typeof item.reviewerValue === "string" || item.reviewerValue === null ? item.reviewerValue : undefined;
   const effectiveValue = reviewerValue ?? (typeof item.value === "number" || typeof item.value === "string" ? item.value : aiValue);
   const linkedLandmarks = Array.isArray(item.linkedLandmarks) ? item.linkedLandmarks.filter((entry): entry is string => typeof entry === "string") : undefined;
-  const label =
-    typeof item.label === "string" && item.label.trim()
-      ? item.label.trim()
-      : typeof item.labelKey === "string" && item.labelKey.trim()
-        ? item.labelKey.trim()
-        : "Medición revisable";
+  const label = resolveMeasurementLabel(item);
   return {
     id: typeof item.id === "string" ? item.id : `measurement-${index}`,
     label,
+    // El nivel lumbar viaja persistido desde el AI Module; sin copiarlo aca toda
+    // medicion llegaba al panel como "sin nivel asignado".
+    level: typeof item.level === "string" ? item.level : undefined,
+    sliceIndex: typeof item.sliceIndex === "number" ? item.sliceIndex : undefined,
     value: effectiveValue,
     aiValue,
     reviewerValue,

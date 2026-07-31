@@ -74,12 +74,69 @@ export async function fetchAuthenticatedAiAsset(url: string, signal?: AbortSigna
 
 export async function createAuthenticatedImageObjectUrl(url: string, signal?: AbortSignal) {
   const blob = await fetchAuthenticatedAiAsset(url, signal);
-  return URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(blob);
+  await decodeBeforeReporting(objectUrl);
+  return objectUrl;
+}
+
+/**
+ * Decodifica la imagen antes de darla por cargada.
+ *
+ * Descargar el blob no alcanza: al cambiar el `src`, el navegador todavía tiene
+ * que decodificar el PNG, y ese intervalo dejaba el visor en negro cada vez que se
+ * visitaba un corte nuevo. Decodificando acá, el estado pasa a "loaded" con el
+ * cuadro ya listo para pintar y el cambio de corte es inmediato.
+ *
+ * Un fallo de decodificación no se propaga: la imagen igual puede renderizar por
+ * la vía normal del <img>, y bloquear la carga por esto dejaría al médico sin el
+ * corte por un detalle de performance.
+ */
+async function decodeBeforeReporting(objectUrl: string) {
+  if (typeof Image === "undefined") return;
+  try {
+    const image = new Image();
+    image.src = objectUrl;
+    await image.decode();
+  } catch {
+    // decode() no está disponible o la imagen no se pudo decodificar por adelantado.
+  }
+}
+
+/*
+ * Caché de blobs ya descargados, acotada y con desalojo del más antiguo.
+ *
+ * Recorrer una serie vuelve a pedir el mismo corte una y otra vez, y sin caché
+ * cada vuelta atrás repetía la descarga y el visor caía al cartel de "verificando
+ * recurso": scrollear rápido mostraba más placeholder que resonancia. El objeto
+ * URL lo posee la caché, no quien lo consume, así que solo se revoca al desalojar
+ * —revocarlo al desmontar dejaría entradas apuntando a blobs muertos.
+ */
+const objectUrlCache = new Map<string, string>();
+const MAX_CACHED_ASSETS = 96;
+
+function rememberObjectUrl(url: string, objectUrl: string) {
+  objectUrlCache.set(url, objectUrl);
+  while (objectUrlCache.size > MAX_CACHED_ASSETS) {
+    const oldest = objectUrlCache.keys().next().value;
+    if (oldest === undefined) break;
+    const evicted = objectUrlCache.get(oldest);
+    objectUrlCache.delete(oldest);
+    if (evicted) URL.revokeObjectURL(evicted);
+  }
+}
+
+export function clearAuthenticatedImageCache() {
+  for (const objectUrl of objectUrlCache.values()) URL.revokeObjectURL(objectUrl);
+  objectUrlCache.clear();
 }
 
 export function startAuthenticatedImageLoad(url: string, onResult: (result: AuthenticatedImageResult) => void) {
+  const cached = objectUrlCache.get(url);
+  if (cached) {
+    onResult({ state: "loaded", url: cached });
+    return () => {};
+  }
   const controller = new AbortController();
-  let objectUrl: string | undefined;
   onResult({ state: "loading" });
   createAuthenticatedImageObjectUrl(url, controller.signal)
     .then((nextObjectUrl) => {
@@ -87,21 +144,21 @@ export function startAuthenticatedImageLoad(url: string, onResult: (result: Auth
         URL.revokeObjectURL(nextObjectUrl);
         return;
       }
-      objectUrl = nextObjectUrl;
+      rememberObjectUrl(url, nextObjectUrl);
       onResult({ state: "loaded", url: nextObjectUrl });
     })
     .catch((error: unknown) => {
       if (controller.signal.aborted) return;
       onResult({ state: "failed", error: error instanceof Error ? error : new Error("No se pudo descargar el asset protegido.") });
     });
-  return () => {
-    controller.abort();
-    if (objectUrl) URL.revokeObjectURL(objectUrl);
-  };
+  return () => controller.abort();
 }
 
 export function useAuthenticatedImageUrl(url?: string): AuthenticatedImageResult {
-  const [result, setResult] = useState<AuthenticatedImageResult>({ state: url ? "loading" : "idle" });
+  const [result, setResult] = useState<AuthenticatedImageResult>(() => {
+    const cached = url ? objectUrlCache.get(url) : undefined;
+    return cached ? { state: "loaded", url: cached } : { state: url ? "loading" : "idle" };
+  });
 
   useEffect(() => {
     if (!url) {

@@ -212,6 +212,215 @@
     flex-direction: column;
   }
 
+  /* Mediciones del revisor sobre la imagen ------------------------------- */
+  .mri-measure-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .mri-measure line {
+    stroke: var(--primary);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .mri-measure circle { fill: var(--primary); }
+
+  .mri-measure text {
+    fill: var(--primary);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    text-anchor: middle;
+    paint-order: stroke;
+    stroke: rgb(0 0 0 / .75);
+    stroke-width: 2px;
+  }
+
+  .mri-measure-anchor {
+    fill: none;
+    stroke: var(--primary);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* Marcadores de contenido de la barra de cortes ------------------------ */
+  /* El track y sus marcadores comparten exactamente el mismo ancho, que es lo que
+     hace que cada punto caiga bajo su corte. */
+  .rr-slice-track {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+  }
+
+  .rr-slice-track .rr-slice-range { flex: 1; }
+
+  .rr-slice-marks {
+    position: absolute;
+    inset: auto 0 -1px;
+    height: 3px;
+    pointer-events: none;
+  }
+
+  .rr-slice-mark {
+    position: absolute;
+    top: 0;
+    width: 3px;
+    height: 3px;
+    margin-left: -1.5px;
+    border-radius: 50%;
+    background: transparent;
+  }
+
+  .rr-slice-mark.is-ai { background: var(--primary); }
+  .rr-slice-mark.is-annotated { background: var(--text); }
+
+  /* Anotaciones ---------------------------------------------------------- */
+  .rr-annot-new {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-3);
+  }
+
+  .rr-annot-scopes { display: flex; gap: 1px; }
+
+  .rr-annot-scopes button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex: 1;
+    font: inherit;
+    font-size: var(--fs-micro);
+    padding: 2px var(--sp-2);
+  }
+
+  .rr-annot-scopes button:disabled { cursor: not-allowed; opacity: .4; }
+  .rr-annot-scopes button.is-active {
+    background: var(--surface-raised);
+    border-color: var(--primary);
+    color: var(--text);
+  }
+
+  .rr-annot-new textarea {
+    background: var(--bg-app);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font: inherit;
+    min-height: 52px;
+    padding: var(--sp-2);
+    resize: vertical;
+  }
+
+  .rr-note-warn { color: var(--warning); }
+
+  .rr-annots { list-style: none; margin: 0; padding: 0; }
+
+  .rr-annot {
+    align-items: baseline;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: var(--sp-2);
+    padding: var(--sp-2) 0;
+  }
+
+  .rr-annot-scope {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    white-space: nowrap;
+  }
+
+  .rr-annot-body { color: var(--text); flex: 1; font-size: var(--fs-micro); }
+  .rr-annot-body em { color: var(--text-muted); font-style: normal; }
+
+  .rr-annot-del {
+    background: transparent;
+    border: 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: var(--fs-small);
+    line-height: 1;
+    padding: 0 var(--sp-1);
+  }
+
+  .rr-annot-del:hover { color: var(--danger); }
+
+  .rr-layout-picker {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-chip);
+    overflow: hidden;
+  }
+
+  .rr-layout-picker button {
+    background: transparent;
+    border: 0;
+    border-left: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    padding: 0 var(--sp-3);
+  }
+
+  .rr-layout-picker button:first-child { border-left: 0; }
+  .rr-layout-picker button:hover:not(:disabled) { color: var(--text); }
+  .rr-layout-picker button:disabled { cursor: not-allowed; opacity: .4; }
+
+  .rr-layout-picker button.is-active {
+    background: var(--surface-raised);
+    color: var(--text);
+  }
+
+  /*
+   * Disposición 1×2: los médicos entrevistados leen sagital y axial en paralelo,
+   * no alternando pestañas. Con una sola pantalla el stage se parte en dos, y el
+   * plano activo — el que recibe rueda y teclado — se distingue por su borde.
+   * El corte de cada plano es independiente: no hay geometría (origin/direction)
+   * para ligarlos, y ligarlos por índice sería inventar una correspondencia.
+   */
+  .rr-stage[data-layout="dual"] {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: 1px;
+    background: var(--border);
+  }
+
+  @media (min-aspect-ratio: 3/2) {
+    .rr-stage[data-layout="dual"] {
+      grid-template-rows: none;
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  .rr-plane {
+    position: relative;
+    display: flex;
+    /* En 1×1 el stage es flex column: sin flex el plano se encoge al alto de la
+       imagen y deja la mitad inferior del stage vacía. En 1×2 lo gobierna el
+       grid y esta regla es inocua. */
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--viewport-bg);
+  }
+
+  /* Con un solo plano el borde activo no distingue nada: sería puro adorno. */
+  .rr-stage[data-layout="dual"] .rr-plane {
+    outline: 1px solid transparent;
+    outline-offset: -1px;
+  }
+
+  .rr-stage[data-layout="dual"] .rr-plane.is-active {
+    outline-color: var(--primary);
+  }
+
   .rr-viewport {
     position: relative;
     flex: 1;
@@ -515,6 +724,10 @@
   .rr-levels {
     display: flex;
     flex-direction: column;
+    /* El panel es una columna flex: sin esto la lista de niveles se comprime a
+       nada cuando el resto del contenido crece, y el eje sobre el que se lee una
+       lumbar desaparece de la pantalla. */
+    flex: none;
     border: 1px solid var(--border);
     border-radius: var(--radius-chip);
     overflow: hidden;

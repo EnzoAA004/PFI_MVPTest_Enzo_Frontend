@@ -5,6 +5,11 @@ import { asyncRemoveItem } from "../browserStorage";
 export const SESSION_INVALIDATED_EVENT = "pfi:session-invalidated";
 
 const REVIEW_HISTORY_KEY = "lumbar-mri-review-history-v1";
+/*
+ * El estudio seleccionado ya no se persiste: viaja por props desde App. La clave se
+ * sigue borrando en el logout para limpiar el residuo que dejaron las versiones que
+ * sí lo escribían en sessionStorage, en un navegador que todavía no lo tenga limpio.
+ */
 const SELECTED_STUDY_KEY = "pfi.selectedStudyDetail";
 const CROSS_TAB_CHANNEL = "pfi-session-sync";
 

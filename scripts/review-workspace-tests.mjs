@@ -129,10 +129,14 @@ test("O axial=null no bloquea la vista", () => assert.equal(readiness.resolveRev
 // ver ExperimentalProxyViewer). El requisito de layout que este test protege —
 // que el panel 3D quede colapsado fuera de la zona principal de revisión —
 // sigue vigente y sigue cumplido por el mismo <details> wrapper.
-test("P el panel 3D (ahora proxy experimental real) queda colapsado fuera de la zona principal", () => assert.match(fs.readFileSync("src/components/AnalysisTimelineView.tsx", "utf8"), /<details className="panel-card compact-card analysis-panel review-accordion span-all">[\s\S]*Funcionalidad 3D/));
+// P verificaba el <details> colapsado que envolvia el panel 3D del asistente. En la
+// sala de lectura el proxy dejo de ser un panel dentro de la revision: es una entrada
+// mas del rail de series, rotulada "experimental", que solo ocupa el visor si el
+// medico la elige. La intencion —que no compita con la imagen— se cumple por
+// construccion y ya no hay un wrapper que verificar.
 test("Q humanReviewRequired y notClinicalDiagnosis permanecen visibles", () => {
-  const source = fs.readFileSync("src/components/AnalysisTimelineView.tsx", "utf8");
-  assert.match(source, /Revisi.n profesional obligatoria/);
+  const source = fs.readFileSync("src/components/StudyReviewView.tsx", "utf8");
+  assert.match(source, /Revisi.n humana requerida/);
   assert.match(source, /No apto para diagn.stico cl.nico/);
 });
 

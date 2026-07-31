@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
+import { NewAnalysisDrawer } from "./NewAnalysisDrawer";
 import { ChevronDown, ChevronUp, ChevronsUpDown, Search } from "lucide-react";
 import type { Priority, ReviewStatus, StudyRow } from "../../appTypes";
 import { displayReviewStatus } from "../../clinicalDisplay";
 import { displayModelKey, displayStudyDate, displaySubjectRef, studyHasReviewableRun } from "../../studyDisplay";
-import { fetchStudyDetail } from "../../studyApi";
-import { saveSelectedStudyDetail, saveSelectedStudyFallback } from "../../selectedStudyStorage";
 import { WORKLIST_FILTERS, countsByFilter, filterStudies, type WorklistFilterId } from "./studyFilters";
 
 /**
@@ -50,10 +49,17 @@ interface WorklistProps {
   studies: StudyRow[];
   loading?: boolean;
   onOpenReview: (study: StudyRow) => void;
-  onNewAnalysis: () => void;
+  /** Se invoca con el caseId cuando una corrida nueva quedó lista para leer. */
+  onAnalysisReady: (caseId: string) => void;
 }
 
-export function Worklist({ studies, loading = false, onOpenReview, onNewAnalysis }: WorklistProps) {
+export function Worklist({ studies, loading = false, onOpenReview, onAnalysisReady }: WorklistProps) {
+  /*
+   * Cargar un estudio es un panel sobre la lista, no un destino aparte: el
+   * asistente de cuatro pasos sacaba al médico de su lista de trabajo para
+   * volver a dejarlo ahí cinco pantallas después.
+   */
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [filterId, setFilterId] = useState<WorklistFilterId>("pending");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("studyDate");
@@ -71,9 +77,14 @@ export function Worklist({ studies, loading = false, onOpenReview, onNewAnalysis
   const visible = rows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
   const activeFilter = WORKLIST_FILTERS.find((item) => item.id === filterId) ?? WORKLIST_FILTERS[0];
 
+  /*
+   * Abrir un estudio es avisar quién se eligió, nada más. Antes la fila además
+   * escribía el detalle en sessionStorage y disparaba su propio fetchStudyDetail
+   * en paralelo al de App: las dos respuestas competían por la misma clave y la
+   * sala de lectura leía la que llegara última, por eso a veces hacía falta
+   * hacer clic dos veces. El detalle lo carga y lo posee App.
+   */
   function openStudy(study: StudyRow) {
-    saveSelectedStudyFallback(study);
-    if (studyHasReviewableRun(study)) void fetchStudyDetail(study).then(saveSelectedStudyDetail).catch(() => undefined);
     onOpenReview(study);
   }
 
@@ -118,7 +129,7 @@ export function Worklist({ studies, loading = false, onOpenReview, onNewAnalysis
               aria-label="Buscar estudios"
             />
           </label>
-          <button className="wl-primary" onClick={onNewAnalysis} type="button">Nuevo análisis</button>
+          <button className="wl-primary" onClick={() => setDrawerOpen(true)} type="button">Nuevo análisis</button>
         </div>
       </header>
 
@@ -215,6 +226,13 @@ export function Worklist({ studies, loading = false, onOpenReview, onNewAnalysis
           </div>
         </footer>
       ) : null}
+
+      {drawerOpen && (
+        <NewAnalysisDrawer
+          onAnalysisReady={(caseId) => { setDrawerOpen(false); onAnalysisReady(caseId); }}
+          onClose={() => setDrawerOpen(false)}
+        />
+      )}
     </div>
   );
 }

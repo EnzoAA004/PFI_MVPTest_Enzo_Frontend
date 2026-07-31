@@ -1,28 +1,27 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { buildReviewCorrections, getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
 import { logoutDoctor, updateDoctorSettings } from "./authClient";
 import { hydrateAuthSession, loadAuthSession } from "./authStorage";
 import { frontendLogger } from "./security/frontendLogger";
 import { SESSION_INVALIDATED_EVENT, onCrossTabSessionSync } from "./security/sessionCleanup";
-import { AnalysisTimelineView } from "./components/AnalysisTimelineView";
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
-import { HelpSupportView } from "./components/HelpSupportView";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { PatientHistoryView } from "./components/PatientHistoryView";
 import { PatientsView } from "./components/PatientsView";
 import { PendingApprovalView } from "./components/PendingApprovalView";
-import { ProfessionalSettingsView } from "./components/ProfessionalSettingsView";
+import { SettingsView } from "./features/settings/SettingsView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { Worklist } from "./features/worklist/Worklist";
 import { deriveSummary, isReviewQueueItem, mergeStudyRowsWithSelectedRun, normalizeSelectedRunForReview, selectReviewableRunFromDetail, shouldFetchSubjectHistory, toSelectedStudyReference } from "./appDataGuards";
 import { isDemoDataMode, validateVisibleDataOrigin } from "./dataMode";
 import { appendBackendAudit, getBackendReviewSnapshot } from "./reviewPersistenceApi";
-import { saveSelectedStudyDetail } from "./selectedStudyStorage";
 import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessionalReview } from "./storage";
 import { fetchStudyDetail } from "./studyApi";
 import { fetchSubjectHistory } from "./subjectHistoryApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, studyHasReviewableRun } from "./studyDisplay";
+import { useLocation, useNavigate } from "react-router-dom";
+import { caseIdFromPath, pathForPatientTarget, pathForStudy, pathForView, patientTargetFromPath, viewForPath } from "./routes";
 import type { AiModel, AiRunResponse, AuditEvent, AuthSession, HistoryTarget, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow, ViewKey } from "./appTypes";
 
 function toPatientStudy(study: StudyRow): PatientStudy {
@@ -108,7 +107,15 @@ function apiErrorDetail(error: unknown) {
 function App() {
   const [session, setSession] = useState<AuthSession | null>(() => loadAuthSession());
   const [authBootstrapping, setAuthBootstrapping] = useState(true);
-  const [activeView, setActiveView] = useState<ViewKey>("dashboard");
+  /*
+   * La URL es la fuente de verdad de la navegación: `activeView` se deriva de
+   * ella, no al revés. Eso es lo que hace que el botón atrás funcione, que
+   * recargar mantenga la pantalla y que un caso se pueda compartir por link.
+   */
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeView: ViewKey = viewForPath(location.pathname);
+  const routeCaseId = caseIdFromPath(location.pathname);
   const [lastStudyNavView, setLastStudyNavView] = useState<"studies" | "queue">("studies");
   const [health, setHealth] = useState("consultando");
   const [models, setModels] = useState<AiModel[]>([]);
@@ -121,6 +128,19 @@ function App() {
   const [studiesError, setStudiesError] = useState("");
   const [historyTarget, setHistoryTarget] = useState<HistoryTarget | null>(null);
   const [selectedStudy, setSelectedStudy] = useState<SelectedStudyReference | null>(null);
+  /*
+   * Detalle persistido del estudio abierto. Vive acá y viaja por props: antes iba
+   * por sessionStorage con un evento de window, un canal fuera de React que hacía
+   * que la sala de lectura no supiera de quién era el dato que estaba leyendo.
+   */
+  const [selectedDetail, setSelectedDetail] = useState<StudyDetailResponse | null>(null);
+  /*
+   * Caso cuyo detalle ya se pidió. Va en una ref y no en el estado porque el
+   * efecto de deep link lo escribiría dentro de sí mismo: al depender del estado
+   * que actualiza, se volvía a ejecutar, su cleanup cancelaba el fetch en vuelo y
+   * la pantalla quedaba en "Cargando corrida" para siempre.
+   */
+  const requestedCaseIdRef = useRef<string | undefined>(undefined);
   const [studiesSummary, setStudiesSummary] = useState<StudiesSummary | undefined>();
   const [patientHistoryResponse, setPatientHistoryResponse] = useState<PatientHistoryResponse | null>(null);
   const [studyTraceabilityStudies, setStudyTraceabilityStudies] = useState<PatientStudy[]>([]);
@@ -349,7 +369,7 @@ function App() {
 
   function changeView(view: ViewKey) {
     if (view === "studies" || view === "queue") setLastStudyNavView(view);
-    setActiveView(view);
+    navigate(pathForView(view));
   }
 
   function retryBootstrap() {
@@ -374,19 +394,21 @@ function App() {
       setReviewError("El estudio no tiene una corrida persistida para revisar.");
       setSelectedRun(null);
       setSelectedStudy(toSelectedStudyReference(study));
-      setActiveView("review");
+      navigate(pathForStudy(study.caseId));
       return;
     }
     if (activeView === "studies" || activeView === "queue") setLastStudyNavView(activeView);
+    requestedCaseIdRef.current = study.caseId;
     setSelectedStudy(toSelectedStudyReference(study));
+    setSelectedDetail(null);
     setSelectedRun(null);
     setMeasurements([]);
     setStudyReview(null);
     setReviewError("");
     setReviewLoading(true);
-    setActiveView("review");
+    navigate(pathForStudy(study.caseId));
     void fetchStudyDetail(study).then((detail) => {
-      saveSelectedStudyDetail(detail);
+      setSelectedDetail(detail);
       if (detail.measurements?.length) setMeasurements(detail.measurements);
       const reviewableRun = selectReviewableRunFromDetail(detail);
       if (!reviewableRun) {
@@ -403,13 +425,68 @@ function App() {
     });
   }
 
+  /*
+   * Deep link a /estudio/:caseId.
+   *
+   * Al entrar por URL —link compartido, recarga, botón atrás— no hubo clic en
+   * ninguna fila, así que no hay estudio seleccionado y hay que resolverlo desde
+   * el caseId. Solo actúa cuando la ruta pide un caso distinto del que ya está
+   * cargado; si no, cada render volvería a pedir el mismo detalle.
+   */
+  useEffect(() => {
+    if (!session || !routeCaseId || requestedCaseIdRef.current === routeCaseId) return;
+    requestedCaseIdRef.current = routeCaseId;
+    let cancelled = false;
+    setSelectedStudy({ caseId: routeCaseId } as SelectedStudyReference);
+    setSelectedDetail(null);
+    setSelectedRun(null);
+    setMeasurements([]);
+    setStudyReview(null);
+    setReviewError("");
+    setReviewLoading(true);
+    void fetchStudyDetail({ caseId: routeCaseId }).then((detail) => {
+      if (cancelled) return;
+      setSelectedDetail(detail);
+      if (detail.measurements?.length) setMeasurements(detail.measurements);
+      const reviewableRun = selectReviewableRunFromDetail(detail);
+      if (!reviewableRun) {
+        setReviewError("El estudio no tiene corridas persistidas.");
+        setSelectedRun(null);
+        return;
+      }
+      setSelectedRun(reviewableRun);
+    }).catch((detailError) => {
+      if (cancelled) return;
+      const detail = detailError instanceof Error ? detailError.message : "Error desconocido";
+      setReviewError(`No se pudo cargar el estudio ${routeCaseId}. Detalle: ${detail}`);
+    }).finally(() => {
+      if (!cancelled) setReviewLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [routeCaseId, session]);
+
+  /*
+   * El historial es el detalle de Paciente, no un destino aparte: la URL lo dice
+   * (/pacientes/:subjectRef) y el efecto de abajo lo resuelve, así que este
+   * handler solo navega. Eso hace que el historial de un paciente también se
+   * pueda compartir por link.
+   */
   function handleOpenPatientHistory(target: HistoryTarget) {
-    setHistoryTarget(target);
+    navigate(pathForPatientTarget(target));
+  }
+
+  /* El objetivo del historial se deriva de la URL, igual que el estudio abierto. */
+  const routePatientTarget = patientTargetFromPath(location.pathname);
+  const routePatientKey = routePatientTarget
+    ? routePatientTarget.kind === "subject" ? `subject:${routePatientTarget.subjectRef}` : `study:${routePatientTarget.caseId}`
+    : "";
+  useEffect(() => {
+    if (!session || !routePatientTarget) return;
+    setHistoryTarget(routePatientTarget);
     setPatientHistoryResponse(null);
     setStudyTraceabilityStudies([]);
     setHistoryError("");
-    setActiveView("history");
-  }
+  }, [routePatientKey, session]);
 
   function handleMeasurementsChange(nextMeasurements: Measurement[], detail: string) {
     const runId = safeRun?.runId;
@@ -446,7 +523,7 @@ function App() {
   async function refreshSelectedStudyFromPostgres() {
     if (!selectedStudy) return;
     const detail = await fetchStudyDetail({ caseId: selectedStudy.caseId });
-    saveSelectedStudyDetail(detail);
+    setSelectedDetail(detail);
     setMeasurements(detail.measurements ?? []);
     const reviewableRun = selectReviewableRunFromDetail(detail);
     if (reviewableRun) setSelectedRun(reviewableRun);
@@ -520,7 +597,7 @@ function App() {
   // keys stay valid so existing navigation calls keep working while the redesign
   // migrates screen by screen.
   const isWorklistView = activeView === "dashboard" || activeView === "studies" || activeView === "queue";
-  const worklistNavView: ViewKey = isWorklistView || activeView === "review" ? "dashboard" : activeView;
+  const worklistNavView: ViewKey = isWorklistView || activeView === "review" ? "dashboard" : activeView === "history" ? "patients" : activeView;
 
   if (authBootstrapping) return <LoadingState title="Restaurando sesión" detail="Validando credenciales guardadas." />;
   if (!session) return <AuthView onAuthenticated={setSession} />;
@@ -545,16 +622,14 @@ function App() {
       {aiModuleStatus === "error" && <div className="toast warning">AI Module no disponible. Los estudios persistidos siguen visibles si PostgreSQL responde.</div>}
       {reviewSnapshotStatus === "error" && <div className="toast warning">No se pudo consultar el snapshot de revisión; no bloquea la lista de trabajo.</div>}
       {info && <div className="toast info">{info}</div>}
-      {isWorklistView && <Worklist studies={realStudyRows} loading={shouldShowDataLoading} onOpenReview={handleOpenReview} onNewAnalysis={() => changeView("analysis")} />}
-      {activeView === "analysis" && <AnalysisTimelineView reviewerName={session.user.fullName} onViewSavedStudy={handleViewSavedAnalysis} onBackToStudies={() => changeView("dashboard")} />}
-      {activeView === "review" && (reviewLoading ? <LoadingState title="Cargando corrida" detail={`Consultando corridas persistidas para ${selectedStudy?.caseId ?? "el estudio seleccionado"}.`} /> : contractIssue ? <ContractErrorState detail={`${contractIssue.message}${contractIssue.path ? ` (${contractIssue.path})` : ""}${contractIssue.traceId ? ` · trace ${contractIssue.traceId}` : ""}`} onBackToStudies={() => changeView(lastStudyNavView)} /> : reviewError ? <ContractErrorState detail={reviewError} onBackToStudies={() => changeView(lastStudyNavView)} /> : safeRun ? <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} onStudyMetadataUpdated={handleStudyMetadataUpdated} /> : <EmptyReviewState onBackToStudies={() => changeView(lastStudyNavView)} />)}
+      {isWorklistView && <Worklist studies={realStudyRows} loading={shouldShowDataLoading} onOpenReview={handleOpenReview} onAnalysisReady={handleViewSavedAnalysis} />}
+      {activeView === "review" && (reviewLoading ? <LoadingState title="Cargando corrida" detail={`Consultando corridas persistidas para ${selectedStudy?.caseId ?? "el estudio seleccionado"}.`} /> : contractIssue ? <ContractErrorState detail={`${contractIssue.message}${contractIssue.path ? ` (${contractIssue.path})` : ""}${contractIssue.traceId ? ` · trace ${contractIssue.traceId}` : ""}`} onBackToStudies={() => changeView(lastStudyNavView)} /> : reviewError ? <ContractErrorState detail={reviewError} onBackToStudies={() => changeView(lastStudyNavView)} /> : safeRun ? <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} onStudyMetadataUpdated={handleStudyMetadataUpdated} selectedDetail={selectedDetail} /> : <EmptyReviewState onBackToStudies={() => changeView(lastStudyNavView)} />)}
       {activeView === "patients" && <PatientsView studies={realStudyRows} loading={shouldShowDataLoading} onOpenHistory={handleOpenPatientHistory} />}
       {activeView === "history" && (historyLoading ? <LoadingState title="Cargando historial" detail={historyTarget?.kind === "study" ? "Consultando trazabilidad real del estudio." : "Consultando historial longitudinal de-identificado."} /> : <PatientHistoryView studies={visiblePatientStudies} target={historyTarget} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (historyTarget?.kind === "study" ? "study-traceability" : "postgres-domain")} summary={patientHistoryResponse?.summary} error={historyError} onOpenStudyReview={(caseId) => {
         const study = studies.find((row) => row.caseId === caseId);
         if (study) handleOpenReview(study);
       }} />)}
-      {activeView === "settings" && <ProfessionalSettingsView user={session.user} onUserUpdated={(user) => setSession((current) => current ? { ...current, user } : current)} onLogout={logout} />}
-      {activeView === "help" && <HelpSupportView />}
+      {activeView === "settings" && <SettingsView user={session.user} onUserUpdated={(user) => setSession((current) => current ? { ...current, user } : current)} onLogout={logout} />}
     </AppShell>
   );
 }

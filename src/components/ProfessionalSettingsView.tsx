@@ -56,17 +56,7 @@ export function ProfessionalSettingsView({ user, onUserUpdated, onLogout }: Prof
   }
 
   return (
-    <div className="view-stack professional-settings-view">
-      <section className="page-heading compact-heading">
-        <div>
-          <p>Configuración</p>
-          <h1>Configuración profesional</h1>
-        </div>
-        <div className="screen-summary">
-          <strong>{user.fullName || "Profesional"}</strong>
-          <span>Perfil y preferencias de sesión</span>
-        </div>
-      </section>
+    <div className="professional-settings-view">
 
       {message && <div className="toast info" role="status">{message}</div>}
 

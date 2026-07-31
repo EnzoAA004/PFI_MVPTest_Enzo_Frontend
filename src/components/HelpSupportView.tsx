@@ -2,17 +2,7 @@ import { HelpCircle, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 
 export function HelpSupportView() {
   return (
-    <div className="view-stack help-support-view">
-      <section className="page-heading compact-heading">
-        <div>
-          <p>Ayuda y soporte</p>
-          <h1>Ayuda, privacidad y alcance de uso</h1>
-        </div>
-        <div className="screen-summary">
-          <strong>Soporte</strong>
-          <span>Información estática de la app</span>
-        </div>
-      </section>
+    <div className="help-support-view">
 
       <section className="help-grid">
         <article className="panel-card compact-card help-card">
@@ -48,8 +38,8 @@ export function HelpSupportView() {
           <div className="section-title"><h2><HelpCircle aria-hidden size={18} /> Cómo usar la app</h2></div>
           <ol className="support-steps">
             <li>Entrar con una cuenta profesional aprobada.</li>
-            <li>Ir a Estudios o Cola de revisión y abrir un caso disponible.</li>
-            <li>Revisar imágenes, superposiciones reales, mediciones y notas del caso.</li>
+            <li>Cargar un estudio con <strong>Nuevo análisis</strong>, o abrir uno de la lista de trabajo.</li>
+            <li>Recorrer la serie con la rueda o las flechas; medir y anotar sobre el corte que corresponda.</li>
             <li>Guardar borrador o completar la revisión según corresponda.</li>
           </ol>
         </article>

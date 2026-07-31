@@ -1,6 +1,6 @@
 import type { ViewKey } from "../appTypes";
 import type { ComponentType } from "react";
-import { ChevronLeft, ChevronRight, HelpCircle, ListChecks, Settings, ShieldCheck, UploadCloud, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, ListChecks, Settings, ShieldCheck, Users } from "lucide-react";
 
 /**
  * Navigation follows the reading workflow, not the module structure.
@@ -11,7 +11,6 @@ import { ChevronLeft, ChevronRight, HelpCircle, ListChecks, Settings, ShieldChec
  */
 const navItems: Array<{ key: ViewKey; label: string; icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>; badge?: "reviewQueue" }> = [
   { key: "dashboard", label: "Lista de trabajo", icon: ListChecks, badge: "reviewQueue" },
-  { key: "analysis", label: "Nuevo análisis", icon: UploadCloud },
   { key: "patients", label: "Pacientes", icon: Users },
   { key: "settings", label: "Configuración", icon: Settings },
 ];
@@ -56,7 +55,6 @@ export function Sidebar({ activeView, activeNavView = activeView, onChangeView, 
         })}
       </nav>
       <div className="sidebar-footer">
-        <button className={activeNavView === "help" ? "active" : ""} type="button" onClick={() => onChangeView("help")} aria-current={activeNavView === "help" ? "page" : undefined} title={collapsed ? "Ayuda y soporte" : undefined}><HelpCircle aria-hidden size={16} />Ayuda y soporte</button>
         <span className={systemOnline ? "system-status is-online" : "system-status is-degraded"}><ShieldCheck aria-hidden size={16} />v1.3.2</span>
         {onToggleCollapsed && (
           <button

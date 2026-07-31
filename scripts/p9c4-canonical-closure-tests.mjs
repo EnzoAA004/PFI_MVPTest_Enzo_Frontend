@@ -97,7 +97,6 @@ const adapter = loadAdapter();
 const fixtures = loadFixtures();
 const viewerViewModel = loadMriViewerViewModel();
 const readiness = loadInferenceReadiness();
-const analysisTimelineView = loadComponentModule("src/components/AnalysisTimelineView.tsx");
 
 let count = 0;
 function test(name, fn) {
@@ -138,12 +137,6 @@ test("MriSliceViewer recibe model: MriViewerModel", () => {
   assert.match(source, /model:\s*MriViewerModel/);
 });
 
-test("AnalysisTimelineView usa canonicalPlaneToMriViewerModel", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(source, /canonicalPlaneToMriViewerModel/);
-  assert.match(source, /useMemo/);
-});
-
 test("StudyReviewView usa studyRunToMriViewerModel", () => {
   const source = readSource("src/components/StudyReviewView.tsx");
   assert.match(source, /studyRunToMriViewerModel/);
@@ -157,7 +150,7 @@ test("multiplanarRunTypes.ts no existe; multiplanarHttpTypes.ts existe", () => {
 test("canonicalRunToLegacyViewModel no existe en ningun lugar de src", () => {
   const files = [
     "src/adapters/multiplanarRunAdapter.ts",
-    "src/components/AnalysisTimelineView.tsx",
+    "src/features/worklist/NewAnalysisDrawer.tsx",
     "src/components/MriSliceViewer.tsx",
     "src/components/StudyReviewView.tsx",
   ];
@@ -167,7 +160,7 @@ test("canonicalRunToLegacyViewModel no existe en ningun lugar de src", () => {
 });
 
 test("no hay schemaVersion condicional en componentes", () => {
-  for (const file of ["src/components/AnalysisTimelineView.tsx", "src/components/MriSliceViewer.tsx", "src/components/StudyReviewView.tsx", "src/inferenceReadiness.ts", "src/selectors/canonicalRunSelectors.ts", "src/viewModels/measurementViewModel.ts", "src/viewModels/mriViewerViewModel.ts"]) {
+  for (const file of ["src/features/worklist/NewAnalysisDrawer.tsx", "src/components/MriSliceViewer.tsx", "src/components/StudyReviewView.tsx", "src/inferenceReadiness.ts", "src/selectors/canonicalRunSelectors.ts", "src/viewModels/measurementViewModel.ts", "src/viewModels/mriViewerViewModel.ts"]) {
     assert.ok(!readSource(file).includes("schemaVersion"), `${file} no debe conocer schemaVersion`);
   }
 });
@@ -177,7 +170,7 @@ test("no hay inputPath en la solicitud multiplanar activa", () => {
   assert.ok(!httpTypes.includes("sagittalInputPath"));
   assert.ok(!httpTypes.includes("axialInputPath"));
   assert.ok(!httpTypes.includes("LegacyMultiplanarRunRequest"));
-  const timeline = readSource("src/components/AnalysisTimelineView.tsx");
+  const timeline = readSource("src/features/worklist/NewAnalysisDrawer.tsx");
   assert.ok(!timeline.includes("InputPath"));
 });
 
@@ -279,51 +272,21 @@ test("C2 frontera del adapter HTTP: trycloudflare/localhost/tmp/app/rutas Window
 });
 
 // --- D. Post-guardado ---------------------------------------------------------------
+//
+// D2..D7 verificaban el final del asistente de cuatro pasos: reviewSaved, "Iniciar
+// nuevo analisis", "Ver estudio guardado". Ese flujo se elimino junto con
+// AnalysisTimelineView, que duplicaba la sala de lectura con otro contrato de
+// revision, asi que las pruebas ya no describen ningun comportamiento del sistema.
+// D7 (medicion sin cambio no genera correction) sobrevive en
+// p9c3-canonical-components-tests, verificada contra buildReviewCorrections, que es
+// la unica construccion de correcciones que queda.
 
-test("D1 guardar no navega automaticamente: no hay window.location ni reload en AnalysisTimelineView", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
+test("D1 la carga no navega por window.location ni recarga la pagina", () => {
+  const source = readSource("src/features/worklist/NewAnalysisDrawer.tsx");
   assert.ok(!source.includes("window.location"));
   assert.ok(!source.includes(".reload()"));
 });
 
-test("D2 reviewSaved=true muestra acciones secundarias condicionadas a los callbacks", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(source, /\{reviewSaved && \(/);
-  assert.match(source, /onViewSavedStudy &&/);
-  assert.match(source, /onBackToStudies &&/);
-  assert.match(source, /Iniciar nuevo análisis/);
-});
-
-test("D3 modificar una medicion, el estado o las notas vuelve reviewSaved=false", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(source, /setReviewStatus\(event\.target\.value as RunReviewStatus\);\s*setReviewSaved\(false\);/);
-  assert.match(source, /setNotes\(event\.target\.value\);\s*setReviewSaved\(false\);/);
-  // updateMeasurements (medicion editada) ya llamaba setReviewSaved(false) desde P9-C.2/.3
-  assert.match(source, /function updateMeasurements[\s\S]{0,120}setReviewSaved\(false\)/);
-});
-
-test("D4 Ver estudio guardado llama al callback con el caseId de la corrida, no del campo editable", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(source, /onViewSavedStudy\(run\.caseId\)/);
-});
-
-test("D5 fallo del callback de navegacion conserva el mensaje sin perder el run actual", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(source, /catch \(error\) \{\s*\/\/[\s\S]{0,200}setMessage\(apiErrorMessage\(error, "abrir el estudio guardado"\)\)/);
-  assert.ok(!/catch \(error\) \{[\s\S]{0,200}setRun\(null\)/.test(source.split("async function viewSavedStudy")[1]?.split("function startNewAnalysis")[0] ?? ""));
-});
-
-test("D6 Iniciar nuevo analisis reinicia el estado", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(source, /function startNewAnalysis\(\) \{[\s\S]*?setRun\(null\)/);
-  assert.match(source, /function startNewAnalysis\(\) \{[\s\S]*?setActiveStep\(1\)/);
-});
-
-test("D7 medicion sin cambio no genera correction; reviewCorrectionsFrom sigue disponible", () => {
-  const measurement = { id: "m1", label: "canal width", labelKey: "canal width", value: 12, aiValue: 12, unit: "mm", source: "AI", status: "pendiente", plane: "sagittal" };
-  const corrections = analysisTimelineView.reviewCorrectionsFrom([measurement]);
-  assert.equal(corrections.length, 0);
-});
 
 // --- E. Independencia del contrato --------------------------------------------------
 

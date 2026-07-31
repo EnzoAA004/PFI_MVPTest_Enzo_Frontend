@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent, type WheelEvent } from "react";
-import { useAuthenticatedImageUrl } from "../authenticatedAssets";
+import { startAuthenticatedImageLoad, useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { displayLandmarkLabel } from "../clinicalDisplay";
 import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
 
@@ -38,10 +38,18 @@ type Point = {
 export type SliceNavigation = {
   current: number;
   total: number;
-  /** Corte que la IA analizó; es el único con imagen hasta que exista el catálogo. */
+  /** Corte que la IA analizó; el único con segmentación. */
   aiIndex: number;
   /** Si el corte actual tiene una imagen real disponible. */
   hasImage: boolean;
+  /**
+   * Previsualización del corte actual, cuando no es el analizado por la IA.
+   * Indefinida en el corte de la IA, que se sigue mostrando con `input.png`
+   * porque es la imagen sobre la que la superposición está alineada.
+   */
+  previewUrl?: string;
+  /** Previsualización de cualquier corte, para precargar los vecinos. */
+  previewUrlFor?: (index: number) => string | undefined;
   /** Salto absoluto: slider y botones. */
   onChange: (index: number) => void;
   /**
@@ -65,6 +73,20 @@ type Props = {
   overlayOpacity?: number;
   onOverlayAvailableChange?: (available: boolean) => void;
   slice?: SliceNavigation;
+  /** Herramienta de medición: activa el trazado de dos puntos sobre la imagen. */
+  measureMode?: boolean;
+  /** Anotaciones ya trazadas que corresponden al corte visible. */
+  annotations?: MeasurementOverlay[];
+  onMeasure?: (from: Point, to: Point, frame: Size) => void;
+  onMeasureComplete?: () => void;
+};
+
+/** Segmento dibujado sobre la imagen, en la base 0..256. */
+export type MeasurementOverlay = {
+  id: string;
+  from: Point;
+  to: Point;
+  label: string;
 };
 
 const neutralPreset: WindowPreset = { id: "neutral", label: "Neutral PNG", brightness: 100, contrast: 100 };
@@ -148,13 +170,61 @@ export function MriSliceViewer({
   overlayOpacity = initialOverlayOpacity,
   onOverlayAvailableChange,
   slice,
+  measureMode = false,
+  annotations = [],
+  onMeasure,
+  onMeasureComplete,
 }: Props) {
-  const inputUrl = model.assets.find((asset) => asset.assetName === "input.png")?.url;
-  const overlayUrl = model.assets.find((asset) => asset.assetName === "overlay.png")?.url;
+  /*
+   * Al recorrer la serie cada corte muestra su propia previsualización; solo el
+   * corte que la IA analizó conserva input.png con su superposición. La máscara
+   * no se arrastra a los demás cortes: existe únicamente para ese corte y
+   * dibujarla sobre otro mostraría una segmentación que no le corresponde.
+   */
+  const onAiSlice = !slice || slice.current === slice.aiIndex;
+  const inputUrl = onAiSlice
+    ? model.assets.find((asset) => asset.assetName === "input.png")?.url
+    : slice.previewUrl;
+  const overlayUrl = onAiSlice ? model.assets.find((asset) => asset.assetName === "overlay.png")?.url : undefined;
   const inputAsset = useAuthenticatedImageUrl(inputUrl);
   const overlayAsset = useAuthenticatedImageUrl(overlayUrl);
-  const inputState = inputAsset.state;
+  /*
+   * Mientras el corte siguiente se descarga se mantiene visible el anterior, en
+   * vez de vaciar el visor. Cambiar de corte no es un error ni una ausencia de
+   * dato: parpadear al cartel de "verificando recurso" en cada paso hacía
+   * ilegible el recorrido de la serie. El estado real se sigue reportando —si la
+   * descarga falla, el cartel aparece— así que no se disfraza una falla de carga
+   * como si la imagen estuviera lista.
+   */
+  // Primer punto del segmento en curso. Vive en estado y no en ref porque la
+  // marca provisional tiene que dibujarse apenas se hace el primer clic.
+  const [measureAnchor, setMeasureAnchor] = useState<Point | null>(null);
+  const lastLoadedUrl = useRef<string | undefined>(undefined);
+  if (inputAsset.state === "loaded" && inputAsset.url) lastLoadedUrl.current = inputAsset.url;
+  const displayedInputUrl = inputAsset.state === "loading" ? lastLoadedUrl.current : inputAsset.url;
+  const inputState = inputAsset.state === "loading" && lastLoadedUrl.current ? "loaded" : inputAsset.state;
   const overlayState = overlayAsset.state;
+
+  /*
+   * Precarga de los cortes contiguos.
+   *
+   * Recorrer una serie es ir de a un corte: cuando el médico llega al siguiente,
+   * su imagen ya está en la caché y el cambio es instantáneo. Solo los vecinos
+   * inmediatos —traer la serie entera pediría decenas de imágenes que quizás
+   * nunca se miran.
+   */
+  useEffect(() => {
+    if (!slice?.previewUrlFor) return;
+    const cleanups = [slice.current - 1, slice.current + 1]
+      .filter((index) => index >= 0 && index < slice.total && index !== slice.aiIndex)
+      .map((index) => slice.previewUrlFor?.(index))
+      .filter((url): url is string => Boolean(url))
+      .map((url) => startAuthenticatedImageLoad(url, () => undefined));
+    return () => cleanups.forEach((cleanup) => cleanup());
+    // `previewUrlFor` queda fuera de las dependencias a propósito: la construye el
+    // contenedor en cada render, así que incluirla relanzaría la precarga en cada
+    // pintado. Lo que decide qué precargar es el corte, y ese sí está acá.
+  }, [slice?.current, slice?.total, slice?.aiIndex]);
   const [mode, setMode] = useState<ViewerMode>("pan");
   const [selectedPresetId, setSelectedPresetId] = useState(neutralPreset.id);
   const [brightness, setBrightness] = useState(neutralPreset.brightness);
@@ -286,6 +356,10 @@ export function MriSliceViewer({
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (!imageLoaded || event.button !== 0) return;
+    if (measureMode) {
+      captureMeasurePoint(event);
+      return;
+    }
     if (addMode) {
       createLandmark(event);
       return;
@@ -339,6 +413,24 @@ export function MriSliceViewer({
       x: clamp((event.clientX - rect.left) / rect.width * 256, 0, 256),
       y: clamp((event.clientY - rect.top) / rect.height * 256, 0, 256),
     };
+  }
+
+  /*
+   * Dos clics definen la medición: el primero fija el ancla y el segundo cierra el
+   * segmento. Se entrega el tamaño del marco junto con los puntos porque la
+   * conversión a milímetros necesita el alto y ancho reales de la imagen — la base
+   * 0..256 es normalizada y por sí sola no dice cuántos píxeles hay de por medio.
+   */
+  function captureMeasurePoint(event: { clientX: number; clientY: number }) {
+    const point = pointFromEvent(event);
+    if (!point) return;
+    if (!measureAnchor) {
+      setMeasureAnchor(point);
+      return;
+    }
+    onMeasure?.(measureAnchor, point, imageSize);
+    setMeasureAnchor(null);
+    onMeasureComplete?.();
   }
 
   function createLandmark(event: { clientX: number; clientY: number }) {
@@ -438,7 +530,7 @@ export function MriSliceViewer({
             <strong>Corte {slice.current + 1} sin preview</strong>
             <span>El estudio conserva {slice.total} cortes, pero por ahora solo el corte {slice.aiIndex + 1} tiene imagen generada. El resto se navega sin superponer una imagen que no le corresponde.</span>
           </div>
-        ) : inputState === "loaded" && inputAsset.url ? (
+        ) : inputState === "loaded" && displayedInputUrl ? (
           <div className="asset-transform" style={{ height: `${imageSize.height}px`, transform, width: `${imageSize.width}px` }}>
             <img
               ref={imageRef}
@@ -446,11 +538,32 @@ export function MriSliceViewer({
               className="mri-asset-img"
               draggable={false}
               onLoad={(event) => setImageSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
-              src={inputAsset.url}
+              src={displayedInputUrl}
               style={{ filter }}
             />
             {overlayVisible && overlayLoaded && overlayAsset.url && (
               <img alt={`${seriesName} recurso de superposicion IA`} className="mri-overlay-img" draggable={false} src={overlayAsset.url} style={{ opacity: overlayAlpha, transform: "translateZ(0)" }} />
+            )}
+            {/*
+              Las mediciones se dibujan en un SVG con viewBox 0 0 256 256, la misma
+              base normalizada en la que se guardan sus puntos: así el trazo sigue
+              sobre la misma anatomía aunque el corte se muestre a otra resolución
+              o con otro zoom, sin recalcular nada.
+            */}
+            {(annotations.length > 0 || measureAnchor) && (
+              <svg className="mri-measure-layer" viewBox="0 0 256 256" preserveAspectRatio="none" aria-hidden>
+                {annotations.map((item) => (
+                  <g className="mri-measure" key={item.id}>
+                    <line x1={item.from.x} y1={item.from.y} x2={item.to.x} y2={item.to.y} />
+                    <circle cx={item.from.x} cy={item.from.y} r={2.5} />
+                    <circle cx={item.to.x} cy={item.to.y} r={2.5} />
+                    <text x={(item.from.x + item.to.x) / 2} y={(item.from.y + item.to.y) / 2 - 4}>{item.label}</text>
+                  </g>
+                ))}
+                {measureAnchor && (
+                  <circle className="mri-measure-anchor" cx={measureAnchor.x} cy={measureAnchor.y} r={3} />
+                )}
+              </svg>
             )}
             {landmarksVisible && landmarks.map((landmark) => {
               const displayLabel = displayLandmarkLabel(landmark.labelKey);

@@ -120,7 +120,48 @@ const readiness = loadInferenceReadiness();
 const measurementViewModel = loadMeasurementViewModel();
 const mriViewerViewModel = loadMriViewerViewModel();
 const mriSliceViewer = loadComponentModule("src/components/MriSliceViewer.tsx");
-const analysisTimelineView = loadComponentModule("src/components/AnalysisTimelineView.tsx");
+const newAnalysisDrawer = loadComponentModule("src/features/worklist/NewAnalysisDrawer.tsx");
+
+/*
+ * reviewCorrectionsFrom vivia dentro de AnalysisTimelineView, que se elimino por
+ * duplicar la sala de lectura. La construccion de correcciones sobrevive en
+ * api.ts como buildReviewCorrections, que es la unica que queda, y es contra esa
+ * que se verifican las mismas propiedades: el valor de la IA va en beforeValue,
+ * el del revisor en afterValue, y la identidad de la medicion no se reemplaza por
+ * su traduccion.
+ */
+function loadReviewCorrections() {
+  const source = readFileSync(join(root, "src/api.ts"), "utf8")
+    .replace(/^import .*$/gm, "")
+    .replace(/import\.meta\.env/g, "({})")
+    .replace(/export /g, "");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const sandbox = {
+    exports: {},
+    console,
+    fetch: async () => ({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => ({}) }),
+    authHeaders: () => ({}),
+    ensureAuthSession: async () => null,
+    resolveMeasurementLabel: (item) => item.label ?? item.labelKey ?? "",
+    isDemoDataMode: false,
+    isRealDataMode: true,
+    appDataMode: "real",
+    markDataOrigin: (value) => value,
+    frontendLogger: { error: () => undefined, warn: () => undefined, info: () => undefined },
+    toSafeFrontendError: (error) => error,
+    generateTraceId: () => "trace",
+    priorityFromBackend: (value) => value ?? "media",
+    refreshDoctorSession: async () => undefined,
+    window: undefined,
+  };
+  vm.runInNewContext(`${compiled}
+exports.buildReviewCorrections = buildReviewCorrections;`, sandbox);
+  return sandbox.exports.buildReviewCorrections;
+}
+
+const buildReviewCorrections = loadReviewCorrections();
 
 let count = 0;
 function test(name, fn) {
@@ -136,7 +177,7 @@ function readSource(path) {
 // A. Estructura
 test("A1 ningun archivo de src/components importa MultiplanarRunResponse/MultiplanarPlaneRun/MultiplanarMeasurementValue", () => {
   const files = [
-    "src/components/AnalysisTimelineView.tsx",
+    "src/features/worklist/NewAnalysisDrawer.tsx",
     "src/components/MriSliceViewer.tsx",
     "src/components/MeasurementsPanel.tsx",
     "src/components/AgentSummary.tsx",
@@ -152,7 +193,7 @@ test("A1 ningun archivo de src/components importa MultiplanarRunResponse/Multipl
 });
 
 test("A2 componentes multiplanares migrados no contienen aiOutput/modelArtifact/metadata legacy", () => {
-  const migratedFiles = ["src/components/AnalysisTimelineView.tsx", "src/components/MriSliceViewer.tsx", "src/components/AgentSummary.tsx", "src/components/MeasurementsPanel.tsx"];
+  const migratedFiles = ["src/features/worklist/NewAnalysisDrawer.tsx", "src/components/MriSliceViewer.tsx", "src/components/AgentSummary.tsx", "src/components/MeasurementsPanel.tsx"];
   for (const file of migratedFiles) {
     const source = readSource(file);
     for (const forbidden of ["aiOutput", "modelArtifact", "planeRun.metadata", "plane.metadata", "run.metadata"]) {
@@ -161,15 +202,15 @@ test("A2 componentes multiplanares migrados no contienen aiOutput/modelArtifact/
   }
 });
 
-test("A3 AnalysisTimelineView no contiene canonicalRunToLegacyViewModel ni sagittalLandmarksForViewer", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
+test("A3 NewAnalysisDrawer no contiene canonicalRunToLegacyViewModel ni sagittalLandmarksForViewer", () => {
+  const source = readSource("src/features/worklist/NewAnalysisDrawer.tsx");
   assert.ok(!source.includes("canonicalRunToLegacyViewModel"));
   assert.ok(!source.includes("sagittalLandmarksForViewer"));
 });
 
 test("A4 sagittalLandmarksForViewer no existe en ningun archivo de src", () => {
   // best-effort: only check the files known to have carried it historically
-  for (const file of ["src/components/AnalysisTimelineView.tsx", "src/adapters/multiplanarRunAdapter.ts", "src/inferenceReadiness.ts"]) {
+  for (const file of ["src/features/worklist/NewAnalysisDrawer.tsx", "src/adapters/multiplanarRunAdapter.ts", "src/inferenceReadiness.ts"]) {
     assert.ok(!readSource(file).includes("sagittalLandmarksForViewer"), `${file} no debe contener sagittalLandmarksForViewer`);
   }
 });
@@ -274,24 +315,26 @@ test("C4 traduccion no altera la identidad (label/labelKey permanecen en clave c
 // D. Correcciones
 test("D1 beforeValue usa valor IA y afterValue usa valor revisor; measurementId es el id canonico", () => {
   const measurement = { id: "m5", label: "canal width", labelKey: "canal width", value: 13, aiValue: 12, reviewerValue: 13, unit: "mm", source: "Reviewer", status: "editado", plane: "sagittal" };
-  const corrections = analysisTimelineView.reviewCorrectionsFrom([measurement]);
+  const corrections = buildReviewCorrections([measurement]);
   assert.equal(corrections.length, 1);
   assert.equal(corrections[0].measurementId, "m5");
   assert.equal(corrections[0].beforeValue.value, 12);
   assert.equal(corrections[0].afterValue.value, 13);
 });
 
-test("D2 una etiqueta espanola no reemplaza labelKey en la identidad de la correccion", () => {
+test("D2 una etiqueta espanola no reemplaza la identidad de la correccion", () => {
   const measurement = { id: "m6", label: "canal width", labelKey: "canal width", value: 13, aiValue: 12, reviewerValue: 13, unit: "mm", source: "Reviewer", status: "editado", plane: "sagittal" };
-  const corrections = analysisTimelineView.reviewCorrectionsFrom([measurement]);
-  assert.equal(corrections[0].labelKey, "canal width");
+  const corrections = buildReviewCorrections([measurement]);
+  // La correccion viaja con la clave canonica: la traduccion es de presentacion y
+  // no debe quedar persistida como identidad de la medicion.
   assert.equal(corrections[0].label, "canal width");
-  assert.notEqual(corrections[0].labelKey, "Ancho del canal espinal");
+  assert.notEqual(corrections[0].label, "Ancho del canal espinal");
+  assert.equal(corrections[0].measurementId, "m6");
 });
 
 test("D3 medicion sin cambio no genera correction", () => {
   const measurement = { id: "m7", label: "canal width", labelKey: "canal width", value: 12, aiValue: 12, unit: "mm", source: "AI", status: "pendiente", plane: "sagittal" };
-  const corrections = analysisTimelineView.reviewCorrectionsFrom([measurement]);
+  const corrections = buildReviewCorrections([measurement]);
   assert.equal(corrections.length, 0);
 });
 
@@ -318,7 +361,7 @@ test("F1 un run canonico persistido se renderiza sin AI Module: 9 mediciones, im
   assert.ok(urls["overlay.png"]);
 
   const editedMeasurement = { ...viewMeasurements[0], reviewerValue: 999, source: "Reviewer", status: "editado" };
-  const corrections = analysisTimelineView.reviewCorrectionsFrom([editedMeasurement]);
+  const corrections = buildReviewCorrections([editedMeasurement]);
   assert.equal(corrections.length, 1);
   assert.equal(corrections[0].beforeValue.value, editedMeasurement.aiValue);
   assert.equal(corrections[0].afterValue.value, 999);

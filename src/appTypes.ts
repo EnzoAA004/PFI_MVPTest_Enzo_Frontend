@@ -4,7 +4,7 @@ export type Priority = "alta" | "media" | "baja";
 export type DataOrigin = "backend" | "ai_module" | "database" | "demo";
 export type MultiplanarRunId = string;
 export type PlaneRunId = string;
-export type ViewKey = "dashboard" | "studies" | "queue" | "review" | "patients" | "history" | "settings" | "help" | "analysis";
+export type ViewKey = "dashboard" | "studies" | "queue" | "review" | "patients" | "history" | "settings";
 
 export type HistoryTarget =
   | { kind: "subject"; subjectRef: string }
@@ -102,6 +102,8 @@ export type Measurement = {
   /** Canonical, untranslated identifier (CanonicalMeasurement.labelKey). Spanish text is resolved only at render time via displayMeasurementLabel(). */
   labelKey?: string;
   level?: string;
+  /** Corte sobre el que se midió; sin él la medición no se puede ubicar en la serie. */
+  sliceIndex?: number;
   value: number | string;
   aiValue?: number | string;
   reviewerValue?: number | string | null;
@@ -181,6 +183,18 @@ export type StudySeries = {
   sequence?: string;
   sliceCount: number;
   selectedSlice: number;
+  /**
+   * Cuántos cortes tienen previsualización persistida. Puede ser menor que
+   * `sliceCount`: un estudio analizado antes de que existiera el catálogo solo
+   * conserva la imagen del corte inferido.
+   */
+  slicePreviewCount?: number;
+  /**
+   * Tamaño físico del píxel [alto, ancho] en mm. Sin este dato una medición del
+   * revisor solo puede expresarse en píxeles: convertir a mm sin él sería inventar
+   * la escala.
+   */
+  inPlaneSpacingMm?: number[];
   imageUrl?: string | null;
   overlayUrl?: string | null;
   overlayOpacity?: number;

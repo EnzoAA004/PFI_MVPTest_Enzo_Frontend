@@ -71,6 +71,7 @@ const {
   createAuthenticatedImageObjectUrl,
   fetchAuthenticatedAiAsset,
   startAuthenticatedImageLoad,
+  clearAuthenticatedImageCache,
 } = context.exports;
 
 let count = 0;
@@ -119,14 +120,50 @@ await test("F application/json no se acepta como imagen", async () => {
   await assert.rejects(() => fetchAuthenticatedAiAsset("https://backend.example/api/ai/assets/run/sagittal/input.png"), /Content-Type application\/json/);
 });
 
-await test("G cleanup ejecuta URL.revokeObjectURL", async () => {
+// El blob ya no lo revoca el cleanup sino la cache, que es su duena: recorrer una
+// serie vuelve al mismo corte constantemente y revocar al desmontar obligaba a
+// descargarlo de nuevo cada vez. Lo que estas tres pruebas siguen garantizando es
+// lo mismo que garantizaba la original: que ningun blob URL quede sin revocar.
+await test("G el cleanup conserva el blob para reutilizarlo", async () => {
+  clearAuthenticatedImageCache();
+  revokedUrls.length = 0;
   fetchQueue = [response(200)];
   const states = [];
   const cleanup = startAuthenticatedImageLoad("https://backend.example/api/ai/assets/run/sagittal/input.png", (state) => states.push(state));
   while (!states.at(-1)?.url) await new Promise((resolve) => setTimeout(resolve, 1));
   cleanup();
   assert.equal(states.at(-1).url, "blob:asset-1");
-  assert.deepEqual(revokedUrls, ["blob:asset-1"]);
+  assert.deepEqual(revokedUrls, []);
+});
+
+await test("G.1 un asset ya descargado se sirve de cache sin volver a pedirlo", async () => {
+  const url = "https://backend.example/api/ai/assets/run/sagittal/input.png";
+  clearAuthenticatedImageCache();
+  fetchQueue = [response(200)];
+  const first = [];
+  startAuthenticatedImageLoad(url, (state) => first.push(state));
+  while (!first.at(-1)?.url) await new Promise((resolve) => setTimeout(resolve, 1));
+  const callsBefore = calls.length;
+  const second = [];
+  startAuthenticatedImageLoad(url, (state) => second.push(state));
+  assert.equal(calls.length, callsBefore, "no debe repetir el fetch");
+  // Se comparan los campos y no el objeto: lo devuelve el modulo cargado dentro del
+  // vm, cuyo Object.prototype es otro y hace fallar a deepStrictEqual.
+  assert.equal(second.length, 1, "debe resolver en un solo paso, sin estado loading");
+  assert.equal(second[0].state, "loaded");
+  assert.equal(second[0].url, first.at(-1).url);
+});
+
+await test("G.2 limpiar la cache revoca todos los blob URL", async () => {
+  clearAuthenticatedImageCache();
+  revokedUrls.length = 0;
+  const states = [];
+  fetchQueue = [response(200)];
+  startAuthenticatedImageLoad("https://backend.example/api/ai/assets/run/sagittal/slice-004.png", (state) => states.push(state));
+  while (!states.at(-1)?.url) await new Promise((resolve) => setTimeout(resolve, 1));
+  const objectUrl = states.at(-1).url;
+  clearAuthenticatedImageCache();
+  assert.deepEqual(revokedUrls, [objectUrl]);
 });
 
 await test("H cambio de runId cancela el fetch anterior", async () => {

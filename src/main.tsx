@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./design/tokens.css";
 import "./design/base.css";
@@ -9,11 +10,14 @@ import "./design/components.css";
 import "./design/shell.css";
 import "./features/worklist/worklist.css";
 import "./features/reading/reading.css";
+import "./features/settings/settings.css";
 import "./design/utilities.css";
 import "./a11yDev";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </React.StrictMode>,
 );

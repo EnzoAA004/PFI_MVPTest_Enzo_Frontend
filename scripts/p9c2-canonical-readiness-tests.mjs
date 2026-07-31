@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import ts from "typescript";
@@ -303,14 +303,28 @@ test("I1 inferenceReadiness.ts no contiene tipos ni aliases legacy", () => {
     assert.ok(!source.includes(forbidden), `inferenceReadiness.ts no debe contener "${forbidden}"`);
   }
 });
-test("I2 AnalysisTimelineView declara estado canonico y no usa canonicalRunToLegacyViewModel", () => {
-  const source = readFileSync(join(root, "src/components/AnalysisTimelineView.tsx"), "utf8");
-  assert.ok(source.includes("useState<CanonicalMultiplanarRun | null>"), "debe declarar useState<CanonicalMultiplanarRun | null>");
-  assert.ok(!source.includes("useState<MultiplanarRunResponse"), "no debe declarar estado principal con MultiplanarRunResponse");
-  assert.ok(!source.includes("canonicalRunToLegacyViewModel"), "no debe importar ni usar canonicalRunToLegacyViewModel si ningun componente lo requiere");
+// AnalysisTimelineView, que era quien sostenia el estado canonico de la corrida,
+// se elimino: duplicaba la sala de lectura con otro contrato de revision. La
+// propiedad que la prueba custodiaba —que el adaptador legacy no vuelva a
+// colarse— ya no depende de un componente y se verifica sobre todo el codigo.
+test("I2 ningun componente usa canonicalRunToLegacyViewModel ni estado MultiplanarRunResponse", () => {
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!/\.tsx?$/.test(entry.name)) continue;
+      const source = readFileSync(full, "utf8");
+      if (source.includes("canonicalRunToLegacyViewModel") || source.includes("useState<MultiplanarRunResponse")) {
+        offenders.push(full);
+      }
+    }
+  };
+  walk(join(root, "src"));
+  assert.deepEqual(offenders, [], "el adaptador legacy no debe reaparecer");
 });
-test("I3 executeRun evalua readiness sobre el resultado canonico directo de runMultiplanarAnalysis", () => {
-  const source = readFileSync(join(root, "src/components/AnalysisTimelineView.tsx"), "utf8");
+test("I3 la corrida evalua readiness sobre el resultado canonico directo de runMultiplanarAnalysis", () => {
+  const source = readFileSync(join(root, "src/features/worklist/NewAnalysisDrawer.tsx"), "utf8");
   assert.match(source, /const result = await runMultiplanarAnalysis\(payload\);\s*\n\s*const readiness = evaluateRealInferenceReadiness\(result\);/);
 });
 

@@ -74,7 +74,6 @@ function loadMeasurementsPanel() {
   return loadComponentModule("src/components/MeasurementsPanel.tsx");
 }
 
-const analysisTimelineView = loadComponentModule("src/components/AnalysisTimelineView.tsx");
 const measurementsPanel = loadMeasurementsPanel();
 
 function readSource(path) {
@@ -84,6 +83,38 @@ function readSource(path) {
 const adapter = loadAdapter();
 const assetParser = loadAssetParser();
 const threeDViewModel = loadThreeDViewModel();
+
+/*
+ * reviewCorrectionsFrom vivia en AnalysisTimelineView, ya eliminado. La construccion
+ * de correcciones sobrevive en api.ts como buildReviewCorrections y es contra esa que
+ * se verifica que un axial se persista por el mismo mecanismo que un sagital.
+ */
+function loadReviewCorrections() {
+  const source = readSource("src/api.ts")
+    .replace(/^import .*$/gm, "")
+    .replace(/import\.meta\.env/g, "({})")
+    .replace(/export /g, "");
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const sandbox = {
+    exports: {}, console,
+    fetch: async () => ({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => ({}) }),
+    authHeaders: () => ({}), ensureAuthSession: async () => null,
+    resolveMeasurementLabel: (item) => item.label ?? item.labelKey ?? "",
+    isDemoDataMode: false, isRealDataMode: true, appDataMode: "real",
+    markDataOrigin: (value) => value,
+    frontendLogger: { error: () => undefined, warn: () => undefined, info: () => undefined },
+    toSafeFrontendError: (error) => error, generateTraceId: () => "trace",
+    priorityFromBackend: (value) => value ?? "media",
+    refreshDoctorSession: async () => undefined, window: undefined,
+  };
+  vm.runInNewContext(`${compiled}
+exports.buildReviewCorrections = buildReviewCorrections;`, sandbox);
+  return sandbox.exports.buildReviewCorrections;
+}
+
+const buildReviewCorrections = loadReviewCorrections();
 
 let count = 0;
 function test(name, fn) {
@@ -238,25 +269,22 @@ test("8 estructuras del proxy conservan el label crudo (raw_*), sin traducir a a
   assert.notEqual(viewModel.geometry.structures[0].label, "Grupo vertebral");
 });
 
-// 9. axial candidato mostrado correctamente
-test("9 AnalysisTimelineView muestra los flags reales del axial candidato, nunca baseline aprobado", () => {
-  const source = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(source, /baselineReady: \{String\(axialPlaneRun\?\.model\.baselineReady/);
-  assert.match(source, /availableForRealInference: \{String\(axialPlaneRun\?\.model\.availableForRealInference/);
-  assert.match(source, /readiness: \{axialPlaneRun\?\.model\.readiness/);
-  assert.match(source, /runtimeQualification: \{axialPlaneRun\?\.model\.runtimeQualification/);
-  assert.match(source, /qualityGatePassed: \{String\(axialPlaneRun\?\.model\.qualityGatePassed/);
-  assert.match(source, /no baseline aprobado/);
-});
+// 9. axial candidato — cubierto por inferenceReadiness
+//
+// El panel que listaba baselineReady/availableForRealInference/qualityGatePassed del
+// axial vivia en AnalysisTimelineView, eliminado por duplicar la sala de lectura. La
+// regla que importaba —que un axial candidato nunca se presente como baseline
+// aprobado— la sostienen las pruebas de resolveReviewWorkspaceMode mas abajo, que
+// devuelven sagittal_only ante un axial en modo contract.
 
 // 10. no uso de la columna generica como resultado del paciente
-test("10 SpineReconstructionPreview nunca combina el proxy con la columna generica; AnalysisTimelineView siempre pasa proxy en el flujo clinico", () => {
+test("10 SpineReconstructionPreview nunca combina el proxy con la columna generica; la sala de lectura siempre pasa proxy", () => {
   const router = readSource("src/components/SpineReconstructionPreview.tsx");
   assert.match(router, /if \(proxy\) return <ExperimentalProxyViewer viewModel=\{proxy\}/);
   assert.match(router, /return <GenericAtlasPreview threeD=\{threeD\} \/>;/);
-  const timeline = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(timeline, /<SpineReconstructionPreview[\s\S]{0,80}proxy=\{threeDProxyViewModel\}/);
-  assert.ok(!timeline.includes("<SpineReconstructionPreview />"), "AnalysisTimelineView ya no debe renderizar el atlas generico sin proxy en el flujo de revision");
+  const reading = readSource("src/components/StudyReviewView.tsx");
+  assert.match(reading, /<SpineReconstructionPreview[\s\S]{0,80}proxy=\{threeDProxyViewModel\}/);
+  assert.ok(!reading.includes("<SpineReconstructionPreview />"), "la sala de lectura no debe renderizar el atlas generico sin proxy");
 });
 
 // 11. estado controlado ante asset invalido
@@ -289,7 +317,7 @@ test("12 estudios sagitales legacy sin threeD no rompen el parseo ni exigen axia
 test("13 textos obligatorios de proxy experimental presentes, y frases prohibidas ausentes", () => {
   const viewer = readSource("src/components/ExperimentalProxyViewer.tsx");
   const viewModelSource = readSource("src/viewModels/threeDProxyViewModel.ts");
-  const timeline = readSource("src/components/AnalysisTimelineView.tsx");
+  const reading = readSource("src/components/StudyReviewView.tsx");
   assert.match(viewer, /No representa una reconstrucci.n an.t.mica ni volum.trica\./);
   assert.match(viewModelSource, /No representa una reconstrucci.n an.t.mica ni volum.trica/);
   const forbidden = [
@@ -301,7 +329,7 @@ test("13 textos obligatorios de proxy experimental presentes, y frases prohibida
   for (const phrase of forbidden) {
     assert.ok(!viewer.includes(phrase), `ExperimentalProxyViewer no debe contener "${phrase}"`);
     assert.ok(!viewModelSource.includes(phrase), `threeDProxyViewModel no debe contener "${phrase}"`);
-    assert.ok(!timeline.includes(phrase), `AnalysisTimelineView no debe contener "${phrase}"`);
+    assert.ok(!reading.includes(phrase), `StudyReviewView no debe contener "${phrase}"`);
   }
 });
 
@@ -323,33 +351,21 @@ test("15 ExperimentalProxyViewer libera renderer/geometria/materiales en el clea
   assert.match(viewer, /resizeObserver\.disconnect\(\)/);
 });
 
-// 16. seleccion coordinada 2D/3D: mapeo landmark <-> estructura
-test("16 structureKeyForLandmarkLabelKey deriva la misma clave que usan las estructuras del proxy 3D", () => {
-  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey("vertebra_group_centroid"), "vertebra_group");
-  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey("canal_centroid"), "canal");
-  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey("disc_group_centroid"), "disc_group");
-  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey("raw_50_centroid"), null);
-  assert.equal(analysisTimelineView.structureKeyForLandmarkLabelKey(undefined), null);
-});
-
-test("16b ExperimentalProxyViewer acepta seleccion controlada externa para coordinar con el visor 2D", () => {
-  const viewer = readSource("src/components/ExperimentalProxyViewer.tsx");
-  assert.match(viewer, /selectedStructure\?: string \| null;/);
-  assert.match(viewer, /onSelectStructure\?: \(label: string \| null\) => void;/);
-  const timeline = readSource("src/components/AnalysisTimelineView.tsx");
-  assert.match(timeline, /selectedStructure=\{selectedStructureLabel\}/);
-  assert.match(timeline, /onSelectStructure=\{handleSelectStructure\}/);
-  assert.match(timeline, /onSelectLandmark=\{handleSelectSagittalLandmark\}/);
-});
+// 16 y 16b verificaban la seleccion coordinada 2D/3D del asistente:
+// structureKeyForLandmarkLabelKey y el cableado selectedStructure/onSelectStructure.
+// Ambos vivian solo en AnalysisTimelineView, eliminado por duplicar la sala de
+// lectura, y no quedo ninguna implementacion en src. ExperimentalProxyViewer conserva
+// la API controlada (prueba 15b/16 de su propio archivo); afirmar que algun componente
+// la cablea seria describir codigo que ya no existe.
 
 // 17. correcciones persistentes plane-agnosticas (axial ya viaja por el mismo mecanismo que sagital)
-test("17 reviewCorrectionsFrom incluye correcciones axiales exactamente igual que sagitales (mismo mecanismo de persistencia)", () => {
+test("17 buildReviewCorrections incluye correcciones axiales exactamente igual que sagitales (mismo mecanismo de persistencia)", () => {
   const measurements = [
     { id: "m-sag-1", label: "canal width", labelKey: "canal width", value: 10, aiValue: 10, reviewerValue: 11, unit: "mm", plane: "sagittal", source: "Reviewer", status: "editado" },
     { id: "m-ax-1", label: "raw_50 area", labelKey: "raw_50 area", value: 20, aiValue: 20, reviewerValue: 25, unit: "mm2", plane: "axial", source: "Reviewer", status: "editado" },
     { id: "m-ax-2", label: "raw_100 area", labelKey: "raw_100 area", value: 5, aiValue: 5, reviewerValue: 5, unit: "mm2", plane: "axial", source: "AI", status: "pendiente" },
   ];
-  const corrections = analysisTimelineView.reviewCorrectionsFrom(measurements);
+  const corrections = buildReviewCorrections(measurements);
   assert.equal(corrections.length, 2);
   assert.ok(corrections.some((correction) => correction.measurementId === "m-sag-1"));
   assert.ok(corrections.some((correction) => correction.measurementId === "m-ax-1"));

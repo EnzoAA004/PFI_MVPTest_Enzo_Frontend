@@ -9,7 +9,6 @@ const api = read("src/api.ts");
 const app = read("src/App.tsx");
 const studyApi = read("src/studyApi.ts");
 const storage = read("src/storage.ts");
-const selectedStudyStorage = read("src/selectedStudyStorage.ts");
 
 function assertNotContains(fileName, source, pattern, message) {
   assert.equal(pattern.test(source), false, `${fileName}: ${message}`);
@@ -45,6 +44,10 @@ assertContains("src/studyApi.ts", studyApi, /throw new ContractError/, "contrato
 
 assertNotContains("src/storage.ts", storage, /initialAuditTrail|local-run/, "storage real no debe sembrar auditoria demo ni runs locales");
 assertContains("src/storage.ts", storage, /patientStudies:\s*\[\]/, "storage real debe iniciar patientStudies vacio");
-assertNotContains("src/selectedStudyStorage.ts", selectedStudyStorage, /demo-run/, "selected study fallback no debe fabricar runId demo");
+// selectedStudyStorage.ts se eliminó: el estudio seleccionado viaja por props desde
+// App en vez de por sessionStorage. La regla que la prueba custodiaba —que no se
+// fabrique un runId demo para el estudio abierto— se verifica ahora sobre App, que
+// es quien lo posee.
+assertNotContains("src/App.tsx", app, /demo-run/, "el estudio seleccionado no debe fabricar runId demo");
 
 console.log("data-mode separation tests: ok");

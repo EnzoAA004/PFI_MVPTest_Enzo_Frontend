@@ -1,14 +1,14 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
-import { exportReviewReport } from "../api";
+import { exportReviewReport, getRunAnnotations, saveRunAnnotations } from "../api";
 import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
 import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudyMetadataInput, StudySeries } from "../appTypes";
 import { parseThreeD } from "../adapters/multiplanarRunAdapter";
 import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
 import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
 import { BackendApiError, fetchThreeDProxyAsset } from "../multiplanarApi";
-import { displayInferenceMode, displayMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayTechnicalReadiness, displayUnit } from "../clinicalDisplay";
+import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayTechnicalReadiness, displayUnit, type LumbarLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
-import { loadSelectedStudyDetail, SELECTED_STUDY_EVENT } from "../selectedStudyStorage";
+import { annotatedSlices, displayAnnotationScope, formatMeasurement, isAnnotationVisible, measureDistance, type Annotation, type AnnotationScope } from "../features/reading/annotations";
 import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { emptyStudyMetadataDraft, normalizeStudyMetadataInput, priorityToBackend, subjectRefErrorMessage, validateSubjectRef, type StudyMetadataDraft } from "../studyMetadata";
@@ -16,7 +16,7 @@ import { studyRunToMriViewerModel } from "../viewModels/mriViewerViewModel";
 import { useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
-import { MriSliceViewer } from "./MriSliceViewer";
+import { MriSliceViewer, type MeasurementOverlay, type SliceNavigation } from "./MriSliceViewer";
 import { SpineReconstructionPreview } from "./SpineReconstructionPreview";
 
 const fallbackSeries: StudySeries[] = [
@@ -58,6 +58,8 @@ interface StudyReviewViewProps {
   onBackToStudies: () => void;
   onMeasurementsChange: (measurements: Measurement[], detail: string) => void;
   onSaveReview: (status: ReviewStatus, notes: string, measurements: Measurement[]) => Promise<ReviewStatusResponse | undefined>;
+  /** Detalle persistido del estudio abierto, cargado y poseído por App. */
+  selectedDetail: StudyDetailResponse | null;
   onStudyMetadataUpdated?: (caseId: string) => Promise<void>;
 }
 
@@ -105,6 +107,16 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
   const rawSelectedSlice = metadata.selectedSlice ?? metadata.selectedSliceIndex;
   const sliceCount = typeof rawSliceCount === "number" && rawSliceCount > 0 ? rawSliceCount : 1;
   const selectedSlice = typeof rawSelectedSlice === "number" && rawSelectedSlice >= 0 ? rawSelectedSlice : 0;
+  // Cantidad de previsualizaciones por corte que el AI Module realmente escribió.
+  // Es lo que distingue "este corte todavía no tiene imagen" de "este corte tiene
+  // imagen": sin el número habría que pedir el PNG y tratar el 404 como respuesta.
+  const quality = { ...asRecord(canonicalPlane?.quality), ...asRecord(planeRun?.quality) };
+  const rawSpacing = metadata.inPlaneSpacingMm ?? metadata.inPlaneSpacing;
+  const inPlaneSpacingMm = Array.isArray(rawSpacing) && rawSpacing.every((value) => typeof value === "number")
+    ? rawSpacing as number[]
+    : undefined;
+  const rawPreviewCount = quality.slicePreviewCount;
+  const slicePreviewCount = typeof rawPreviewCount === "number" && rawPreviewCount > 0 ? rawPreviewCount : 0;
   const coordinateSpace = typeof planeRun?.coordinateSpace === "string"
     ? planeRun.coordinateSpace
     : typeof planeRun?.measurements?.coordinateSpace === "string"
@@ -121,6 +133,8 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
     plane: workspace.plane,
     sliceCount,
     selectedSlice,
+    slicePreviewCount,
+    inPlaneSpacingMm,
     imageUrl: workspace.inputUrl ?? null,
     overlayUrl: workspace.overlayUrl ?? null,
     assets,
@@ -136,8 +150,140 @@ function readinessLabel(value?: string) {
   return displayTechnicalReadiness(value);
 }
 
+/**
+ * URL de la previsualización de un corte, derivada de la del corte inferido.
+ *
+ * Ambas viven en el mismo directorio de assets de la corrida, así que se
+ * reemplaza el último segmento y nada más: no se arma una ruta nueva ni se
+ * concatena el índice a mano, de modo que el origen y el prefijo `/api/...` que
+ * la política de origen exige quedan intactos.
+ */
+function slicePreviewUrl(inputUrl: string | null | undefined, index: number) {
+  if (!inputUrl) return undefined;
+  const name = `slice-${String(index).padStart(3, "0")}.png`;
+  const separator = inputUrl.lastIndexOf("/");
+  return separator < 0 ? undefined : `${inputUrl.slice(0, separator + 1)}${name}`;
+}
+
 function clampSlice(index: number, total: number) {
   return Math.min(Math.max(index, 0), Math.max(0, total - 1));
+}
+
+type PlaneViewportProps = {
+  plane: "sagittal" | "axial";
+  caseLabel: string;
+  seriesName: string;
+  model: ReturnType<typeof studyRunToMriViewerModel>;
+  modelLabel: string;
+  inferenceLabel: string;
+  spacingLabel: string;
+  slice?: SliceNavigation;
+  active: boolean;
+  onActivate: () => void;
+  selectedLandmarkId: string;
+  onSelectLandmark: (id: string) => void;
+  readonly: boolean;
+  addMode: boolean;
+  onMoveLandmark: (landmarkId: string, point: { x: number; y: number }) => void;
+  onAddLandmark: (point: { x: number; y: number }) => void;
+  onLandmarkAddComplete: () => void;
+  onOverlayAvailableChange: (available: boolean) => void;
+  measureMode: boolean;
+  annotations: MeasurementOverlay[];
+  onMeasure: (from: { x: number; y: number }, to: { x: number; y: number }, frame: { width: number; height: number }) => void;
+  onMeasureComplete: () => void;
+  /** Cortes de este plano con anotaciones, para marcarlos en la barra de stack. */
+  annotatedIndices?: Set<number>;
+};
+
+/**
+ * Un plano de la sala de lectura: imagen, anotaciones de esquina y barra de stack.
+ *
+ * Se extrae para poder montar sagital y axial a la vez. Cada viewport mantiene su
+ * propio corte porque los stacks son independientes: 17 cortes sagitales y 12
+ * axiales no se recorren con el mismo índice.
+ */
+function PlaneViewport({
+  plane, caseLabel, seriesName, model, modelLabel, inferenceLabel, spacingLabel,
+  slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
+  onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
+  measureMode, annotations, onMeasure, onMeasureComplete, annotatedIndices,
+}: PlaneViewportProps) {
+  const sliceLabel = slice ? `corte ${slice.current + 1}/${slice.total}` : "corte único";
+  return (
+    <section className={`rr-plane${active ? " is-active" : ""}`} onPointerDownCapture={onActivate}>
+      <div className="rr-viewport">
+        <div className="rr-corner rr-corner-tl"><strong>{caseLabel}</strong></div>
+        <div className="rr-corner rr-corner-tr">
+          <strong>{seriesName}</strong>
+          {sliceLabel}
+        </div>
+        <div className="rr-corner rr-corner-bl">{modelLabel}{"\n"}{inferenceLabel}</div>
+        <div className="rr-corner rr-corner-br">
+          {spacingLabel}
+          {"\n"}<span className="rr-disclaimer">No apto para diagnóstico clínico</span>
+        </div>
+        <MriSliceViewer
+          model={model}
+          selectedLandmarkId={selectedLandmarkId}
+          onSelectLandmark={onSelectLandmark}
+          readonly={readonly}
+          addMode={addMode}
+          onMoveLandmark={onMoveLandmark}
+          onAddLandmark={onAddLandmark}
+          onLandmarkAddComplete={onLandmarkAddComplete}
+          overlayEnabled
+          onOverlayAvailableChange={onOverlayAvailableChange}
+          slice={slice}
+          measureMode={measureMode}
+          annotations={annotations}
+          onMeasure={onMeasure}
+          onMeasureComplete={onMeasureComplete}
+        />
+      </div>
+      {slice && (
+        <div className="rr-slicebar">
+          <button className="rr-slice-step" type="button" onClick={() => slice.onStep(-1)} disabled={slice.current <= 0} aria-label={`Corte anterior en ${plane}`}>‹</button>
+          <span className="rr-slice-track">
+          <input
+            className="rr-slice-range"
+            type="range"
+            min={0}
+            max={slice.total - 1}
+            value={slice.current}
+            onChange={(event) => slice.onChange(Number(event.target.value))}
+            aria-label={`Corte ${slice.current + 1} de ${slice.total} en ${seriesName}`}
+          />
+          {/*
+            Marcadores de contenido: de un vistazo se ve dónde hay algo que mirar
+            —el corte que analizó la IA y los cortes con anotaciones del revisor—
+            en vez de tener que recorrer el stack entero para descubrirlo.
+          */}
+          <span className="rr-slice-marks" aria-hidden>
+            {Array.from({ length: slice.total }, (_, index) => (
+              <i
+                className={`rr-slice-mark${index === slice.aiIndex ? " is-ai" : ""}${annotatedIndices?.has(index) ? " is-annotated" : ""}`}
+                key={index}
+                style={{ left: `${slice.total > 1 ? index / (slice.total - 1) * 100 : 0}%` }}
+              />
+            ))}
+          </span>
+          </span>
+          <button className="rr-slice-step" type="button" onClick={() => slice.onStep(1)} disabled={slice.current >= slice.total - 1} aria-label={`Corte siguiente en ${plane}`}>›</button>
+          <span className="rr-slice-index">{slice.current + 1}/{slice.total}</span>
+          <button
+            className="rr-slice-ai"
+            type="button"
+            onClick={() => slice.onChange(slice.aiIndex)}
+            disabled={slice.current === slice.aiIndex}
+            title={`Volver al corte analizado por la IA (${slice.aiIndex + 1})`}
+          >
+            corte IA {slice.aiIndex + 1}
+          </button>
+        </div>
+      )}
+    </section>
+  );
 }
 
 /**
@@ -182,14 +328,14 @@ function coordinateSpaceFrom(series?: any, landmarks?: StudyLandmark[]) {
   return fromSeries ?? (typeof fromLandmark?.coordinateSpace === "string" ? fromLandmark.coordinateSpace : undefined);
 }
 
+/** Primer valor realmente presente: "" es ausencia, y `??` no la detecta. */
+function firstPresent(...values: unknown[]) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
 function normalizeRow(item: any): MeasurementRow {
   const value = item.aiValue ?? item.value ?? "";
-  const label =
-    typeof item.label === "string" && item.label.trim()
-      ? item.label.trim()
-      : typeof item.labelKey === "string" && item.labelKey.trim()
-        ? item.labelKey.trim()
-        : "Medición revisable";
+  const label = resolveMeasurementLabel(item);
   return {
     id: String(item.id ?? item.labelKey ?? item.label ?? "measurement"),
     label,
@@ -264,7 +410,7 @@ function metadataPayloadEqual(next: StudyMetadataInput, current: StudyMetadataDr
     && next.reviewPriority === current.reviewPriority;
 }
 
-export function StudyReviewView({ run, studyReview, measurements, auditTrail, saving, onBackToStudies, onMeasurementsChange, onSaveReview, onStudyMetadataUpdated }: StudyReviewViewProps) {
+export function StudyReviewView({ run, studyReview, measurements, auditTrail, saving, onBackToStudies, onMeasurementsChange, onSaveReview, onStudyMetadataUpdated, selectedDetail }: StudyReviewViewProps) {
   const [tab, setTab] = useState<"Sagittal" | "Axial" | "3D Reconstruction">("Sagittal");
   const [selectedSeriesId, setSelectedSeriesId] = useState("");
   const [editMode, setEditMode] = useState(false);
@@ -273,6 +419,11 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [reviewerValues, setReviewerValues] = useState<Record<string, string>>({});
   const [landmarkDrafts, setLandmarkDrafts] = useState<Record<string, StudyLandmark>>({});
   const [landmarkAddMode, setLandmarkAddMode] = useState(false);
+  const [measureMode, setMeasureMode] = useState(false);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteScope, setNoteScope] = useState<AnnotationScope>("study");
+  const [annotationsError, setAnnotationsError] = useState("");
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? run.reviewStatus ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
   const [saveMessage, setSaveMessage] = useState("");
@@ -283,17 +434,34 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   // Corte visible por plano. Arranca en el corte que analizó la IA y se mueve con
   // la rueda o el teclado; queda por plano para que cambiar de serie no lo pierda.
   const [sliceByPlane, setSliceByPlane] = useState<Record<string, number>>({});
-  const [selectedDetail, setSelectedDetail] = useState<StudyDetailResponse | null>(() => loadSelectedStudyDetail());
+  // Disposición del stage: un plano a la vez o sagital y axial simultáneos, que es
+  // como se lee en la práctica (el axial se interpreta mirando dónde cae en sagital).
+  const [layout, setLayout] = useState<"single" | "dual">("single");
+
   const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
-  const [metadataDraft, setMetadataDraft] = useState<StudyMetadataDraft>(() => metadataDraftFromDetail(loadSelectedStudyDetail(), run));
+  const [metadataDraft, setMetadataDraft] = useState<StudyMetadataDraft>(() => metadataDraftFromDetail(selectedDetail, run));
   const [metadataSaving, setMetadataSaving] = useState(false);
   const [metadataError, setMetadataError] = useState("");
 
+  /*
+   * Anotaciones persistidas de la corrida. Se descartan las locales al cambiar de
+   * corrida: pertenecen a la que se estaba leyendo y arrastrarlas mostraría marcas
+   * de un estudio sobre otro.
+   */
   useEffect(() => {
-    const update = () => setSelectedDetail(loadSelectedStudyDetail());
-    window.addEventListener(SELECTED_STUDY_EVENT, update);
-    return () => window.removeEventListener(SELECTED_STUDY_EVENT, update);
-  }, []);
+    const runId = run.runId;
+    setAnnotations([]);
+    setAnnotationsError("");
+    if (!runId) return;
+    let cancelled = false;
+    getRunAnnotations(runId)
+      .then((persisted) => { if (!cancelled) setAnnotations(persisted as Annotation[]); })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setAnnotationsError(error instanceof Error ? `No se pudieron cargar las anotaciones: ${error.message}` : "No se pudieron cargar las anotaciones.");
+      });
+    return () => { cancelled = true; };
+  }, [run.runId]);
 
   useEffect(() => {
     if (!metadataDialogOpen) setMetadataDraft(metadataDraftFromDetail(selectedDetail, run));
@@ -402,26 +570,40 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     setOverlayAvailableByPlano((current) => (current[activePlano] === available ? current : { ...current, [activePlano]: available }));
   }, [activePlano]);
 
-  const sliceTotal = currentSeries?.sliceCount ?? 1;
-  const aiSliceIndex = Math.min(Math.max(currentSeries?.selectedSlice ?? 0, 0), Math.max(0, sliceTotal - 1));
-  const currentSliceIndex = sliceByPlane[activePlano] ?? aiSliceIndex;
-  const sliceNavigation = sliceTotal > 1
-    ? {
-      current: currentSliceIndex,
-      total: sliceTotal,
-      aiIndex: aiSliceIndex,
-      // Hasta que exista el catálogo de previews, la imagen persistida corresponde
-      // exclusivamente al corte que la IA analizó.
-      hasImage: currentSliceIndex === aiSliceIndex,
-      onChange: (index: number) => setSliceByPlane((current) => ({ ...current, [activePlano]: clampSlice(index, sliceTotal) })),
-      // Se resuelve dentro del setter para no perder pasos cuando llegan varios
-      // eventos de rueda en el mismo tick.
-      onStep: (delta: number) => setSliceByPlane((current) => ({
-        ...current,
-        [activePlano]: clampSlice((current[activePlano] ?? aiSliceIndex) + delta, sliceTotal),
-      })),
-    }
-    : undefined;
+  /**
+   * Datos por plano para poder montar sagital y axial a la vez. Cada plano tiene su
+   * propia serie, su propio modelo de visor y su propio corte: los stacks son
+   * independientes y no comparten índice.
+   */
+  function planeViewportData(plane: "sagittal" | "axial"): { series: any; nav?: SliceNavigation } | null {
+    const series = seriesList.find((item: any) => item.plane === plane);
+    if (!series) return null;
+    const total = series.sliceCount ?? 1;
+    const aiIndex = clampSlice(series.selectedSlice ?? 0, total);
+    const current = clampSlice(sliceByPlane[plane] ?? aiIndex, total);
+    const nav: SliceNavigation | undefined = total > 1
+      ? {
+        current,
+        total,
+        aiIndex,
+        hasImage: current === aiIndex || current < (series.slicePreviewCount ?? 0),
+        previewUrl: current === aiIndex ? undefined : slicePreviewUrl(series.imageUrl, current),
+        previewUrlFor: (index: number) => (index < (series.slicePreviewCount ?? 0) ? slicePreviewUrl(series.imageUrl, index) : undefined),
+        onChange: (index: number) => setSliceByPlane((state) => ({ ...state, [plane]: clampSlice(index, total) })),
+        onStep: (delta: number) => setSliceByPlane((state) => ({
+          ...state,
+          [plane]: clampSlice((state[plane] ?? aiIndex) + delta, total),
+        })),
+      }
+      : undefined;
+    return { series, nav };
+  }
+
+  const axialAvailable = seriesList.some((item: any) => item.plane === "axial");
+  /** Qué planos se montan en el stage según la disposición elegida. */
+  const visiblePlanes: Array<"sagittal" | "axial"> = layout === "dual" && axialAvailable
+    ? ["sagittal", "axial"]
+    : [activePlano];
 
   const viewerModel = useMemo(
     () => studyRunToMriViewerModel({
@@ -659,10 +841,29 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-informe.html`, html, "text/html;charset=utf-8");
   }
 
+  /*
+   * Las anotaciones se guardan junto con la revisión y no en cada trazo: el
+   * revisor mide y descarta varias veces mientras lee, y persistir cada
+   * movimiento dejaría en la historia clínica pasos intermedios que él nunca
+   * quiso registrar. El PUT reemplaza el conjunto completo, que es la unidad con
+   * la que se editan en pantalla.
+   */
   async function save(status: ReviewStatus) {
     const nextMeasurements = currentReviewerMeasurements();
     const review = await onSaveReview(status, notes, nextMeasurements);
     if (!review) return;
+    const runId = displayRun.runId;
+    if (runId) {
+      try {
+        const saved = await saveRunAnnotations(runId, annotations);
+        setAnnotations(saved as Annotation[]);
+        setAnnotationsError("");
+      } catch (error) {
+        // La revisión sí se guardó: se dice qué quedó sin persistir en vez de
+        // dejar que el revisor cierre creyendo que sus marcas están a salvo.
+        setAnnotationsError(error instanceof Error ? `Las anotaciones no se guardaron: ${error.message}` : "Las anotaciones no se guardaron.");
+      }
+    }
     if (hasMeasurementDrafts) commitReviewerMeasurements();
     setSaveMessage(status === "pendiente" ? "Borrador guardado correctamente" : status === "observado" ? "Estudio marcado como observado." : status === "aceptado" ? "Estudio finalizado y aprobado por el revisor." : "Estudio descartado por el revisor.");
   }
@@ -699,8 +900,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     setMetadataSaving(true);
     setMetadataError("");
     try {
-      const detail = await updateStudyMetadata(caseId, payload);
-      setSelectedDetail(detail);
+      // El detalle fresco lo vuelve a leer App en onStudyMetadataUpdated, que es
+      // quien lo posee: guardarlo también acá abría una segunda copia que podía
+      // quedar desincronizada de la lista de trabajo.
+      await updateStudyMetadata(caseId, payload);
       await onStudyMetadataUpdated?.(caseId);
       setMetadataDialogOpen(false);
       setSaveMessage("Metadata del estudio actualizada.");
@@ -728,11 +931,38 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const levelUnassigned = allFindingsUnassigned(levelGroups);
   const activeGroup = levelGroups.find((group: LevelGroup) => String(group.level) === String(selectedLevel));
   const visibleRows = activeGroup ? resultRows.filter((row) => activeGroup.findings.some((finding) => finding.id === row.id)) : resultRows;
+  /*
+   * Nivel activo para anclar anotaciones de alcance "level". Es el nivel que el
+   * revisor tiene seleccionado en el panel; si está mirando "sin nivel asignado"
+   * no hay nivel al que anclar y esa opción queda deshabilitada.
+   */
+  const activeLevel: LumbarLevel | null = activeGroup?.level ?? null;
+
+  function addAnnotation(annotation: Annotation) {
+    setAnnotations((current) => [...current, annotation]);
+  }
+
+  function removeAnnotation(id: string) {
+    setAnnotations((current) => current.filter((item) => item.id !== id));
+  }
+
+  /** Mediciones que corresponden al corte visible de un plano, ya rotuladas. */
+  function measurementOverlaysFor(plane: "sagittal" | "axial", sliceIndex: number, seriesId?: string): MeasurementOverlay[] {
+    const context = { plane, seriesId, sliceIndex, level: activeLevel };
+    return annotations
+      .filter((item) => item.kind === "measurement" && item.points?.length === 2 && isAnnotationVisible(item, context))
+      .map((item) => ({
+        id: item.id,
+        from: item.points![0],
+        to: item.points![1],
+        label: item.value !== undefined && item.unit ? formatMeasurement(item.value, item.unit) : "",
+      }));
+  }
+
   const caseLabel = displayRun.caseId ?? studyReview?.caseId ?? "Caso sin identificador";
   const subjectLabel = displaySubjectRef(selectedDetail?.study?.subjectRef ?? run.patientId ?? null);
   // La esquina del viewport muestra el corte que se está mirando, no el que analizó
   // la IA: es el índice de referencia mientras se recorre el stack.
-  const sliceLabel = sliceTotal > 1 ? `corte ${currentSliceIndex + 1}/${sliceTotal}` : "corte único";
 
   return (
     <div className="rr" data-theme="reading">
@@ -747,6 +977,23 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </span>
         </div>
         <div className="rr-topbar-right">
+          {/*
+            1×2 solo se ofrece cuando el estudio trae axial: sin axial la mitad
+            inferior quedaría vacía y el control prometería una comparación que
+            no existe.
+          */}
+          <div className="rr-layout-picker" role="group" aria-label="Disposición del visor">
+            <button className={layout === "single" ? "is-active" : ""} onClick={() => setLayout("single")} type="button" title="Un plano a pantalla completa">1×1</button>
+            <button
+              className={layout === "dual" ? "is-active" : ""}
+              disabled={!axialAvailable}
+              onClick={() => setLayout("dual")}
+              title={axialAvailable ? "Sagital y axial simultáneos" : "El estudio no tiene plano axial persistido"}
+              type="button"
+            >
+              1×2
+            </button>
+          </div>
           <span className="rr-status" data-status={review.status ?? "pendiente"}>
             <i aria-hidden />{displayReviewStatus(review.status ?? "pendiente")}
           </span>
@@ -774,104 +1021,80 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           </button>
         </aside>
 
-        <main className="rr-stage">
-          <div className="rr-viewport">
-            {tab === "3D Reconstruction" ? (
-              <SpineReconstructionPreview proxy={threeDProxyViewModel} />
-            ) : (
-              <>
-                {/* DICOM-style corner annotations burned over the image. */}
-                <div className="rr-corner rr-corner-tl">
-                  <strong>{caseLabel}</strong>
-                </div>
-                <div className="rr-corner rr-corner-tr">
-                  <strong>{currentSeries?.name ?? displayPrimaryPlane(activePlano)}</strong>
-                  {sliceLabel}
-                </div>
-                <div className="rr-corner rr-corner-bl">
-                  {displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}
-                  {"\n"}{inferenceModeLabel(inferenceMode)}
-                </div>
-                <div className="rr-corner rr-corner-br">
-                  {quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm/px` : "escala no informada"}
-                  {"\n"}<span className="rr-disclaimer">No apto para diagnóstico clínico</span>
-                </div>
-                <MriSliceViewer
-                  model={viewerModel}
+        <main className="rr-stage" data-layout={layout}>
+          {tab === "3D Reconstruction" ? (
+            <div className="rr-viewport"><SpineReconstructionPreview proxy={threeDProxyViewModel} /></div>
+          ) : (
+            visiblePlanes.map((planeName) => {
+              const data = planeViewportData(planeName);
+              if (!data) return null;
+              const workspace = planeName === "axial" ? axialWorkspace : sagittalWorkspace;
+              return (
+                <PlaneViewport
+                  key={planeName}
+                  plane={planeName}
+                  caseLabel={caseLabel}
+                  seriesName={data.series.name}
+                  model={studyRunToMriViewerModel({
+                    plane: planeName,
+                    planeRunId: workspace.planeRunId ?? undefined,
+                    series: data.series,
+                    masks,
+                    landmarks: displayLandmarks,
+                  })}
+                  modelLabel={displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}
+                  inferenceLabel={inferenceModeLabel(inferenceMode)}
+                  spacingLabel={quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm/px` : "escala no informada"}
+                  slice={data.nav}
+                  active={activePlano === planeName}
+                  onActivate={() => selectSeries(data.series)}
                   selectedLandmarkId={selectedLandmark}
                   onSelectLandmark={setSelectedLandmark}
-                  readonly={!editMode}
-                  addMode={landmarkAddMode}
+                  readonly={!editMode || activePlano !== planeName}
+                  addMode={landmarkAddMode && activePlano === planeName}
                   onMoveLandmark={(landmarkId, point) => {
                     const landmark = displayLandmarks.find((item) => item.id === landmarkId);
                     if (!landmark) return;
                     updateLandmarkDraft({ ...landmark, x: point.x, y: point.y, editable: true });
                   }}
                   onAddLandmark={(point) => {
-                    const landmark: StudyLandmark = {
+                    updateLandmarkDraft({
                       id: `reviewer-landmark-${Date.now()}`,
                       label: `R${displayLandmarks.length + 1}`,
-                      seriesId: currentSeries?.id ?? `${activePlano}-asset`,
-                      sliceIndex: currentSeries?.selectedSlice ?? 1,
+                      seriesId: data.series.id,
+                      sliceIndex: data.nav?.current ?? data.series.selectedSlice ?? 1,
                       x: point.x,
                       y: point.y,
                       editable: true,
-                    };
-                    updateLandmarkDraft(landmark);
+                    });
                   }}
                   onLandmarkAddComplete={() => setLandmarkAddMode(false)}
-                  overlayEnabled
                   onOverlayAvailableChange={handleOverlayAvailableChange}
-                  slice={sliceNavigation}
+                  measureMode={measureMode && activePlano === planeName}
+                  annotations={measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
+                  annotatedIndices={annotatedSlices(annotations, planeName)}
+                  onMeasure={(from, to, frame) => {
+                    const spacing = data.series.inPlaneSpacingMm;
+                    const { value, unit } = measureDistance(from, to, frame, spacing);
+                    addAnnotation({
+                      id: `measure-${Date.now()}`,
+                      scope: "slice",
+                      kind: "measurement",
+                      plane: planeName,
+                      seriesId: data.series.id,
+                      sliceIndex: data.nav?.current ?? data.series.selectedSlice ?? 0,
+                      level: activeLevel ?? undefined,
+                      points: [from, to],
+                      value,
+                      unit,
+                      author: reviewerName,
+                      createdAt: new Date().toISOString(),
+                    });
+                  }}
+                  onMeasureComplete={() => setMeasureMode(false)}
                 />
-              </>
-            )}
-          </div>
-
-          {sliceNavigation && (
-            <div className="rr-slicebar">
-              <button
-                className="rr-slice-step"
-                type="button"
-                onClick={() => sliceNavigation.onChange(Math.max(0, currentSliceIndex - 1))}
-                disabled={currentSliceIndex <= 0}
-                aria-label="Corte anterior"
-              >
-                ‹
-              </button>
-              <input
-                className="rr-slice-range"
-                type="range"
-                min={0}
-                max={sliceTotal - 1}
-                value={currentSliceIndex}
-                onChange={(event) => sliceNavigation.onChange(Number(event.target.value))}
-                aria-label={`Corte ${currentSliceIndex + 1} de ${sliceTotal}`}
-                list="rr-slice-marks"
-              />
-              {/* El corte analizado por la IA queda marcado sobre la barra para poder
-                  volver a él después de recorrer el stack. */}
-              <datalist id="rr-slice-marks"><option value={aiSliceIndex} /></datalist>
-              <button
-                className="rr-slice-step"
-                type="button"
-                onClick={() => sliceNavigation.onChange(Math.min(sliceTotal - 1, currentSliceIndex + 1))}
-                disabled={currentSliceIndex >= sliceTotal - 1}
-                aria-label="Corte siguiente"
-              >
-                ›
-              </button>
-              <span className="rr-slice-index">{currentSliceIndex + 1}/{sliceTotal}</span>
-              <button
-                className="rr-slice-ai"
-                type="button"
-                onClick={() => sliceNavigation.onChange(aiSliceIndex)}
-                disabled={currentSliceIndex === aiSliceIndex}
-                title={`Volver al corte analizado por la IA (${aiSliceIndex + 1})`}
-              >
-                corte IA {aiSliceIndex + 1}
-              </button>
-            </div>
+              );
+            })
           )}
         </main>
 
@@ -919,13 +1142,94 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     {visibleRows.map((item) => (
                       <div className={`rr-measure${item.draftValue !== undefined && item.draftValue !== "" ? " rr-measure-edited" : ""}`} key={item.id}>
                         <span className="rr-measure-label" title={displayMeasurementLabel(item.label)}>{displayMeasurementLabelShort(item.label)}</span>
+                        {/*
+                          `resultRows` normaliza "sin valor del revisor" a "", no a
+                          null, así que `??` no caía al valor de la IA y toda la
+                          columna se veía vacía aunque la medición existiera.
+                        */}
                         <span className="rr-measure-value">
-                          {String(item.reviewerValue ?? item.aiValue ?? "—")}<u>{displayUnit(item.unit)}</u>
+                          {String(firstPresent(item.reviewerValue, item.aiValue) ?? "—")}<u>{displayUnit(item.unit)}</u>
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : <p className="rr-note">Sin mediciones en este nivel.</p>}
+
+                <p className="rr-section-title">Anotaciones</p>
+                {/*
+                  El alcance se elige al escribir, no después: una observación del
+                  estudio y una acotada a un corte se leen igual en una lista plana,
+                  y sin el alcance explícito la anotación pierde el contexto que la
+                  hace interpretable.
+                */}
+                <div className="rr-annot-new">
+                  <div className="rr-annot-scopes" role="group" aria-label="Alcance de la anotación">
+                    <button className={noteScope === "study" ? "is-active" : ""} onClick={() => setNoteScope("study")} type="button">Estudio</button>
+                    <button
+                      className={noteScope === "level" ? "is-active" : ""}
+                      disabled={!activeLevel}
+                      onClick={() => setNoteScope("level")}
+                      title={activeLevel ? `Anclar a ${activeLevel}` : "Seleccioná un nivel en la lista de arriba"}
+                      type="button"
+                    >
+                      {activeLevel ?? "Nivel"}
+                    </button>
+                    <button className={noteScope === "slice" ? "is-active" : ""} onClick={() => setNoteScope("slice")} type="button">
+                      Corte {(sliceByPlane[activePlano] ?? currentSeries?.selectedSlice ?? 0) + 1}
+                    </button>
+                  </div>
+                  <textarea
+                    aria-label="Texto de la anotación"
+                    onChange={(event) => setNoteDraft(event.target.value)}
+                    placeholder="Observación del revisor…"
+                    value={noteDraft}
+                  />
+                  <button
+                    className="rr-ghost"
+                    disabled={!noteDraft.trim()}
+                    onClick={() => {
+                      const sliceIndex = sliceByPlane[activePlano] ?? currentSeries?.selectedSlice ?? 0;
+                      addAnnotation({
+                        id: `note-${Date.now()}`,
+                        scope: noteScope,
+                        kind: "note",
+                        plane: noteScope === "slice" ? activePlano : undefined,
+                        seriesId: noteScope === "slice" ? currentSeries?.id : undefined,
+                        sliceIndex: noteScope === "slice" ? sliceIndex : undefined,
+                        level: noteScope === "level" ? activeLevel ?? undefined : undefined,
+                        text: noteDraft.trim(),
+                        author: reviewerName,
+                        createdAt: new Date().toISOString(),
+                      });
+                      setNoteDraft("");
+                    }}
+                    type="button"
+                  >
+                    Agregar
+                  </button>
+                </div>
+
+                {annotations.length ? (
+                  <ul className="rr-annots">
+                    {annotations.map((item) => (
+                      <li className="rr-annot" key={item.id}>
+                        <span className="rr-annot-scope">{displayAnnotationScope(item)}</span>
+                        <span className="rr-annot-body">
+                          {item.kind === "measurement" && item.value !== undefined && item.unit
+                            ? formatMeasurement(item.value, item.unit)
+                            : item.text}
+                          {item.kind === "measurement" && item.unit === "px" && (
+                            <em> · la corrida no informó escala física</em>
+                          )}
+                        </span>
+                        <button aria-label="Eliminar anotación" className="rr-annot-del" onClick={() => removeAnnotation(item.id)} type="button">×</button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="rr-note">Sin anotaciones del revisor.</p>}
+                {annotationsError
+                  ? <p className="rr-note rr-note-warn">{annotationsError}</p>
+                  : <p className="rr-note">Se guardan junto con la revisión.</p>}
               </>
             )}
 
@@ -1042,6 +1346,20 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           type="button"
         >
           Agregar landmark
+        </button>
+        <span className="rr-toolbar-sep" aria-hidden />
+        {/*
+          Medir no depende del espacio de coordenadas de la IA: es geometría propia
+          del revisor sobre la imagen. Sí depende del corte visible, que es a lo que
+          la medición queda anclada.
+        */}
+        <button
+          className={`rr-tool${measureMode ? " is-active" : ""}`}
+          onClick={() => { setMeasureMode((value) => !value); setLandmarkAddMode(false); }}
+          title="Dos clics sobre la imagen definen una distancia, anclada al corte visible"
+          type="button"
+        >
+          Medir
         </button>
         <span className="rr-toolbar-sep" aria-hidden />
         <button className="rr-tool" disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores"} type="button">

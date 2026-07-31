@@ -47,6 +47,9 @@ const measurementLabels: Record<string, string> = {
   "canal area": "Área del canal espinal",
   "canal width": "Ancho del canal espinal",
   "canal height": "Altura del canal espinal",
+  "disc area": "Área del disco intervertebral",
+  "disc width": "Ancho del disco intervertebral",
+  "disc height": "Altura del disco intervertebral",
   "disc_group area": "Área del grupo de discos intervertebrales",
   "disc_group width": "Ancho del grupo de discos intervertebrales",
   "disc_group height": "Altura del grupo de discos intervertebrales",
@@ -64,6 +67,9 @@ const measurementShortLabels: Record<string, string> = {
   "canal area": "Área canal",
   "canal width": "Ancho canal",
   "canal height": "Altura canal",
+  "disc area": "Área discal",
+  "disc width": "Ancho discal",
+  "disc height": "Altura discal",
   "disc_group area": "Área discal",
   "disc_group width": "Ancho discal",
   "disc_group height": "Altura discal",
@@ -140,6 +146,31 @@ export function displayInferenceMode(value: string | null | undefined) {
 export function displayMeasurementLabel(value: string | null | undefined) {
   if (!value) return "Medición";
   return measurementLabels[value] ?? readableFallback(value);
+}
+
+/**
+ * Clave de medición a partir del id canónico, para corridas persistidas sin
+ * `labelKey`.
+ *
+ * El AI Module arma el id como `{plano}-{clase}-{métrica}`
+ * (`sagittal-vertebra_group-area`), que es la misma información que labelKey
+ * ("vertebra_group area"): no se adivina el nombre clínico, se lo lee del
+ * identificador que ya lo contiene. Si el id no tiene esa forma, o la clave
+ * resultante no está en el diccionario, devuelve undefined y quien llame usa su
+ * rótulo genérico en vez de inventar una estructura anatómica.
+ */
+export function measurementKeyFromId(id: unknown): string | undefined {
+  const parts = String(id ?? "").split("-");
+  if (parts.length < 3) return undefined;
+  const key = `${parts.slice(1, -1).join("-")} ${parts.at(-1)}`;
+  return key in measurementLabels ? key : undefined;
+}
+
+/** Rótulo de una medición según lo que la corrida haya informado. */
+export function resolveMeasurementLabel(item: { label?: unknown; labelKey?: unknown; id?: unknown }) {
+  if (typeof item.label === "string" && item.label.trim()) return item.label.trim();
+  if (typeof item.labelKey === "string" && item.labelKey.trim()) return item.labelKey.trim();
+  return measurementKeyFromId(item.id) ?? "Medición revisable";
 }
 
 export function displayMeasurementLabelShort(value: string | null | undefined) {

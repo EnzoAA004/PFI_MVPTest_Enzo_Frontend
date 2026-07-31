@@ -258,8 +258,8 @@ test("D3 priority clínica local se mapea al contrato backend", () => {
   assert.equal(metadata.priorityToBackend("baja"), "low");
 });
 
-test("E AnalysisTimelineView envía studyMetadata solo en run y no en upload", () => {
-  const source = readFileSync(join(root, "src/components/AnalysisTimelineView.tsx"), "utf8");
+test("E NewAnalysisDrawer envía studyMetadata solo en run y no en upload", () => {
+  const source = readFileSync(join(root, "src/features/worklist/NewAnalysisDrawer.tsx"), "utf8");
   assert.match(source, /studyMetadata:\s*normalizedStudyMetadata/);
   assert.match(source, /uploadAiInput\(file,\s*normalizedCaseId,\s*plane\)/);
   assert.doesNotMatch(source, /uploadAiInput\(file,\s*normalizedCaseId,\s*plane,\s*studyMetadata/);
@@ -272,8 +272,8 @@ test("F upload no incluye studyMetadata", () => {
 });
 
 test("G metadata técnica de IA no incluye subjectRef", () => {
-  const source = readFileSync(join(root, "src/components/AnalysisTimelineView.tsx"), "utf8");
-  const metadataBlock = source.slice(source.indexOf("metadata: {"), source.indexOf("...(axialUploadReady"));
+  const source = readFileSync(join(root, "src/features/worklist/NewAnalysisDrawer.tsx"), "utf8");
+  const metadataBlock = source.slice(source.indexOf("metadata: {"), source.indexOf("...(axialReady"));
   assert.doesNotMatch(metadataBlock, /subjectRef|studyDate|modality|description|reviewPriority/);
 });
 
@@ -289,11 +289,18 @@ test("H updateStudyMetadata usa PUT /api/studies/{caseId}/metadata con JWT", () 
 test("I PUT 409 no modifica UI local antes del 200", () => {
   const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
   const saveFunction = source.slice(source.indexOf("async function saveStudyMetadata"), source.indexOf("function panelVisible"));
-  assert.match(saveFunction, /const detail = await updateStudyMetadata/);
-  assert.match(saveFunction, /setSelectedDetail\(detail\)/);
+  // El detalle ya no se guarda en la vista (lo posee App y viaja por props), asi que
+  // la propiedad se verifica sobre lo que si le queda a la vista: nada de su UI
+  // cambia hasta que el PUT resolvio.
+  assert.match(saveFunction, /await updateStudyMetadata\(caseId, payload\)/);
   assert.match(saveFunction, /catch \(error\)/);
   assert.match(saveFunction, /setMetadataError/);
-  assert.doesNotMatch(saveFunction.slice(saveFunction.indexOf("try {"), saveFunction.indexOf("const detail = await updateStudyMetadata")), /setSelectedDetail|setMetadataDialogOpen\(false\)/);
+  const beforeAwait = saveFunction.slice(saveFunction.indexOf("try {"), saveFunction.indexOf("await updateStudyMetadata"));
+  assert.doesNotMatch(beforeAwait, /setMetadataDialogOpen\(false\)|setSaveMessage/);
+  assert.ok(
+    saveFunction.indexOf("setMetadataDialogOpen(false)") > saveFunction.indexOf("await updateStudyMetadata"),
+    "el dialogo solo se cierra despues del 200",
+  );
 });
 
 test("J PUT 200 refresca estudio y worklist", () => {
@@ -314,7 +321,7 @@ test("K campos null se muestran correctamente", () => {
 });
 
 test("L no se deriva referencia desde caseId, archivo o inputId", () => {
-  const timeline = readFileSync(join(root, "src/components/AnalysisTimelineView.tsx"), "utf8");
+  const timeline = readFileSync(join(root, "src/features/worklist/NewAnalysisDrawer.tsx"), "utf8");
   const helper = readFileSync(join(root, "src/studyMetadata.ts"), "utf8");
   assert.doesNotMatch(helper, /caseId|fileName|inputId/);
   assert.doesNotMatch(timeline, /subjectRef:\s*normalizedCaseId|subjectRef:\s*file|subjectRef:\s*uploads/);

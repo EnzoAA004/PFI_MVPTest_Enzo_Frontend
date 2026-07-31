@@ -6,7 +6,12 @@ import ts from "typescript";
 
 const root = process.cwd();
 
-function loadMeasurementNormalizer() {
+/*
+ * normalizeMeasurement delega el rotulo en clinicalDisplay.resolveMeasurementLabel,
+ * que es ahora el unico traductor. El sandbox transpila studyApi.ts con los imports
+ * borrados, asi que la funcion se inyecta desde el modulo ya cargado.
+ */
+function loadMeasurementNormalizer(resolveMeasurementLabel) {
   const source = readFileSync(join(root, "src/studyApi.ts"), "utf8")
     .replace(/^import .*$/gm, "")
     .replace(/import\.meta\.env/g, "({})")
@@ -21,6 +26,7 @@ function loadMeasurementNormalizer() {
     ApiError: class ApiError extends Error { constructor(message, extra) { super(message); Object.assign(this, extra); } },
     ContractError: class ContractError extends Error { constructor(message, path) { super(message); this.path = path; } },
     priorityFromBackend: (value) => value ?? "media",
+    resolveMeasurementLabel,
   };
   vm.runInNewContext(`${js}\nexports.normalizeMeasurement = normalizeMeasurement;`, sandbox);
   return sandbox.exports;
@@ -35,12 +41,13 @@ function loadClinicalDisplay() {
   vm.runInNewContext(`${js}
 exports.displayMeasurementLabel = displayMeasurementLabel;
 exports.displayMeasurementLevel = displayMeasurementLevel;
-exports.displayUnit = displayUnit;`, sandbox);
+exports.displayUnit = displayUnit;
+exports.resolveMeasurementLabel = resolveMeasurementLabel;`, sandbox);
   return sandbox.exports;
 }
 
-const studyApi = loadMeasurementNormalizer();
 const display = loadClinicalDisplay();
+const studyApi = loadMeasurementNormalizer(display.resolveMeasurementLabel);
 
 let count = 0;
 function test(name, fn) {

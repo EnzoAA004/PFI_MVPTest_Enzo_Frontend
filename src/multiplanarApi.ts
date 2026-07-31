@@ -128,17 +128,12 @@ export async function runMultiplanarAnalysis(payload: MultiplanarRunPayload): Pr
   return parseMultiplanarRunResponse(raw);
 }
 
-export async function getRunReview(multiplanarRunId: string): Promise<RunReviewResponse> {
-  return multiplanarRequest<RunReviewResponse>(`/api/ai/runs/${encodeURIComponent(multiplanarRunId)}/review`);
-}
-
-export async function submitRunReview(multiplanarRunId: string, payload: RunReviewRequest, method: "POST" | "PUT" = "POST"): Promise<RunReviewResponse> {
-  return multiplanarRequest<RunReviewResponse>(`/api/ai/runs/${encodeURIComponent(multiplanarRunId)}/review`, {
-    method,
-    body: JSON.stringify(payload),
-  });
-}
-
+/*
+ * getRunReview/submitRunReview vivían acá con estados accepted/observed/rejected/
+ * edited, en paralelo al pendiente/observado/aceptado/descartado de updateReview.
+ * Eran dos contratos de API para el mismo acto profesional; quedó el de api.ts,
+ * que es el que usa la sala de lectura.
+ */
 export function aiAssetUrl(runId: string, plane: Plane, assetName: AssetName): string {
   return `${API_BASE_URL}/api/ai/assets/${encodeURIComponent(runId)}/${plane}/${assetName}`;
 }
