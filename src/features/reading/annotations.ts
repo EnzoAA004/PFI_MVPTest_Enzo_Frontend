@@ -1,4 +1,4 @@
-import type { LumbarLevel } from "../../clinicalDisplay";
+import type { SpineLevel } from "../../clinicalDisplay";
 
 /**
  * Anotaciones del revisor sobre un estudio.
@@ -24,7 +24,7 @@ export type Annotation = {
   seriesId?: string;
   sliceIndex?: number;
   /** Requerido si scope = "level". */
-  level?: LumbarLevel;
+  level?: SpineLevel;
   /**
    * Geometría en el mismo espacio 0..256 que usan máscaras y landmarks: es una
    * base normalizada al marco de la imagen, no píxeles del PNG, así que sigue
@@ -44,7 +44,7 @@ export type AnnotationContext = {
   plane: "sagittal" | "axial";
   seriesId?: string;
   sliceIndex: number;
-  level?: LumbarLevel | null;
+  level?: SpineLevel | null;
 };
 
 /**

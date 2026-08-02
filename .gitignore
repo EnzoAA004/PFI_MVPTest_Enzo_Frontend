@@ -5,3 +5,6 @@ dist/
 npm-debug.log*
 debug.log
 tsconfig.tsbuildinfo
+
+# IDE
+.idea/

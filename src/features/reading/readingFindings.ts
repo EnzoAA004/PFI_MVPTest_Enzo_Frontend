@@ -1,4 +1,4 @@
-import { LUMBAR_LEVELS, normalizeLevel, type LumbarLevel } from "../../clinicalDisplay";
+import { LUMBAR_LEVELS, THORACIC_LEVELS, normalizeLevel, type SpineLevel } from "../../clinicalDisplay";
 
 /**
  * Groups findings by lumbar level — the axis a radiologist actually reads and
@@ -9,9 +9,12 @@ import { LUMBAR_LEVELS, normalizeLevel, type LumbarLevel } from "../../clinicalD
  * the panel is indistinguishable from a level that was never looked at.
  *
  * Measurements whose level the AI did not report land in an explicit unassigned
- * bucket instead of being spread across levels by guesswork. Today the contract
- * returns `level: null` for every measurement, so that bucket holds all of them
- * until the AI Module starts emitting the level (see the data contract track).
+ * bucket instead of being spread across levels by guesswork.
+ *
+ * Thoracic levels are the exception to the complete list: they are appended above
+ * L1-L2 only when the study reaches them. A lumbar protocol is not read T9-T10, so
+ * an always-present empty row there would claim a level was examined and found
+ * clean when it was never in the field of view.
  */
 
 export type LevelFinding = {
@@ -25,7 +28,7 @@ export type LevelFinding = {
 
 export type LevelGroup = {
   /** Canonical level, or null for the unassigned bucket. */
-  level: LumbarLevel | null;
+  level: SpineLevel | null;
   label: string;
   findings: LevelFinding[];
 };
@@ -41,7 +44,8 @@ export type LevelledInput = {
 };
 
 export function groupFindingsByLevel(items: LevelledInput[]): LevelGroup[] {
-  const byLevel = new Map<LumbarLevel | null, LevelFinding[]>();
+  const byLevel = new Map<SpineLevel | null, LevelFinding[]>();
+  for (const level of THORACIC_LEVELS) byLevel.set(level, []);
   for (const level of LUMBAR_LEVELS) byLevel.set(level, []);
   byLevel.set(null, []);
 
@@ -58,11 +62,19 @@ export function groupFindingsByLevel(items: LevelledInput[]): LevelGroup[] {
     });
   }
 
-  const groups: LevelGroup[] = LUMBAR_LEVELS.map((level) => ({
+  const thoracic: LevelGroup[] = THORACIC_LEVELS.filter((level) => (byLevel.get(level) ?? []).length).map((level) => ({
     level,
     label: level,
     findings: byLevel.get(level) ?? [],
   }));
+  const groups: LevelGroup[] = [
+    ...thoracic,
+    ...LUMBAR_LEVELS.map((level) => ({
+      level,
+      label: level,
+      findings: byLevel.get(level) ?? [],
+    })),
+  ];
 
   const unassigned = byLevel.get(null) ?? [];
   if (unassigned.length) {

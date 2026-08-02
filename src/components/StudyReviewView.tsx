@@ -6,7 +6,7 @@ import { parseThreeD } from "../adapters/multiplanarRunAdapter";
 import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
 import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
 import { BackendApiError, fetchThreeDProxyAsset } from "../multiplanarApi";
-import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type LumbarLevel } from "../clinicalDisplay";
+import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type SpineLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
 import { instanceColor, instanceLabel, parseSegmentation, type Segmentation } from "../features/reading/segmentation";
 import { parseSlicePixelsMeta, type SlicePixelsMeta } from "../features/reading/pixels";
@@ -1066,7 +1066,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    * revisor tiene seleccionado en el panel; si está mirando "sin nivel asignado"
    * no hay nivel al que anclar y esa opción queda deshabilitada.
    */
-  const activeLevel: LumbarLevel | null = activeGroup?.level ?? null;
+  const activeLevel: SpineLevel | null = activeGroup?.level ?? null;
 
   function addAnnotation(annotation: Annotation) {
     setAnnotations((current) => [...current, annotation]);

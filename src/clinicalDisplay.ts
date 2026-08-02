@@ -123,15 +123,37 @@ const landmarkLabels: Record<string, string> = {
  * rendered complete, including levels with no finding.
  */
 export const LUMBAR_LEVELS = ["L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1"] as const;
-export type LumbarLevel = (typeof LUMBAR_LEVELS)[number];
 
-/** Accepts l4_l5 / L4L5 / l4-l5 / "L4 L5" and normalizes to the canonical "L4-L5". */
-export function normalizeLevel(value: string | null | undefined): LumbarLevel | null {
+/**
+ * Thoracic levels a lumbar study reaches when the field of view extends upwards,
+ * ordered downwards so they sit above L1-L2 in the panel.
+ *
+ * They are not part of the fixed spine: a lumbar protocol is read L1-L2 through
+ * L5-S1, and showing an empty T9-T10 row on every study would state that a level
+ * was looked at and found clean when it was never in frame. They appear only when
+ * the study actually has them.
+ */
+export const THORACIC_LEVELS = ["T8-T9", "T9-T10", "T10-T11", "T11-T12", "T12-L1"] as const;
+
+export type LumbarLevel = (typeof LUMBAR_LEVELS)[number];
+export type ThoracicLevel = (typeof THORACIC_LEVELS)[number];
+export type SpineLevel = LumbarLevel | ThoracicLevel;
+
+const KNOWN_LEVELS: readonly string[] = [...THORACIC_LEVELS, ...LUMBAR_LEVELS];
+
+/**
+ * Accepts l4_l5 / L4L5 / l4-l5 / "L4 L5" and normalizes to the canonical "L4-L5".
+ *
+ * Thoracic levels are accepted too. While only the lumbar table was, a level the AI
+ * had correctly identified as T12-L1 landed in the unassigned bucket, which reads as
+ * "the AI could not tell" when in fact it could.
+ */
+export function normalizeLevel(value: string | null | undefined): SpineLevel | null {
   if (!value) return null;
   const compact = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const match = compact.match(/^([LS]\d)([LS]\d)$/);
+  const match = compact.match(/^([LST]\d{1,2})([LST]\d{1,2})$/);
   const candidate = match ? `${match[1]}-${match[2]}` : value.toUpperCase().trim();
-  return (LUMBAR_LEVELS as readonly string[]).includes(candidate) ? (candidate as LumbarLevel) : null;
+  return KNOWN_LEVELS.includes(candidate) ? (candidate as SpineLevel) : null;
 }
 
 const modalityLabels: Record<string, string> = {
