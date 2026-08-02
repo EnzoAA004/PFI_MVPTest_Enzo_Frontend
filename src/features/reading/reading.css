@@ -212,6 +212,95 @@
     flex-direction: column;
   }
 
+  /* Imagen renderizada desde las intensidades originales -------------------- */
+  .mri-pixel-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  /* Segmentación pintada en el cliente ------------------------------------ */
+  .mri-segmentation-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    /* El mapa es de etiquetas: suavizarlo inventaría píxeles de una clase vecina. */
+    image-rendering: pixelated;
+  }
+
+  /* Leyenda por instancia -------------------------------------------------- */
+  .rr-instances {
+    position: absolute;
+    right: var(--sp-3);
+    top: calc(var(--sp-3) * 2 + 22px);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    max-height: 55%;
+    overflow-y: auto;
+    margin: 0;
+    padding: var(--sp-2);
+    list-style: none;
+    background: rgb(0 0 0 / .55);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-chip);
+  }
+
+  .rr-instances label {
+    align-items: center;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    font-size: var(--fs-micro);
+    gap: 5px;
+  }
+
+  .rr-instances i {
+    border-radius: 2px;
+    display: inline-block;
+    height: 9px;
+    width: 9px;
+  }
+
+  /* Contornos por instancia ---------------------------------------------- */
+  .mri-contour-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .mri-contour-layer.is-editable { pointer-events: none; }
+
+  .mri-contour-layer polygon {
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .mri-contour-layer.is-editable polygon { cursor: pointer; }
+
+  .mri-contour-layer polygon.is-selected {
+    stroke-width: 2;
+    stroke-dasharray: 3 2;
+  }
+
+  /* Los vértices son el control: tienen que recibir el puntero aunque la capa no. */
+  .mri-contour-handle {
+    pointer-events: auto;
+    cursor: grab;
+    stroke: #fff;
+    stroke-width: 0.6;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .mri-contour-handle:active { cursor: grabbing; }
+
   /* Mediciones del revisor sobre la imagen ------------------------------- */
   .mri-measure-layer {
     position: absolute;
@@ -277,6 +366,77 @@
 
   .rr-slice-mark.is-ai { background: var(--primary); }
   .rr-slice-mark.is-annotated { background: var(--text); }
+
+  /*
+   * Leyenda de segmentación.
+   *
+   * Estaba oculta mientras sus controles no hacían nada. Ahora que cada clase
+   * tiene su propia máscara y el checkbox la muestra u oculta de verdad, vuelve al
+   * viewport: decidir qué estructura se mira es parte de leer, no una preferencia
+   * que se configure en otra pantalla.
+   *
+   * Va sobre la imagen para no robarle alto al visor, y arriba a la izquierda
+   * bajo el identificador del caso: las esquinas de abajo ya llevan las
+   * anotaciones DICOM (modelo, escala, disclaimer) y se pisaban.
+   */
+  .rr-viewport .segmentation-legend-panel {
+    position: absolute;
+    left: var(--sp-3);
+    top: calc(var(--sp-3) * 2 + 22px);
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--sp-2);
+    background: rgb(0 0 0 / .55);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-chip);
+    font-size: var(--fs-micro);
+    max-width: 190px;
+  }
+
+  .rr-viewport .segmentation-legend-panel > strong {
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-medium);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .rr-viewport .segmentation-legend-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .rr-viewport .segmentation-class-control {
+    align-items: center;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    gap: 6px;
+  }
+
+  .rr-viewport .segmentation-class-control:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: .55;
+  }
+
+  .rr-viewport .mask-swatch {
+    border-radius: 2px;
+    display: inline-block;
+    height: 9px;
+    width: 9px;
+  }
+
+  /* La nota de degradacion si se muestra: explica por que el control no responde. */
+  .rr-viewport .segmentation-legend-panel .viewer-limit-note {
+    display: block;
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    line-height: 1.3;
+    margin: 0;
+  }
 
   /* Anotaciones ---------------------------------------------------------- */
   .rr-annot-new {
@@ -460,7 +620,6 @@
   }
 
   .rr-viewport .viewer-caption,
-  .rr-viewport .segmentation-legend-panel,
   .rr-viewport .viewer-footer,
   .rr-viewport .viewer-limit-note,
   .rr-viewport .panel-hidden-placeholder {

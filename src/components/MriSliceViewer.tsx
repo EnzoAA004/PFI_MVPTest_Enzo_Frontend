@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent, type WheelEvent } from "react";
 import { startAuthenticatedImageLoad, useAuthenticatedImageUrl } from "../authenticatedAssets";
-import { displayLandmarkLabel } from "../clinicalDisplay";
+import { displayLandmarkLabel, displayStructureLabel } from "../clinicalDisplay";
+import { paintSegmentation, type Segmentation } from "../features/reading/segmentation";
+import { applyWindow, defaultWindow, fetchSlicePixels, slicePixelsUrl, type SlicePixelsMeta } from "../features/reading/pixels";
 import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
 
 /**
@@ -79,6 +81,25 @@ type Props = {
   annotations?: MeasurementOverlay[];
   onMeasure?: (from: Point, to: Point, frame: Size) => void;
   onMeasureComplete?: () => void;
+  /**
+   * Corrección del contorno de una instancia por parte del revisor.
+   *
+   * Es lo que convierte a la segmentación en una propuesta: la IA dibuja, el
+   * médico corrige el punto que está mal y lo que queda registrado es su versión.
+   */
+  onMoveMaskPoint?: (maskId: string, pointIndex: number, point: Point) => void;
+  /** Mapa de instancias del corte inferido. El visor lo pinta; el backend no. */
+  segmentation?: Segmentation;
+  /** Índices de instancia que el revisor ocultó. */
+  hiddenInstances?: number[];
+  /**
+   * Metadatos de los cortes crudos. Cuando llegan, la imagen se renderiza desde
+   * las intensidades originales y el W/L pasa a ser ventaneo real en vez de un
+   * filtro de brillo sobre un PNG ya ventaneado.
+   */
+  slicePixels?: SlicePixelsMeta;
+  /** URL del corte inferido, de la que se derivan las de los cortes crudos. */
+  pixelsBaseUrl?: string;
 };
 
 /** Segmento dibujado sobre la imagen, en la base 0..256. */
@@ -140,17 +161,66 @@ function maskFallbackColor(group: string | undefined) {
 export function maskGroups(masks: MriViewerMask[]) {
   const groups = new Map<string, { id: string; label: string; color: string; technicalName: string }>();
   masks.forEach((mask) => {
-    const label = mask.groupName ?? mask.labelKey;
+    // El nombre técnico se traduce igual que en la leyenda de instancias. Sin esto
+    // el axial mostraba `raw_50`, `raw_100`… porque esas clases no traen `groupName`
+    // y el identificador crudo del artifact llegaba tal cual a la pantalla clínica.
+    const label = displayStructureLabel(mask.groupName ?? mask.labelKey);
     if (!groups.has(label)) {
       groups.set(label, {
         id: mask.id,
         label,
-        color: mask.color ?? maskFallbackColor(mask.groupName),
+        // `??` no cae con "": una máscara canónica sin color declarado llegaba con
+        // cadena vacía y el cuadradito de la leyenda quedaba sin pintar.
+        color: mask.color || maskFallbackColor(mask.groupName),
         technicalName: mask.labelKey,
       });
     }
   });
   return Array.from(groups.values());
+}
+
+/**
+ * URL de la máscara de una clase, derivada de la del corte inferido.
+ *
+ * Vive en el mismo directorio de assets de la corrida, así que se reemplaza el
+ * último segmento y nada más: no se arma una ruta nueva, de modo que el origen y
+ * el prefijo `/api/...` que exige la política de origen quedan intactos.
+ */
+function classMaskUrl(inputUrl: string | undefined, className: string) {
+  if (!inputUrl) return undefined;
+  const separator = inputUrl.lastIndexOf("/");
+  if (separator < 0) return undefined;
+  if (!/^[a-z][a-z0-9_]{0,31}$/.test(className)) return undefined;
+  return `${inputUrl.slice(0, separator + 1)}mask-${className}.png`;
+}
+
+/**
+ * Carga las máscaras por clase y dice si están todas disponibles.
+ *
+ * El control por clase solo se habilita cuando lo están: una corrida anterior a
+ * este cambio no las tiene, y ofrecer un checkbox que no puede ocultar nada sería
+ * repetir el problema que este cambio vino a resolver.
+ */
+function useClassMaskLayers(inputUrl: string | undefined, classNames: string[]) {
+  const [layers, setLayers] = useState<Record<string, string>>({});
+  const key = classNames.join("|");
+
+  useEffect(() => {
+    setLayers({});
+    if (!inputUrl || !classNames.length) return;
+    const cleanups = classNames.map((className) => {
+      const url = classMaskUrl(inputUrl, className);
+      if (!url) return () => {};
+      return startAuthenticatedImageLoad(url, (result) => {
+        if (result.state !== "loaded" || !result.url) return;
+        setLayers((current) => (current[className] ? current : { ...current, [className]: result.url as string }));
+      });
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
+    // `classNames` se reconstruye en cada render; `key` es su contenido.
+  }, [inputUrl, key]);
+
+  return { layers, ready: classNames.length > 0 && classNames.every((name) => Boolean(layers[name])) };
 }
 
 function assetStorageMessage(hasUrl: boolean) {
@@ -174,6 +244,11 @@ export function MriSliceViewer({
   annotations = [],
   onMeasure,
   onMeasureComplete,
+  onMoveMaskPoint,
+  segmentation,
+  hiddenInstances,
+  slicePixels,
+  pixelsBaseUrl,
 }: Props) {
   /*
    * Al recorrer la serie cada corte muestra su propia previsualización; solo el
@@ -199,6 +274,63 @@ export function MriSliceViewer({
   // Primer punto del segmento en curso. Vive en estado y no en ref porque la
   // marca provisional tiene que dibujarse apenas se hace el primer clic.
   const [measureAnchor, setMeasureAnchor] = useState<Point | null>(null);
+  /*
+   * La segmentación se pinta acá, no llega pintada. `putImageData` escribe los
+   * píxeles exactos del mapa de instancias: no hay interpolación ni contorno
+   * reconstruido, así que lo que se ve es lo que el modelo produjo.
+   */
+  /*
+   * Ventana real (centro/ancho) sobre las intensidades originales. Arranca cubriendo
+   * todo el rango de la serie, que es lo único que el dato respalda sin suponer un
+   * preset de tejido que esta corrida no informa.
+   */
+  const [windowLevel, setWindowLevel] = useState<{ center: number; width: number } | null>(null);
+  useEffect(() => {
+    setWindowLevel(slicePixels ? defaultWindow(slicePixels) : null);
+  }, [slicePixels]);
+
+  const pixelCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [pixelsReady, setPixelsReady] = useState(false);
+  const pixelsUrl = slicePixels && pixelsBaseUrl
+    ? slicePixelsUrl(pixelsBaseUrl, slice ? slice.current : 0)
+    : undefined;
+
+  useEffect(() => {
+    setPixelsReady(false);
+    if (!pixelsUrl || !slicePixels || !windowLevel) return;
+    const controller = new AbortController();
+    void fetchSlicePixels(pixelsUrl, controller.signal)
+      .then((pixels) => {
+        if (controller.signal.aborted) return;
+        const canvas = pixelCanvasRef.current;
+        const context = canvas?.getContext("2d");
+        if (!canvas || !context) return;
+        canvas.width = slicePixels.width;
+        canvas.height = slicePixels.height;
+        context.putImageData(applyWindow(pixels, slicePixels.width, slicePixels.height, windowLevel.center, windowLevel.width), 0, 0);
+        setPixelsReady(true);
+      })
+      .catch(() => {
+        // Se cae al PNG: es peor dejar el visor vacío que mostrar la imagen ya
+        // ventaneada por el backend.
+        if (!controller.signal.aborted) setPixelsReady(false);
+      });
+    return () => controller.abort();
+  }, [pixelsUrl, slicePixels, windowLevel?.center, windowLevel?.width]);
+
+  const segmentationCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hiddenKey = (hiddenInstances ?? []).join(",");
+  useEffect(() => {
+    const canvas = segmentationCanvasRef.current;
+    if (!canvas || !segmentation) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    canvas.width = segmentation.width;
+    canvas.height = segmentation.height;
+    context.putImageData(paintSegmentation(segmentation, new Set(hiddenInstances ?? [])), 0, 0);
+    // `hiddenInstances` se reconstruye en cada render; `hiddenKey` es su contenido.
+  }, [segmentation, hiddenKey]);
+
   const lastLoadedUrl = useRef<string | undefined>(undefined);
   if (inputAsset.state === "loaded" && inputAsset.url) lastLoadedUrl.current = inputAsset.url;
   const displayedInputUrl = inputAsset.state === "loading" ? lastLoadedUrl.current : inputAsset.url;
@@ -239,15 +371,36 @@ export function MriSliceViewer({
   const [overlayAlpha, setOverlayAlpha] = useState(overlayOpacity);
   const [landmarksVisible, setLandmarksVisible] = useState(initialLandmarksVisible);
   const frameRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ x: number; y: number; brightness: number; contrast: number; panX: number; panY: number } | null>(null);
+  const dragRef = useRef<{ x: number; y: number; brightness: number; contrast: number; panX: number; panY: number; window?: { center: number; width: number } } | null>(null);
   const landmarkDragRef = useRef<string | null>(null);
+  /* Instancia y vértice que se está arrastrando. */
+  const contourDragRef = useRef<{ maskId: string; index: number } | null>(null);
+  const [selectedContourId, setSelectedContourId] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const landmarks = model.landmarks;
   const groups = useMemo(() => maskGroups(model.masks), [model.masks]);
+  const [hiddenClasses, setHiddenClasses] = useState<string[]>([]);
+  const classNames = useMemo(() => groups.map((group) => group.technicalName), [groups]);
+  const classMasks = useClassMaskLayers(onAiSlice ? inputUrl : undefined, classNames);
+  /*
+   * Instancias con contorno propio que corresponden al corte visible. Solo el corte
+   * que la IA analizo tiene segmentacion, asi que en los demas no se dibuja nada:
+   * un contorno sobre otro corte marcaria anatomia que no es la que se midio.
+   */
+  const contours = useMemo(
+    () => (onAiSlice ? model.masks.filter((mask) => (mask.points?.length ?? 0) >= 3 && !hiddenClasses.includes(mask.labelKey)) : []),
+    [model.masks, onAiSlice, hiddenClasses],
+  );
   const imageLoaded = inputState === "loaded";
   const overlayLoaded = overlayState === "loaded";
   const storageMessage = assetStorageMessage(Boolean(inputUrl));
   const canEditLandmarks = Boolean(imageLoaded && model.coordinateSpace && !readonly);
+  /*
+   * El contorno se corrige sobre el corte que la IA analizó: es el único donde la
+   * segmentación existe, y mover un punto sobre otro corte estaría editando una
+   * figura que no corresponde a esa imagen.
+   */
+  const canEditContours = Boolean(imageLoaded && !readonly && onAiSlice && onMoveMaskPoint);
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
   const filter = `brightness(${brightness}%) contrast(${contrast}%)`;
   const seriesName = model.plane === "sagittal" ? "Sagital" : "Axial";
@@ -370,12 +523,33 @@ export function MriSliceViewer({
       y: event.clientY,
       brightness,
       contrast,
+      // La ventana al empezar: el arrastre es relativo a ella, no acumulativo.
+      window: windowLevel ?? undefined,
       panX: pan.x,
       panY: pan.y,
     };
   }
 
+  /*
+   * Arrastrar en modo W/L mueve centro y ancho de la ventana. Con datos crudos eso
+   * es ventaneo: horizontal ensancha o angosta, vertical sube o baja el centro,
+   * que es el gesto de cualquier PACS. Sin datos crudos sigue ajustando brillo y
+   * contraste sobre el PNG, que es lo único que esa corrida permite.
+   */
+  function dragWindowLevel(dx: number, dy: number, base: { center: number; width: number }) {
+    const span = slicePixels ? Math.max(1, slicePixels.max - slicePixels.min) : 1;
+    setWindowLevel({
+      center: base.center + dy * span * 0.002,
+      width: Math.max(1, base.width + dx * span * 0.002),
+    });
+  }
+
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (contourDragRef.current && canEditContours) {
+      const point = pointFromEvent(event);
+      if (point) onMoveMaskPoint?.(contourDragRef.current.maskId, contourDragRef.current.index, point);
+      return;
+    }
     if (landmarkDragRef.current && canEditLandmarks) {
       const point = pointFromEvent(event);
       if (point) onMoveLandmark?.(landmarkDragRef.current, point);
@@ -386,6 +560,10 @@ export function MriSliceViewer({
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
     if (mode === "window") {
+      if (pixelsReady && drag.window) {
+        dragWindowLevel(dx, dy, drag.window);
+        return;
+      }
       setSelectedPresetId(customPreset.id);
       setContrast(clamp(drag.contrast + dx * 0.65, 45, 220));
       setBrightness(clamp(drag.brightness - dy * 0.65, 45, 180));
@@ -397,6 +575,7 @@ export function MriSliceViewer({
   function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
     dragRef.current = null;
     landmarkDragRef.current = null;
+    contourDragRef.current = null;
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
@@ -495,14 +674,29 @@ export function MriSliceViewer({
         <strong>Leyenda de segmentación</strong>
         <div className="segmentation-legend-list">
           {groups.length ? groups.map((group) => (
-            <label className="segmentation-class-control" key={group.id} title={`Control por clase pendiente de assets separados. Clase tecnica: ${group.technicalName}`}>
-              <input checked disabled type="checkbox" />
+            <label
+              className="segmentation-class-control"
+              key={group.id}
+              title={classMasks.ready
+                ? `Mostrar u ocultar ${group.label}. Clase técnica: ${group.technicalName}`
+                : `Esta corrida no tiene máscara separada para esta clase. Clase técnica: ${group.technicalName}`}
+            >
+              <input
+                checked={!hiddenClasses.includes(group.technicalName)}
+                disabled={!classMasks.ready || !overlayVisible}
+                onChange={(event) => setHiddenClasses((current) => (event.target.checked
+                  ? current.filter((name) => name !== group.technicalName)
+                  : [...current, group.technicalName]))}
+                type="checkbox"
+              />
               <span className="mask-swatch" style={{ background: group.color }} />
               <span>{group.label}</span>
             </label>
           )) : <span className="muted">Máscara por clase no informada.</span>}
         </div>
-        <p className="viewer-limit-note">El overlay actual es compuesto. Ocultar clases individuales requiere assets separados por clase; por ahora el switch global de segmentación es el control funcional.</p>
+        {!classMasks.ready && groups.length > 0 && (
+          <p className="viewer-limit-note">Esta corrida guardó la segmentación como una sola imagen compuesta, así que solo se puede mostrar u ocultar entera. Las corridas nuevas guardan una máscara por clase.</p>
+        )}
       </div>
 
       <p className="viewer-limit-note">W/L es un filtro aproximado de brillo/contraste sobre un PNG de 8 bits. El ventaneo DICOM y la navegacion multicorte requieren AI-009.</p>
@@ -532,6 +726,12 @@ export function MriSliceViewer({
           </div>
         ) : inputState === "loaded" && displayedInputUrl ? (
           <div className="asset-transform" style={{ height: `${imageSize.height}px`, transform, width: `${imageSize.width}px` }}>
+            {/*
+              Cuando llegan las intensidades originales, la imagen se dibuja acá y el
+              <img> queda solo como marco: sigue definiendo el tamaño natural sobre el
+              que se posicionan landmarks y mediciones, pero no se ve.
+            */}
+            {pixelsReady && <canvas className="mri-pixel-canvas" ref={pixelCanvasRef} />}
             <img
               ref={imageRef}
               alt={`${seriesName} recurso de entrada`}
@@ -539,17 +739,23 @@ export function MriSliceViewer({
               draggable={false}
               onLoad={(event) => setImageSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
               src={displayedInputUrl}
-              style={{ filter }}
+              style={{ filter: pixelsReady ? undefined : filter, opacity: pixelsReady ? 0 : 1 }}
             />
-            {overlayVisible && overlayLoaded && overlayAsset.url && (
-              <img alt={`${seriesName} recurso de superposicion IA`} className="mri-overlay-img" draggable={false} src={overlayAsset.url} style={{ opacity: overlayAlpha, transform: "translateZ(0)" }} />
-            )}
             {/*
-              Las mediciones se dibujan en un SVG con viewBox 0 0 256 256, la misma
-              base normalizada en la que se guardan sus puntos: así el trazo sigue
-              sobre la misma anatomía aunque el corte se muestre a otra resolución
-              o con otro zoom, sin recalcular nada.
+              Una sola capa: el mapa de instancias pintado en el cliente.
+
+              Antes se apilaban un PNG por clase servido por el backend y encima un
+              contorno vectorial reconstruido. Eran dos representaciones de lo mismo,
+              y la vectorial era una aproximación: unía puntos ordenados por ángulo,
+              lo que sobre una forma no compacta dibuja una figura que la IA nunca
+              segmentó. Cuando el mapa no viaja —corridas anteriores a este cambio—
+              se cae al overlay compuesto, que es lo que esa corrida produjo.
             */}
+            {overlayVisible && segmentation && onAiSlice ? (
+              <canvas className="mri-segmentation-canvas" ref={segmentationCanvasRef} style={{ opacity: overlayAlpha }} />
+            ) : overlayVisible && onAiSlice && overlayLoaded && overlayAsset.url ? (
+              <img alt={`${seriesName} recurso de superposicion IA`} className="mri-overlay-img" draggable={false} src={overlayAsset.url} style={{ opacity: overlayAlpha, transform: "translateZ(0)" }} />
+            ) : null}
             {(annotations.length > 0 || measureAnchor) && (
               <svg className="mri-measure-layer" viewBox="0 0 256 256" preserveAspectRatio="none" aria-hidden>
                 {annotations.map((item) => (

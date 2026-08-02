@@ -6,8 +6,10 @@ import { parseThreeD } from "../adapters/multiplanarRunAdapter";
 import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
 import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
 import { BackendApiError, fetchThreeDProxyAsset } from "../multiplanarApi";
-import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayTechnicalReadiness, displayUnit, type LumbarLevel } from "../clinicalDisplay";
+import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type LumbarLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
+import { instanceColor, instanceLabel, parseSegmentation, type Segmentation } from "../features/reading/segmentation";
+import { parseSlicePixelsMeta, type SlicePixelsMeta } from "../features/reading/pixels";
 import { annotatedSlices, displayAnnotationScope, formatMeasurement, isAnnotationVisible, measureDistance, type Annotation, type AnnotationScope } from "../features/reading/annotations";
 import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
@@ -192,6 +194,12 @@ type PlaneViewportProps = {
   annotations: MeasurementOverlay[];
   onMeasure: (from: { x: number; y: number }, to: { x: number; y: number }, frame: { width: number; height: number }) => void;
   onMeasureComplete: () => void;
+  onMoveMaskPoint: (maskId: string, pointIndex: number, point: { x: number; y: number }) => void;
+  segmentation?: Segmentation;
+  slicePixels?: SlicePixelsMeta;
+  pixelsBaseUrl?: string;
+  hiddenInstances: number[];
+  onToggleInstance: (index: number) => void;
   /** Cortes de este plano con anotaciones, para marcarlos en la barra de stack. */
   annotatedIndices?: Set<number>;
 };
@@ -207,7 +215,8 @@ function PlaneViewport({
   plane, caseLabel, seriesName, model, modelLabel, inferenceLabel, spacingLabel,
   slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
-  measureMode, annotations, onMeasure, onMeasureComplete, annotatedIndices,
+  measureMode, annotations, onMeasure, onMeasureComplete, annotatedIndices, onMoveMaskPoint,
+  segmentation, slicePixels, pixelsBaseUrl, hiddenInstances, onToggleInstance,
 }: PlaneViewportProps) {
   const sliceLabel = slice ? `corte ${slice.current + 1}/${slice.total}` : "corte único";
   return (
@@ -239,7 +248,34 @@ function PlaneViewport({
           annotations={annotations}
           onMeasure={onMeasure}
           onMeasureComplete={onMeasureComplete}
+          onMoveMaskPoint={onMoveMaskPoint}
+          segmentation={segmentation}
+          hiddenInstances={hiddenInstances}
+          slicePixels={slicePixels}
+          pixelsBaseUrl={pixelsBaseUrl}
         />
+        {/*
+          Leyenda por instancia: cada vértebra y cada disco con su color y su nivel.
+          Es lo que permite ver a qué estructura pertenece cada mancha, y apagar una
+          sin perder las demás.
+        */}
+        {segmentation && segmentation.instances.length > 0 && (
+          <ul className="rr-instances" aria-label={`Estructuras segmentadas en ${plane}`}>
+            {segmentation.instances.map((instance) => (
+              <li key={instance.id}>
+                <label>
+                  <input
+                    checked={!hiddenInstances.includes(instance.index)}
+                    onChange={() => onToggleInstance(instance.index)}
+                    type="checkbox"
+                  />
+                  <i style={{ background: instanceColor(instance.index) }} />
+                  <span>{instanceLabel(instance, displayStructureLabel)}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {slice && (
         <div className="rr-slicebar">
@@ -420,6 +456,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [landmarkDrafts, setLandmarkDrafts] = useState<Record<string, StudyLandmark>>({});
   const [landmarkAddMode, setLandmarkAddMode] = useState(false);
   const [measureMode, setMeasureMode] = useState(false);
+  /*
+   * Contornos corregidos por el revisor, por id de máscara.
+   *
+   * Es un borrador: la máscara de la IA no se pisa hasta que el revisor guarda.
+   * Mientras tanto conviven la propuesta y la corrección, que es lo que permite
+   * descartarla con "Deshacer" sin haber perdido el original.
+   */
+  const [contourDrafts, setContourDrafts] = useState<Record<string, { x: number; y: number }[]>>({});
+  /* Instancias que el revisor ocultó, por plano. */
+  const [hiddenInstances, setHiddenInstances] = useState<Record<string, number[]>>({});
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteScope, setNoteScope] = useState<AnnotationScope>("study");
@@ -537,7 +583,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const sourceMeasurements = persistedMeasurements.length ? persistedMeasurements : selectedDetail?.measurements?.length ? selectedDetail.measurements : pipelineMeasurements.length ? pipelineMeasurements : measurements;
   const review = useMemo(() => displayRun.review ?? { status: run.reviewStatus ?? "pendiente" as ReviewStatus }, [displayRun.review, run.reviewStatus]);
   const seriesList = persistedSeries.length ? persistedSeries : demoMode ? hasPipelineVisualContract ? run.series ?? fallbackSeries : Array.isArray(studyReview?.series) && studyReview.series.length ? studyReview.series : fallbackSeries : [];
-  const masks = demoMode ? hasPipelineVisualContract && Array.isArray(run.masks) ? run.masks : Array.isArray(studyReview?.masks) && studyReview.masks.length ? studyReview.masks : fallbackMasks : Array.isArray(run.masks) ? run.masks : [];
   const landmarks: StudyLandmark[] = demoMode ? hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [] : Array.isArray(run.landmarks) ? run.landmarks : [];
   const displayLandmarks = useMemo(() => {
     const byId = new Map<string, StudyLandmark>();
@@ -552,6 +597,89 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   };
   const currentSeries = seriesList.find((item: any) => item.id === selectedSeriesId) ?? seriesList.find((item: any) => item.plane === tab.toLowerCase()) ?? seriesList[0];
   const activePlano = currentSeries?.plane === "axial" ? "axial" : "sagittal";
+
+  /*
+   * Las máscaras de una corrida persistida viven en el plano canónico, no en el
+   * nivel legacy de `run`: leer solo ahí dejaba la leyenda de segmentación vacía en
+   * la sala de lectura aunque el estudio tuviera sus tres clases.
+   */
+  const canonicalMasksFor = (plane: "sagittal" | "axial"): StudyMask[] => {
+    const canonicalPlane = asRecord(asRecord(displayRun.canonicalRun?.planes)?.[plane]);
+    const value = canonicalPlane?.masks;
+    if (!Array.isArray(value)) return [];
+    // El plano canónico identifica la clase con `classKey`, no con `label` ni
+    // `className`, que es lo que busca el view model: sin traducirlo la leyenda
+    // mostraba el id del asset ("mask-sagittal-vertebra-group") como nombre de la
+    // estructura, y ese id no sirve para resolver la máscara de la clase.
+    return value.flatMap((raw) => {
+      const mask = asRecord(raw);
+      const classKey = typeof mask?.classKey === "string" ? mask.classKey : undefined;
+      if (!mask || !classKey) return [];
+      // El contorno viaja en `geometry.points`, en la base del coordinateSpace.
+      const geometry = asRecord(mask.geometry);
+      const rawPoints = Array.isArray(geometry?.points) ? geometry.points : [];
+      const points = rawPoints.flatMap((entry) => {
+        const point = asRecord(entry);
+        return typeof point?.x === "number" && typeof point?.y === "number" ? [{ x: point.x, y: point.y }] : [];
+      });
+      return [{
+        id: String(mask.id ?? classKey),
+        label: classKey,
+        className: classKey,
+        color: typeof mask.color === "string" ? mask.color : "",
+        level: typeof mask.level === "string" ? mask.level : undefined,
+        confidence: typeof mask.confidence === "number" ? mask.confidence : undefined,
+        enabled: mask.enabled !== false,
+        contours: points.length >= 3
+          ? [{ seriesId: String(mask.id ?? classKey), sliceIndex: Number(geometry?.sliceIndex ?? 0), points }]
+          : undefined,
+      } satisfies StudyMask];
+    });
+  };
+  const masks = demoMode
+    ? hasPipelineVisualContract && Array.isArray(run.masks) ? run.masks : Array.isArray(studyReview?.masks) && studyReview.masks.length ? studyReview.masks : fallbackMasks
+    : Array.isArray(run.masks) && run.masks.length ? run.masks : canonicalMasksFor(activePlano);
+
+  /**
+   * Máscaras de un plano, con la corrección del revisor aplicada.
+   *
+   * Se resuelven por plano y no una sola vez: en 1×2 los dos viewports se montan a
+   * la vez, y pasarles las del plano activo hacía que el sagital dibujara la
+   * segmentación del axial sobre su propia imagen.
+   */
+  /** Mapa de instancias de un plano, si la corrida lo publicó. */
+  function segmentationForPlane(plane: "sagittal" | "axial"): Segmentation | undefined {
+    const canonicalPlane = asRecord(asRecord(displayRun.canonicalRun?.planes)?.[plane]);
+    return parseSegmentation(canonicalPlane?.segmentation);
+  }
+
+  /** Metadatos de los cortes crudos de un plano, si la corrida los publicó. */
+  function slicePixelsForPlane(plane: "sagittal" | "axial"): SlicePixelsMeta | undefined {
+    const canonicalPlane = asRecord(asRecord(displayRun.canonicalRun?.planes)?.[plane]);
+    return parseSlicePixelsMeta(asRecord(canonicalPlane?.quality)?.slicePixels);
+  }
+
+  function masksForPlane(plane: "sagittal" | "axial"): StudyMask[] {
+    const source = plane === activePlano ? masks : canonicalMasksFor(plane);
+    return source.map((mask: StudyMask) => {
+      const draft = contourDrafts[mask.id];
+      if (!draft || !mask.contours?.length) return mask;
+      return { ...mask, contours: [{ ...mask.contours[0], points: draft }] };
+    });
+  }
+
+  const displayMasks = masksForPlane(activePlano);
+
+  function moveMaskPoint(maskId: string, pointIndex: number, point: { x: number; y: number }) {
+    setContourDrafts((current) => {
+      const base = current[maskId] ?? masks.find((mask: StudyMask) => mask.id === maskId)?.contours?.[0]?.points;
+      if (!base || pointIndex < 0 || pointIndex >= base.length) return current;
+      const next = base.slice();
+      next[pointIndex] = point;
+      return { ...current, [maskId]: next };
+    });
+  }
+
   const activeWorkspace = activePlano === "axial" ? axialWorkspace : sagittalWorkspace;
   const overlayAvailable = overlayAvailableByPlano[activePlano] === true;
   const activeCoordinateSpace = coordinateSpaceFrom(currentSeries, displayLandmarks);
@@ -610,7 +738,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       plane: activePlano,
       planeRunId: activeWorkspace.planeRunId ?? undefined,
       series: currentSeries ?? undefined,
-      masks,
+      masks: displayMasks,
       landmarks: displayLandmarks,
     }),
     [activePlano, activeWorkspace.planeRunId, currentSeries, masks, displayLandmarks],
@@ -666,7 +794,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const hasMeasurementDrafts = Object.keys(reviewerValues).some((key) => reviewerValues[key] !== "");
   const reviewerDraftCount = Object.keys(reviewerValues).filter((key) => reviewerValues[key] !== "").length;
   const landmarkDraftCount = Object.keys(landmarkDrafts).length;
-  const hasReviewerDrafts = hasMeasurementDrafts || landmarkDraftCount > 0;
+  const contourDraftCount = Object.keys(contourDrafts).length;
+  const hasReviewerDrafts = hasMeasurementDrafts || landmarkDraftCount > 0 || contourDraftCount > 0;
   const relevantChanges = resultRows.filter((row) => row.severity === "medium" || row.severity === "high").length;
   const outlierCount = resultRows.filter((row) => row.outlier).length;
   const confirmDisabled = saving || reviewStatus === "pendiente";
@@ -701,6 +830,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   function resetReviewerDrafts() {
     setReviewerValues({});
     setLandmarkDrafts({});
+    setContourDrafts({});
     setLandmarkAddMode(false);
   }
 
@@ -1039,7 +1169,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     plane: planeName,
                     planeRunId: workspace.planeRunId ?? undefined,
                     series: data.series,
-                    masks,
+                    masks: masksForPlane(planeName),
                     landmarks: displayLandmarks,
                   })}
                   modelLabel={displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}
@@ -1092,6 +1222,18 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     });
                   }}
                   onMeasureComplete={() => setMeasureMode(false)}
+                  onMoveMaskPoint={moveMaskPoint}
+                  segmentation={segmentationForPlane(planeName)}
+                  slicePixels={slicePixelsForPlane(planeName)}
+                  pixelsBaseUrl={data.series.imageUrl ?? undefined}
+                  hiddenInstances={hiddenInstances[planeName] ?? []}
+                  onToggleInstance={(index) => setHiddenInstances((current) => {
+                    const list = current[planeName] ?? [];
+                    return {
+                      ...current,
+                      [planeName]: list.includes(index) ? list.filter((item) => item !== index) : [...list, index],
+                    };
+                  })}
                 />
               );
             })
@@ -1370,7 +1512,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         </button>
 
         <span className="rr-toolbar-end">
-          {hasReviewerDrafts ? <span>{reviewerDraftCount} med · {landmarkDraftCount} lm en borrador</span> : null}
+          {hasReviewerDrafts ? <span>{reviewerDraftCount} med · {landmarkDraftCount} lm · {contourDraftCount} contornos en borrador</span> : null}
           <span className="rr-kbd">?</span>
           <span>Revisión humana requerida</span>
         </span>

@@ -211,6 +211,8 @@ export type StudyMask = {
   label: string;
   className: string;
   color: string;
+  /** Nivel lumbar de la instancia, cuando la corrida lo pudo determinar. */
+  level?: string;
   confidence?: number;
   editable?: boolean;
   enabled?: boolean;

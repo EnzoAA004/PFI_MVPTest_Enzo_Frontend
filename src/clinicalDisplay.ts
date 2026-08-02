@@ -47,6 +47,10 @@ const measurementLabels: Record<string, string> = {
   "canal area": "Área del canal espinal",
   "canal width": "Ancho del canal espinal",
   "canal height": "Altura del canal espinal",
+  "canal ap": "Diámetro anteroposterior del canal",
+  "vertebra area": "Área del cuerpo vertebral",
+  "vertebra width": "Ancho del cuerpo vertebral",
+  "vertebra height": "Altura del cuerpo vertebral",
   "disc area": "Área del disco intervertebral",
   "disc width": "Ancho del disco intervertebral",
   "disc height": "Altura del disco intervertebral",
@@ -67,6 +71,10 @@ const measurementShortLabels: Record<string, string> = {
   "canal area": "Área canal",
   "canal width": "Ancho canal",
   "canal height": "Altura canal",
+  "canal ap": "Canal AP",
+  "vertebra area": "Área vertebral",
+  "vertebra width": "Ancho vertebral",
+  "vertebra height": "Altura vertebral",
   "disc area": "Área discal",
   "disc width": "Ancho discal",
   "disc height": "Altura discal",
@@ -77,7 +85,27 @@ const measurementShortLabels: Record<string, string> = {
 
 /** Segmentation class keys emitted by the sagittal model. */
 const structureLabels: Record<string, string> = {
+  /*
+   * Clases del modelo axial (dataset Al-Kafri).
+   *
+   * Las claves son los valores de gris de la máscara original, no nombres: así los
+   * declara el manifest del artefacto, y el AI Module los deja tal cual para que
+   * código y artefacto digan lo mismo sobre lo que se entrenó. La traducción
+   * clínica es cosa de esta capa, igual que con las clases del sagital.
+   */
+  raw_50: "Disco intervertebral",
+  raw_100: "Elemento posterior",
+  raw_150: "Saco tecal",
+  raw_200: "Área anteroposterior",
   vertebra_group: "Grupo vertebral",
+  /*
+   * Estructuras que el AI Module separa dentro de `vertebra_group`. La clase del
+   * modelo no las distingue, pero en un sagital el cuerpo y el arco son piezas
+   * distintas de la misma vértebra y nombrarlas por igual escondía esa diferencia.
+   */
+  vertebra: "Cuerpo vertebral",
+  posterior_element: "Arco posterior",
+  disc: "Disco",
   canal: "Canal espinal",
   disc_group: "Grupo discal",
   background: "Fondo",

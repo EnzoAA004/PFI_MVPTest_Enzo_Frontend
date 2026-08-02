@@ -45,6 +45,16 @@ export type MriViewerMask = {
   color?: string;
   visible?: boolean;
   opacity?: number;
+  /** Nivel lumbar de la instancia, cuando la corrida lo pudo determinar. */
+  level?: string;
+  /**
+   * Contorno de la instancia en la base 0..256 del `coordinateSpace`.
+   *
+   * Es lo que convierte a la máscara en un dato que el revisor puede corregir:
+   * mientras el único transporte fue el PNG, podía ver que la IA se equivocó y no
+   * tenía cómo decirlo.
+   */
+  points?: { x: number; y: number }[];
 };
 
 export type MriViewerLandmark = {
@@ -201,6 +211,8 @@ function studyMasksToViewer(masks: StudyMask[]): MriViewerMask[] {
     labelKey: mask.label || mask.className || mask.id,
     groupName: groupNameForLabel(mask.label || mask.className),
     color: mask.color,
+    level: mask.level,
+    points: mask.contours?.[0]?.points,
   }));
 }
 
