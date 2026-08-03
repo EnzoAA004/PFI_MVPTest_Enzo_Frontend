@@ -48,6 +48,8 @@ const measurementLabels: Record<string, string> = {
   "canal width": "Ancho del canal espinal",
   "canal height": "Altura del canal espinal",
   "canal ap": "Diámetro anteroposterior del canal",
+  "segmental angle": "Ángulo segmentario",
+  "listhesis": "Desplazamiento vertebral",
   "vertebra area": "Área del cuerpo vertebral",
   "vertebra width": "Ancho del cuerpo vertebral",
   "vertebra height": "Altura del cuerpo vertebral",
@@ -72,6 +74,8 @@ const measurementShortLabels: Record<string, string> = {
   "canal width": "Ancho canal",
   "canal height": "Altura canal",
   "canal ap": "Canal AP",
+  "segmental angle": "Ángulo",
+  "listhesis": "Listesis",
   "vertebra area": "Área vertebral",
   "vertebra width": "Ancho vertebral",
   "vertebra height": "Altura vertebral",
@@ -255,6 +259,9 @@ export function displayTechnicalReadiness(value: string | null | undefined) {
 
 export function displayUnit(value: string | null | undefined) {
   if (value === "mm2") return "mm²";
+  // El contrato transporta "deg" porque es un identificador ASCII estable; el símbolo
+  // es cosa de esta capa, igual que con mm².
+  if (value === "deg") return "°";
   return value && value.trim() ? value : "";
 }
 
