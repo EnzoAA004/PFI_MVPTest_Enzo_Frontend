@@ -40,6 +40,8 @@ type MeasurementRow = {
   id: string;
   label: string;
   level: string;
+  /** "study" cuando la medición no describe un nivel. Por defecto, "level". */
+  levelScope?: string;
   aiValue: number | string;
   reviewerValue?: number | string | null;
   unit: string;
@@ -376,6 +378,7 @@ function normalizeRow(item: any): MeasurementRow {
     id: String(item.id ?? item.labelKey ?? item.label ?? "measurement"),
     label,
     level: String(item.level ?? "Nivel no informado"),
+    levelScope: item.levelScope === "study" ? "study" : "level",
     aiValue: value,
     reviewerValue: item.reviewerValue ?? null,
     unit: String(item.unit ?? ""),
@@ -1051,6 +1054,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       id: row.id,
       label: row.label,
       level: row.level,
+      levelScope: row.levelScope,
       value: row.reviewerValue ?? row.aiValue,
       unit: row.unit,
       confidence: row.confidence,
@@ -1059,7 +1063,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     [resultRows],
   );
   const levelUnassigned = allFindingsUnassigned(levelGroups);
-  const activeGroup = levelGroups.find((group: LevelGroup) => String(group.level) === String(selectedLevel));
+  const activeGroup = levelGroups.find((group: LevelGroup) => group.key === selectedLevel);
   const visibleRows = activeGroup ? resultRows.filter((row) => activeGroup.findings.some((finding) => finding.id === row.id)) : resultRows;
   /*
    * Nivel activo para anclar anotaciones de alcance "level". Es el nivel que el
@@ -1253,12 +1257,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <p className="rr-section-title">Niveles</p>
                 <div className="rr-levels">
                   {levelGroups.map((group: LevelGroup) => {
-                    const key = String(group.level);
-                    const active = String(selectedLevel) === key;
+                    const key = group.key;
+                    const active = selectedLevel === key;
                     return (
                       <button
                         key={key}
-                        className={`rr-level${active ? " is-active" : ""}${group.findings.length ? "" : " is-empty"}`}
+                        className={`rr-level rr-level-${group.kind}${active ? " is-active" : ""}${group.findings.length ? "" : " is-empty"}`}
                         onClick={() => setSelectedLevel(active ? null : key)}
                         type="button"
                       >
@@ -1270,9 +1274,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 </div>
                 {levelUnassigned && (
                   <p className="rr-note">
-                    El modelo todavía no informa el nivel vertebral de cada medición, por lo que
-                    ninguna puede atribuirse a L1-L2…L5-S1. Se listan sin nivel asignado en vez de
-                    repartirlas por suposición.
+                    Ninguna medición de esta corrida pudo atribuirse a un nivel vertebral. Se listan
+                    sin nivel asignado en vez de repartirlas por suposición.
                   </p>
                 )}
 

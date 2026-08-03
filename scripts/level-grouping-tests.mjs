@@ -29,10 +29,10 @@ const js = ts.transpileModule(`${load("src/clinicalDisplay.ts")}\n${load("src/fe
 
 const sandbox = { exports: {}, console };
 vm.runInNewContext(
-  `${js}\nexports.groupFindingsByLevel = groupFindingsByLevel;\nexports.normalizeLevel = normalizeLevel;\nexports.allFindingsUnassigned = allFindingsUnassigned;`,
+  `${js}\nexports.groupFindingsByLevel = groupFindingsByLevel;\nexports.normalizeLevel = normalizeLevel;\nexports.allFindingsUnassigned = allFindingsUnassigned;\nexports.levelFromMeasurementId = levelFromMeasurementId;`,
   sandbox,
 );
-const { groupFindingsByLevel, normalizeLevel, allFindingsUnassigned } = sandbox.exports;
+const { groupFindingsByLevel, normalizeLevel, allFindingsUnassigned, levelFromMeasurementId } = sandbox.exports;
 
 let passed = 0;
 const check = (name, fn) => {
@@ -76,10 +76,53 @@ check("un nivel que el estudio no alcanza no ocupa una fila vacía", () => {
 });
 
 check("una medición sin nivel va al cajón aparte y no se reparte por adivinanza", () => {
-  const groups = groupFindingsByLevel([{ id: "m-1", label: "canal area", level: null, value: 2945, unit: "mm2" }]);
-  const unassigned = groups.find((group) => group.level === null);
+  const groups = groupFindingsByLevel([{ id: "m-1", label: "disc height", level: null, value: 9, unit: "mm" }]);
+  const unassigned = groups.find((group) => group.kind === "unassigned");
   assert.equal(unassigned.findings.length, 1);
   assert.equal(allFindingsUnassigned(groups), true);
+});
+
+check("lo que no corresponde a un nivel no se acusa de no tenerlo", () => {
+  const groups = groupFindingsByLevel([
+    { id: "sagittal-canal-area", label: "canal area", level: null, levelScope: "study", value: 2945, unit: "mm2" },
+  ]);
+  assert.equal(groups.find((group) => group.kind === "unassigned"), undefined);
+  const general = groups.find((group) => group.kind === "study");
+  assert.equal(general.label, "Medición general");
+  assert.equal(general.findings.length, 1);
+  // No hay medición por nivel, pero tampoco hay ninguna que haya fallado en tenerlo.
+  assert.equal(allFindingsUnassigned(groups), false);
+});
+
+check("los dos casos sin nivel no se mezclan en el mismo cajón", () => {
+  const groups = groupFindingsByLevel([
+    { id: "sagittal-canal-area", label: "canal area", level: null, levelScope: "study", value: 2945, unit: "mm2" },
+    { id: "sagittal-disc-d1-height", label: "disc height", level: null, value: 9, unit: "mm" },
+  ]);
+  assert.equal(groups.find((group) => group.kind === "study").findings.length, 1);
+  assert.equal(groups.find((group) => group.kind === "unassigned").findings.length, 1);
+  // Dos grupos sin nivel conviven, asi que la identidad no puede salir del nivel.
+  const keys = groups.map((group) => group.key);
+  assert.equal(new Set(keys).size, keys.length);
+});
+
+check("el nivel se recupera del id en corridas guardadas antes del arreglo", () => {
+  assert.equal(levelFromMeasurementId("sagittal-disc-t11-t12-width"), "T11-T12");
+  assert.equal(levelFromMeasurementId("sagittal-disc-l4-l5-area"), "L4-L5");
+  assert.equal(levelFromMeasurementId("sagittal-vertebra-l4-height"), "L4");
+  const groups = groupFindingsByLevel([
+    { id: "sagittal-disc-t11-t12-height", label: "disc height", level: null, value: 9.84, unit: "mm" },
+  ]);
+  assert.equal(groups.find((group) => group.label === "T11-T12").findings.length, 1);
+  assert.equal(groups.find((group) => group.kind === "unassigned"), undefined);
+});
+
+check("un disco que la IA no supo nombrar no recibe nivel desde el id", () => {
+  // El slug posicional es lo que el modulo escribe cuando no pudo asignar nivel:
+  // recuperarlo tiene que fallar, o se estaria inventando el nivel en vez de leerlo.
+  assert.equal(levelFromMeasurementId("sagittal-disc-d1-width"), null);
+  assert.equal(levelFromMeasurementId("sagittal-canal-area"), null);
+  assert.equal(levelFromMeasurementId("sagittal-vertebra_group-area"), null);
 });
 
 check("un nivel desconocido no se fuerza a uno conocido", () => {
