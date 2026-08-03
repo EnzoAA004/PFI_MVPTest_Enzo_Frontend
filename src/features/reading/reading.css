@@ -320,14 +320,15 @@
 
   .mri-measure circle { fill: var(--primary); }
 
+  /* El tamaño lo fija el componente dividiendo por el zoom, para que el rótulo se
+     lea igual a cualquier aumento. El contorno negro lo despega de la anatomía sin
+     necesidad de una caja de fondo que taparía más imagen. */
   .mri-measure text {
     fill: var(--primary);
     font-family: var(--font-mono);
-    font-size: 9px;
-    text-anchor: middle;
+    dominant-baseline: middle;
     paint-order: stroke;
-    stroke: rgb(0 0 0 / .75);
-    stroke-width: 2px;
+    stroke: rgb(0 0 0 / .85);
   }
 
   .mri-measure-anchor {

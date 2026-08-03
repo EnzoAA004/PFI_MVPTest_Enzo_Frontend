@@ -86,6 +86,8 @@ type Props = {
    * tiene cómo saber de dónde a dónde se midió, ni verificarlo, ni corregirlo.
    */
   aiMeasurements?: MeasurementOverlay[];
+  /** Cuántas mediciones dibujables tiene la corrida, con o sin nivel seleccionado. */
+  aiMeasurableCount?: number;
   /** Arrastrar un extremo de una medición de la IA la corrige. */
   onMoveMeasurePoint?: (measurementId: string, end: "from" | "to", point: Point, frame: Size) => void;
   onMeasure?: (from: Point, to: Point, frame: Size) => void;
@@ -259,6 +261,7 @@ export function MriSliceViewer({
   measureMode = false,
   annotations = [],
   aiMeasurements = [],
+  aiMeasurableCount = 0,
   onMoveMeasurePoint,
   onMeasure,
   onMeasureComplete,
@@ -436,6 +439,15 @@ export function MriSliceViewer({
    */
   const canEditContours = Boolean(imageLoaded && !readonly && onAiSlice && onMoveMaskPoint);
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+  /*
+   * El texto y los tiradores se dibujan dentro del SVG, que escala junto con la
+   * imagen: sin compensar el zoom un rótulo ocupa siempre la misma fracción de la
+   * anatomía, así que acercarse no lo achica y alejarse no lo agranda. Dividir por el
+   * zoom los deja de tamaño constante en pantalla, que es la convención de cualquier
+   * estación de lectura: la anotación se lee igual a cualquier aumento.
+   */
+  const fontSize = 6 / zoom;
+  const handleRadius = 1.8 / zoom;
   const filter = `brightness(${brightness}%) contrast(${contrast}%)`;
   const seriesName = model.plane === "sagittal" ? "Sagital" : "Axial";
 
@@ -706,10 +718,18 @@ export function MriSliceViewer({
           <span>Opacidad {Math.round(overlayAlpha * 100)}%</span>
           <input aria-label="Opacidad de segmentación" disabled={!overlayLoaded} max="1" min="0" onChange={(event) => setOverlayAlpha(Number(event.target.value))} step="0.01" type="range" value={overlayAlpha} />
         </label>
-        <label className="toggle-row">
-          <input checked={aiMeasuresVisible} disabled={!aiMeasurements.length} onChange={(event) => setAiMeasuresVisible(event.target.checked)} type="checkbox" />
+        <label className="toggle-row" title={aiMeasurableCount ? "Se dibujan las del nivel que esté seleccionado en el panel de hallazgos" : "Esta corrida no guardó los extremos de sus mediciones"}>
+          <input checked={aiMeasuresVisible} disabled={!aiMeasurableCount} onChange={(event) => setAiMeasuresVisible(event.target.checked)} type="checkbox" />
           <span>Mediciones de la IA{aiMeasurements.length ? ` (${aiMeasurements.length})` : ""}</span>
         </label>
+        {/*
+          Sin nivel seleccionado no se dibuja ninguna: treinta segmentos con su rótulo
+          tapan la anatomía. Se dice por qué está vacío en vez de dejar la capa
+          prendida sin efecto visible, que se lee como que no funciona.
+        */}
+        {aiMeasuresVisible && aiMeasurableCount > 0 && !aiMeasurements.length && (
+          <p className="viewer-limit-note">Elegí un nivel en Hallazgos para ver sus mediciones sobre la imagen.</p>
+        )}
         <label className="toggle-row">
           <input checked={myMeasuresVisible} disabled={!annotations.length} onChange={(event) => setMyMeasuresVisible(event.target.checked)} type="checkbox" />
           <span>Mis mediciones{annotations.length ? ` (${annotations.length})` : ""}</span>
@@ -810,6 +830,19 @@ export function MriSliceViewer({
               <svg className="mri-measure-layer" viewBox="0 0 256 256" preserveAspectRatio="none">
                 {visibleMeasures.map((item) => {
                   const editable = Boolean(item.measurementId && onMoveMeasurePoint && !readonly);
+                  /*
+                   * El rótulo va en la punta de la línea y no en el medio. En el medio
+                   * tapa la estructura que se está midiendo, y sobre un disco delgado
+                   * el rótulo del alto cae encima del rótulo del ancho: tres números
+                   * amontonados en el mismo lugar. En la punta, cada medición separa
+                   * su rótulo sola, en la dirección en la que mide.
+                   */
+                  const dx = item.to.x - item.from.x;
+                  const dy = item.to.y - item.from.y;
+                  const length = Math.hypot(dx, dy) || 1;
+                  const gap = fontSize * 0.8;
+                  const labelX = item.to.x + dx / length * gap;
+                  const labelY = item.to.y + dy / length * gap;
                   return (
                     <g className={`mri-measure mri-measure-${item.source ?? "reviewer"}`} key={item.id}>
                       <line x1={item.from.x} y1={item.from.y} x2={item.to.x} y2={item.to.y} />
@@ -824,15 +857,23 @@ export function MriSliceViewer({
                             measureDragRef.current = { measurementId: item.measurementId!, end };
                             event.currentTarget.setPointerCapture(event.pointerId);
                           } : undefined}
-                          r={editable ? 3.5 : 2.5}
+                          r={handleRadius * (editable ? 1.3 : 1)}
                         />
                       ))}
-                      <text x={(item.from.x + item.to.x) / 2} y={(item.from.y + item.to.y) / 2 - 4}>{item.label}</text>
+                      <text
+                        fontSize={fontSize}
+                        strokeWidth={fontSize / 4}
+                        textAnchor={dx < -0.5 ? "end" : dx > 0.5 ? "start" : "middle"}
+                        x={labelX}
+                        y={labelY}
+                      >
+                        {item.label}
+                      </text>
                     </g>
                   );
                 })}
                 {measureAnchor && (
-                  <circle className="mri-measure-anchor" cx={measureAnchor.x} cy={measureAnchor.y} r={3} />
+                  <circle className="mri-measure-anchor" cx={measureAnchor.x} cy={measureAnchor.y} r={handleRadius} />
                 )}
               </svg>
             )}

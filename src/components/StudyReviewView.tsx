@@ -201,6 +201,8 @@ type PlaneViewportProps = {
   annotations: MeasurementOverlay[];
   /** Segmentos de las mediciones de la IA, con sus extremos reales. */
   aiMeasurements: MeasurementOverlay[];
+  /** Cuántas mediciones dibujables tiene la corrida, con o sin nivel seleccionado. */
+  aiMeasurableCount: number;
   onMoveMeasurePoint: (measurementId: string, end: "from" | "to", point: { x: number; y: number }, frame: { width: number; height: number }) => void;
   onMeasure: (from: { x: number; y: number }, to: { x: number; y: number }, frame: { width: number; height: number }) => void;
   onMeasureComplete: () => void;
@@ -225,7 +227,7 @@ function PlaneViewport({
   plane, caseLabel, seriesName, model, modelLabel, inferenceLabel, spacingLabel,
   slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
-  measureMode, annotations, aiMeasurements, onMoveMeasurePoint, onMeasure, onMeasureComplete, annotatedIndices, onMoveMaskPoint,
+  measureMode, annotations, aiMeasurements, aiMeasurableCount, onMoveMeasurePoint, onMeasure, onMeasureComplete, annotatedIndices, onMoveMaskPoint,
   segmentation, slicePixels, pixelsBaseUrl, hiddenInstances, onToggleInstance,
 }: PlaneViewportProps) {
   const sliceLabel = slice ? `corte ${slice.current + 1}/${slice.total}` : "corte único";
@@ -257,6 +259,7 @@ function PlaneViewport({
           measureMode={measureMode}
           annotations={annotations}
           aiMeasurements={aiMeasurements}
+          aiMeasurableCount={aiMeasurableCount}
           onMoveMeasurePoint={onMoveMeasurePoint}
           onMeasure={onMeasure}
           onMeasureComplete={onMeasureComplete}
@@ -1113,20 +1116,26 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   }
 
   /**
-   * Segmentos de las mediciones de la IA para el corte que se está mirando.
+   * Segmentos de las mediciones de la IA para el nivel que se está leyendo.
    *
-   * Se filtran por nivel cuando hay uno seleccionado: con siete discos, cinco
-   * vértebras y seis niveles de canal, dibujarlo todo junto tapa la anatomía. El
-   * área no aparece porque no tiene dos extremos.
+   * Solo las del nivel seleccionado. Dibujarlas todas junto -treinta segmentos con su
+   * rótulo sobre siete discos y cinco vértebras- tapa exactamente la anatomía que hay
+   * que mirar: el ruido visual no es un problema estético, esconde la imagen.
+   *
+   * El rótulo es solo el valor. Qué estructura y qué magnitud es ya lo dice el panel
+   * de la derecha, y repetirlo sobre la imagen agrega texto sin agregar información.
+   *
+   * El área no aparece: no tiene dos extremos, y la máscara pintada ya la muestra.
    */
   function aiMeasurementOverlaysFor(plane: "sagittal" | "axial", sliceIndex: number): MeasurementOverlay[] {
+    if (!activeLevel) return [];
     return resultRows
       .filter((row) => {
         const points = measureGeometry[row.id] ?? row.points;
         if (!points || points.length !== 2) return false;
         if (row.sliceIndex !== undefined && row.sliceIndex !== sliceIndex) return false;
         if (row.plane && row.plane !== plane) return false;
-        return !activeLevel || row.level === activeLevel;
+        return row.level === activeLevel;
       })
       .map((row) => {
         const points = measureGeometry[row.id] ?? row.points!;
@@ -1137,10 +1146,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           from: points[0],
           to: points[1],
           source: "ai" as const,
-          label: `${displayMeasurementLabelShort(row.label)} ${value ?? "—"}${displayUnit(row.unit)}`,
+          label: `${value ?? "—"} ${displayUnit(row.unit)}`.trim(),
         };
       });
   }
+
+  /** Cuántas mediciones tiene dibujables el nivel activo, para el panel de capas. */
+  const aiMeasurableCount = resultRows.filter((row) => (measureGeometry[row.id] ?? row.points)?.length === 2).length;
 
   /**
    * Arrastrar un extremo recalcula la medición desde la geometría nueva.
@@ -1279,6 +1291,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   measureMode={measureMode && activePlano === planeName}
                   annotations={measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
                   aiMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0)}
+                  aiMeasurableCount={aiMeasurableCount}
                   onMoveMeasurePoint={(measurementId, end, point, frame) => moveMeasurePoint(measurementId, end, point, frame, data.series.inPlaneSpacingMm)}
                   annotatedIndices={annotatedSlices(annotations, planeName)}
                   onMeasure={(from, to, frame) => {
