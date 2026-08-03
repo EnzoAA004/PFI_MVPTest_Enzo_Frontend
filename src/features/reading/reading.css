@@ -301,9 +301,9 @@
 
   .mri-contour-handle:active { cursor: grabbing; }
 
-  /* Mediciones sobre la imagen ------------------------------------------- */
-  /* La capa no intercepta el puntero salvo en los tiradores: si lo hiciera, no se
-     podría desplazar ni ventanear la imagen por debajo de una medición. */
+  /* Cotas sobre la imagen ------------------------------------------------ */
+  /* La capa no intercepta el puntero salvo en las figuras y los tiradores: si lo
+     hiciera, no se podría desplazar ni ventanear la imagen por debajo de una cota. */
   .mri-measure-layer {
     position: absolute;
     inset: 0;
@@ -312,49 +312,77 @@
     pointer-events: none;
   }
 
-  .mri-measure line {
+  .mri-measure line,
+  .mri-measure polygon {
     stroke: var(--primary);
     stroke-width: 1;
-    vector-effect: non-scaling-stroke;
-  }
-
-  .mri-measure circle { fill: var(--primary); }
-
-  /* El tamaño lo fija el componente dividiendo por el zoom, para que el rótulo se
-     lea igual a cualquier aumento. El contorno negro lo despega de la anatomía sin
-     necesidad de una caja de fondo que taparía más imagen. */
-  .mri-measure text {
-    fill: var(--primary);
-    font-family: var(--font-mono);
-    dominant-baseline: middle;
-    paint-order: stroke;
-    stroke: rgb(0 0 0 / .85);
-  }
-
-  .mri-measure-anchor {
     fill: none;
-    stroke: var(--primary);
-    stroke-width: 1;
     vector-effect: non-scaling-stroke;
   }
 
-  /* La de la IA es una propuesta y la del revisor es lo que él afirma: se
-     distinguen por color y por trazo, no solo por color, para que la diferencia
-     sobreviva a una pantalla mal calibrada o a un daltonismo. */
-  .mri-measure-ai line {
-    stroke: var(--warning, #e0a33e);
-    stroke-dasharray: 4 2;
+  /* Franja ancha e invisible para poder agarrar una línea de un píxel con el mouse. */
+  .mri-measure-hit {
+    stroke: transparent !important;
+    vector-effect: none !important;
+    pointer-events: stroke;
+    cursor: pointer;
   }
 
-  .mri-measure-ai circle { fill: var(--warning, #e0a33e); }
-  .mri-measure-ai text { fill: var(--warning, #e0a33e); }
+  .mri-measure-roi { fill: rgb(255 255 255 / .06); }
+
+  /* El corrimiento de una listesis se distingue del platillo contra el que se mide. */
+  .mri-measure-slip { stroke-dasharray: 3 2; }
+
+  .mri-measure-plate { color: var(--primary); }
+
+  .mri-measure-plate rect {
+    fill: rgb(8 11 16 / .82);
+    stroke: currentColor;
+    stroke-width: .5;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .mri-measure-plate text {
+    fill: currentColor;
+    font-family: var(--font-mono);
+    text-anchor: middle;
+    dominant-baseline: middle;
+    stroke: none;
+  }
+
+  /* La de la IA es una propuesta y la del revisor es lo que él afirma haber medido:
+     se distinguen por color y por trazo, no solo por color, para que la diferencia
+     sobreviva a una pantalla mal calibrada o a un daltonismo. */
+  .mri-measure-ai line,
+  .mri-measure-ai polygon { stroke: var(--warning, #e0a33e); stroke-dasharray: 4 2; }
+  .mri-measure-ai .mri-measure-hit { stroke-dasharray: none; }
+  .mri-measure-ai .mri-measure-plate { color: var(--warning, #e0a33e); }
+
+  /* Resaltada: es la fila que el médico está mirando en el panel. Solo engorda el
+     trazo, sin cambiar de color, para no sugerir que cambió de origen. */
+  .mri-measure.is-highlighted line,
+  .mri-measure.is-highlighted polygon { stroke-width: 2; }
+  .mri-measure.is-highlighted .mri-measure-plate rect { fill: rgb(8 11 16 / .95); }
+
+  /* Seleccionada: la única con tiradores, y la única que se puede arrastrar. */
+  .mri-measure.is-selected line,
+  .mri-measure.is-selected polygon { stroke-width: 2; stroke-dasharray: none; }
 
   .mri-measure-handle {
+    fill: var(--primary);
+    stroke: rgb(8 11 16 / .9);
+    stroke-width: .6;
+    vector-effect: non-scaling-stroke;
     pointer-events: auto;
     cursor: grab;
   }
 
+  .mri-measure-ai .mri-measure-handle { fill: var(--warning, #e0a33e); }
   .mri-measure-handle:active { cursor: grabbing; }
+
+  /* En curso: lo que el médico está trazando ahora, todavía sin valor. */
+  .mri-measure-draft line { stroke-dasharray: 2 2; }
+  .mri-measure-draft circle { fill: var(--primary); }
 
   .layers-title {
     display: block;
@@ -999,6 +1027,16 @@
   }
 
   .rr-measure-edited .rr-measure-value { color: var(--text-warning-strong); }
+
+  /* Solo las que tienen figura sobre la imagen son elegibles: un área no se dibuja,
+     así que ofrecer clic en su fila prometería un resaltado que no va a aparecer. */
+  .rr-measure.is-measurable { cursor: pointer; }
+  .rr-measure.is-measurable:hover { background: var(--surface-hover, rgb(255 255 255 / .06)); }
+
+  .rr-measure.is-selected {
+    background: var(--surface-hover, rgb(255 255 255 / .08));
+    box-shadow: inset 2px 0 0 var(--primary);
+  }
 
   /* Review form ---------------------------------------------------------- */
   .rr-field {

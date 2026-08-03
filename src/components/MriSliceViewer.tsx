@@ -3,6 +3,7 @@ import { startAuthenticatedImageLoad, useAuthenticatedImageUrl } from "../authen
 import { displayLandmarkLabel, displayStructureLabel } from "../clinicalDisplay";
 import { paintSegmentation, type Segmentation } from "../features/reading/segmentation";
 import { applyWindow, defaultWindow, fetchSlicePixels, slicePixelsUrl, type SlicePixelsMeta } from "../features/reading/pixels";
+import { MeasurementLayer, type MeasurementFigure } from "../features/reading/MeasurementLayer";
 import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
 
 /**
@@ -90,6 +91,11 @@ type Props = {
   aiMeasurableCount?: number;
   /** Arrastrar un extremo de una medición de la IA la corrige. */
   onMoveMeasurePoint?: (measurementId: string, end: "from" | "to", point: Point, frame: Size) => void;
+  /** Medición elegida: es la única que muestra tiradores y se puede arrastrar. */
+  selectedMeasurementId?: string | null;
+  /** Medición señalada desde el panel, para saber cuál fila es cuál línea. */
+  highlightedMeasurementId?: string | null;
+  onSelectMeasurement?: (id: string) => void;
   onMeasure?: (from: Point, to: Point, frame: Size) => void;
   onMeasureComplete?: () => void;
   /**
@@ -113,20 +119,13 @@ type Props = {
   pixelsBaseUrl?: string;
 };
 
-/** Segmento dibujado sobre la imagen, en la base 0..256. */
-export type MeasurementOverlay = {
-  id: string;
-  from: Point;
-  to: Point;
-  label: string;
-  /**
-   * De quién es la medición. Se distinguen en pantalla porque no valen lo mismo: la
-   * de la IA es una propuesta, la del revisor es lo que él afirma haber medido.
-   */
-  source?: "ai" | "reviewer";
-  /** Medición de la tabla a la que corresponde, cuando arrastrarla la corrige. */
-  measurementId?: string;
-};
+/**
+ * Figura dibujada sobre la imagen, en la base 0..256.
+ *
+ * Es el mismo tipo que consume la capa de cotas: el visor no reinterpreta la
+ * geometría, solo decide qué figuras están visibles.
+ */
+export type MeasurementOverlay = MeasurementFigure;
 
 const neutralPreset: WindowPreset = { id: "neutral", label: "Neutral PNG", brightness: 100, contrast: 100 };
 const customPreset: WindowPreset = { id: "custom", label: "Personalizado", brightness: 100, contrast: 100 };
@@ -263,6 +262,9 @@ export function MriSliceViewer({
   aiMeasurements = [],
   aiMeasurableCount = 0,
   onMoveMeasurePoint,
+  selectedMeasurementId,
+  highlightedMeasurementId,
+  onSelectMeasurement,
   onMeasure,
   onMeasureComplete,
   onMoveMaskPoint,
@@ -411,9 +413,9 @@ export function MriSliceViewer({
    * Las de la IA van primero para que las del revisor queden encima: si se pisan, lo
    * que tiene que quedar legible es lo que el médico afirmó, no la propuesta.
    */
-  const visibleMeasures = [
-    ...(aiMeasuresVisible ? aiMeasurements.map((item) => ({ ...item, source: "ai" as const })) : []),
-    ...(myMeasuresVisible ? annotations.map((item) => ({ ...item, source: "reviewer" as const })) : []),
+  const visibleMeasures: MeasurementFigure[] = [
+    ...(aiMeasuresVisible ? aiMeasurements : []),
+    ...(myMeasuresVisible ? annotations : []),
   ];
   const groups = useMemo(() => maskGroups(model.masks), [model.masks]);
   const [hiddenClasses, setHiddenClasses] = useState<string[]>([]);
@@ -439,15 +441,6 @@ export function MriSliceViewer({
    */
   const canEditContours = Boolean(imageLoaded && !readonly && onAiSlice && onMoveMaskPoint);
   const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
-  /*
-   * El texto y los tiradores se dibujan dentro del SVG, que escala junto con la
-   * imagen: sin compensar el zoom un rótulo ocupa siempre la misma fracción de la
-   * anatomía, así que acercarse no lo achica y alejarse no lo agranda. Dividir por el
-   * zoom los deja de tamaño constante en pantalla, que es la convención de cualquier
-   * estación de lectura: la anotación se lee igual a cualquier aumento.
-   */
-  const fontSize = 6 / zoom;
-  const handleRadius = 1.8 / zoom;
   const filter = `brightness(${brightness}%) contrast(${contrast}%)`;
   const seriesName = model.plane === "sagittal" ? "Sagital" : "Axial";
 
@@ -826,57 +819,20 @@ export function MriSliceViewer({
             ) : overlayVisible && onAiSlice && overlayLoaded && overlayAsset.url ? (
               <img alt={`${seriesName} recurso de superposicion IA`} className="mri-overlay-img" draggable={false} src={overlayAsset.url} style={{ opacity: overlayAlpha, transform: "translateZ(0)" }} />
             ) : null}
-            {(visibleMeasures.length > 0 || measureAnchor) && (
-              <svg className="mri-measure-layer" viewBox="0 0 256 256" preserveAspectRatio="none">
-                {visibleMeasures.map((item) => {
-                  const editable = Boolean(item.measurementId && onMoveMeasurePoint && !readonly);
-                  /*
-                   * El rótulo va en la punta de la línea y no en el medio. En el medio
-                   * tapa la estructura que se está midiendo, y sobre un disco delgado
-                   * el rótulo del alto cae encima del rótulo del ancho: tres números
-                   * amontonados en el mismo lugar. En la punta, cada medición separa
-                   * su rótulo sola, en la dirección en la que mide.
-                   */
-                  const dx = item.to.x - item.from.x;
-                  const dy = item.to.y - item.from.y;
-                  const length = Math.hypot(dx, dy) || 1;
-                  const gap = fontSize * 0.8;
-                  const labelX = item.to.x + dx / length * gap;
-                  const labelY = item.to.y + dy / length * gap;
-                  return (
-                    <g className={`mri-measure mri-measure-${item.source ?? "reviewer"}`} key={item.id}>
-                      <line x1={item.from.x} y1={item.from.y} x2={item.to.x} y2={item.to.y} />
-                      {(["from", "to"] as const).map((end) => (
-                        <circle
-                          className={editable ? "mri-measure-handle" : undefined}
-                          cx={item[end].x}
-                          cy={item[end].y}
-                          key={end}
-                          onPointerDown={editable ? (event) => {
-                            event.stopPropagation();
-                            measureDragRef.current = { measurementId: item.measurementId!, end };
-                            event.currentTarget.setPointerCapture(event.pointerId);
-                          } : undefined}
-                          r={handleRadius * (editable ? 1.3 : 1)}
-                        />
-                      ))}
-                      <text
-                        fontSize={fontSize}
-                        strokeWidth={fontSize / 4}
-                        textAnchor={dx < -0.5 ? "end" : dx > 0.5 ? "start" : "middle"}
-                        x={labelX}
-                        y={labelY}
-                      >
-                        {item.label}
-                      </text>
-                    </g>
-                  );
-                })}
-                {measureAnchor && (
-                  <circle className="mri-measure-anchor" cx={measureAnchor.x} cy={measureAnchor.y} r={handleRadius} />
-                )}
-              </svg>
-            )}
+            <MeasurementLayer
+              editable={!readonly && Boolean(onMoveMeasurePoint)}
+              figures={visibleMeasures}
+              draft={measureAnchor ? { kind: "distance", points: [measureAnchor] } : null}
+              highlightedId={highlightedMeasurementId ?? null}
+              onDragStart={(event, measurementId, index) => {
+                event.stopPropagation();
+                measureDragRef.current = { measurementId, end: index === 0 ? "from" : "to" };
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }}
+              onSelect={onSelectMeasurement}
+              selectedId={selectedMeasurementId ?? null}
+              zoom={zoom}
+            />
             {landmarksVisible && landmarks.map((landmark) => {
               const displayLabel = displayLandmarkLabel(landmark.labelKey);
               const selected = selectedLandmarkId === landmark.id;

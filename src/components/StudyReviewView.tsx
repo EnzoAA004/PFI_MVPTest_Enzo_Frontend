@@ -203,6 +203,9 @@ type PlaneViewportProps = {
   aiMeasurements: MeasurementOverlay[];
   /** Cuántas mediciones dibujables tiene la corrida, con o sin nivel seleccionado. */
   aiMeasurableCount: number;
+  selectedMeasurementId: string | null;
+  highlightedMeasurementId: string | null;
+  onSelectMeasurement: (id: string) => void;
   onMoveMeasurePoint: (measurementId: string, end: "from" | "to", point: { x: number; y: number }, frame: { width: number; height: number }) => void;
   onMeasure: (from: { x: number; y: number }, to: { x: number; y: number }, frame: { width: number; height: number }) => void;
   onMeasureComplete: () => void;
@@ -228,6 +231,7 @@ function PlaneViewport({
   slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
   measureMode, annotations, aiMeasurements, aiMeasurableCount, onMoveMeasurePoint, onMeasure, onMeasureComplete, annotatedIndices, onMoveMaskPoint,
+  selectedMeasurementId, highlightedMeasurementId, onSelectMeasurement,
   segmentation, slicePixels, pixelsBaseUrl, hiddenInstances, onToggleInstance,
 }: PlaneViewportProps) {
   const sliceLabel = slice ? `corte ${slice.current + 1}/${slice.total}` : "corte único";
@@ -260,6 +264,9 @@ function PlaneViewport({
           annotations={annotations}
           aiMeasurements={aiMeasurements}
           aiMeasurableCount={aiMeasurableCount}
+          highlightedMeasurementId={highlightedMeasurementId}
+          onSelectMeasurement={onSelectMeasurement}
+          selectedMeasurementId={selectedMeasurementId}
           onMoveMeasurePoint={onMoveMeasurePoint}
           onMeasure={onMeasure}
           onMeasureComplete={onMeasureComplete}
@@ -502,6 +509,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    * IA propuso, no encima.
    */
   const [measureGeometry, setMeasureGeometry] = useState<Record<string, { x: number; y: number }[]>>({});
+  /*
+   * Cuál medición está elegida y cuál está señalada desde el panel. Son estados
+   * distintos: señalar es pasar el mouse por una fila para saber qué línea es cuál,
+   * elegir es decidir trabajar sobre ella y hace aparecer sus tiradores.
+   */
+  const [selectedMeasurementId, setSelectedMeasurementId] = useState<string | null>(null);
+  const [highlightedMeasurementId, setHighlightedMeasurementId] = useState<string | null>(null);
   // Corte visible por plano. Arranca en el corte que analizó la IA y se mueve con
   // la rueda o el teclado; queda por plano para que cambiar de serie no lo pierda.
   const [sliceByPlane, setSliceByPlane] = useState<Record<string, number>>({});
@@ -1109,8 +1123,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       .filter((item) => item.kind === "measurement" && item.points?.length === 2 && isAnnotationVisible(item, context))
       .map((item) => ({
         id: item.id,
-        from: item.points![0],
-        to: item.points![1],
+        kind: "distance" as const,
+        points: item.points!,
+        source: "reviewer" as const,
         label: item.value !== undefined && item.unit ? formatMeasurement(item.value, item.unit) : "",
       }));
   }
@@ -1142,9 +1157,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         const value = firstPresent(row.reviewerValue, row.aiValue);
         return {
           id: `ai-${row.id}`,
+          kind: "distance" as const,
           measurementId: row.id,
-          from: points[0],
-          to: points[1],
+          points,
           source: "ai" as const,
           label: `${value ?? "—"} ${displayUnit(row.unit)}`.trim(),
         };
@@ -1292,6 +1307,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   annotations={measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
                   aiMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0)}
                   aiMeasurableCount={aiMeasurableCount}
+                  highlightedMeasurementId={highlightedMeasurementId ? `ai-${highlightedMeasurementId}` : null}
+                  onSelectMeasurement={(id) => setSelectedMeasurementId(id.startsWith("ai-") ? id.slice(3) : id)}
+                  selectedMeasurementId={selectedMeasurementId ? `ai-${selectedMeasurementId}` : null}
                   onMoveMeasurePoint={(measurementId, end, point, frame) => moveMeasurePoint(measurementId, end, point, frame, data.series.inPlaneSpacingMm)}
                   annotatedIndices={annotatedSlices(annotations, planeName)}
                   onMeasure={(from, to, frame) => {
@@ -1369,21 +1387,37 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <p className="rr-section-title">
                   Mediciones{activeGroup ? ` · ${activeGroup.label}` : ""}
                 </p>
+                {/*
+                  La fila y la cota son la misma medición vista de dos maneras, así que
+                  se comportan como una sola: pasar el mouse por la fila resalta su
+                  línea, y tocarla la elige. Sin eso, con tres cotas sobre el mismo
+                  disco no hay forma de saber cuál corresponde a cuál número.
+                */}
                 {visibleRows.length ? (
                   <div className="rr-measures">
-                    {visibleRows.map((item) => (
-                      <div className={`rr-measure${item.draftValue !== undefined && item.draftValue !== "" ? " rr-measure-edited" : ""}`} key={item.id}>
-                        <span className="rr-measure-label" title={displayMeasurementLabel(item.label)}>{displayMeasurementLabelShort(item.label)}</span>
-                        {/*
-                          `resultRows` normaliza "sin valor del revisor" a "", no a
-                          null, así que `??` no caía al valor de la IA y toda la
-                          columna se veía vacía aunque la medición existiera.
-                        */}
-                        <span className="rr-measure-value">
-                          {String(firstPresent(item.reviewerValue, item.aiValue) ?? "—")}<u>{displayUnit(item.unit)}</u>
-                        </span>
-                      </div>
-                    ))}
+                    {visibleRows.map((item) => {
+                      const measurable = (measureGeometry[item.id] ?? item.points)?.length === 2;
+                      const edited = item.draftValue !== undefined && item.draftValue !== "";
+                      return (
+                        <div
+                          className={`rr-measure${edited ? " rr-measure-edited" : ""}${measurable ? " is-measurable" : ""}${selectedMeasurementId === item.id ? " is-selected" : ""}`}
+                          key={item.id}
+                          onClick={measurable ? () => setSelectedMeasurementId((current) => (current === item.id ? null : item.id)) : undefined}
+                          onMouseEnter={() => setHighlightedMeasurementId(item.id)}
+                          onMouseLeave={() => setHighlightedMeasurementId((current) => (current === item.id ? null : current))}
+                        >
+                          <span className="rr-measure-label" title={displayMeasurementLabel(item.label)}>{displayMeasurementLabelShort(item.label)}</span>
+                          {/*
+                            `resultRows` normaliza "sin valor del revisor" a "", no a
+                            null, así que `??` no caía al valor de la IA y toda la
+                            columna se veía vacía aunque la medición existiera.
+                          */}
+                          <span className="rr-measure-value">
+                            {String(firstPresent(item.reviewerValue, item.aiValue) ?? "—")}<u>{displayUnit(item.unit)}</u>
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : <p className="rr-note">Sin mediciones en este nivel.</p>}
 
