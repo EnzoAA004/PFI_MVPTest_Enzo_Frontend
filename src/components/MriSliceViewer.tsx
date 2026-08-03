@@ -103,6 +103,13 @@ type Props = {
   aiMeasurements?: MeasurementOverlay[];
   /** Cuántas mediciones dibujables tiene la corrida, con o sin nivel seleccionado. */
   aiMeasurableCount?: number;
+  /**
+   * Mediciones derivadas de la geometría de otras estructuras: ángulo segmentario y
+   * listesis. Van en su propia capa, apagada por defecto, porque el modelo no fue
+   * entrenado para producirlas y usarlas es una decisión del médico.
+   */
+  derivedMeasurements?: MeasurementOverlay[];
+  derivedMeasurableCount?: number;
   /** Arrastrar un extremo de una medición de la IA la corrige. */
   onMoveMeasurePoint?: (measurementId: string, end: "from" | "to", point: Point, frame: Size) => void;
   /** Medición elegida: es la única que muestra tiradores y se puede arrastrar. */
@@ -281,6 +288,8 @@ export function MriSliceViewer({
   annotations = [],
   aiMeasurements = [],
   aiMeasurableCount = 0,
+  derivedMeasurements = [],
+  derivedMeasurableCount = 0,
   onMoveMeasurePoint,
   selectedMeasurementId,
   highlightedMeasurementId,
@@ -431,6 +440,8 @@ export function MriSliceViewer({
    */
   const [aiMeasuresVisible, setAiMeasuresVisible] = useState(true);
   const [myMeasuresVisible, setMyMeasuresVisible] = useState(true);
+  /* Apagada por defecto: son propuestas a evaluar, no parte de la lectura. */
+  const [derivedVisible, setDerivedVisible] = useState(false);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; brightness: number; contrast: number; panX: number; panY: number; window?: { center: number; width: number } } | null>(null);
   const landmarkDragRef = useRef<string | null>(null);
@@ -445,6 +456,7 @@ export function MriSliceViewer({
    */
   const visibleMeasures: MeasurementFigure[] = [
     ...(aiMeasuresVisible ? aiMeasurements : []),
+    ...(derivedVisible ? derivedMeasurements : []),
     ...(myMeasuresVisible ? annotations : []),
   ];
   const groups = useMemo(() => maskGroups(model.masks), [model.masks]);
@@ -786,6 +798,15 @@ export function MriSliceViewer({
         {aiMeasuresVisible && aiMeasurableCount > 0 && !aiMeasurements.length && (
           <p className="viewer-limit-note">Elegí un nivel en Hallazgos para ver sus mediciones sobre la imagen.</p>
         )}
+        <label
+          className="toggle-row"
+          title={derivedMeasurableCount
+            ? "Ángulo segmentario y listesis, calculados a partir de los ejes de dos vértebras vecinas. El modelo no fue entrenado para producirlas."
+            : "Esta corrida no trae mediciones derivadas"}
+        >
+          <input checked={derivedVisible} disabled={!derivedMeasurableCount} onChange={(event) => setDerivedVisible(event.target.checked)} type="checkbox" />
+          <span>Derivadas{derivedMeasurements.length ? ` (${derivedMeasurements.length})` : ""} <em>experimental</em></span>
+        </label>
         <label className="toggle-row">
           <input checked={myMeasuresVisible} disabled={!annotations.length} onChange={(event) => setMyMeasuresVisible(event.target.checked)} type="checkbox" />
           <span>Mis mediciones{annotations.length ? ` (${annotations.length})` : ""}</span>

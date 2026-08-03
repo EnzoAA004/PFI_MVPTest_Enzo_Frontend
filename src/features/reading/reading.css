@@ -378,6 +378,23 @@
   }
 
   .mri-measure-ai .mri-measure-handle { fill: var(--warning, #e0a33e); }
+
+  /* Derivada: no se apoya en su propia máscara sino en la geometría de otras dos, así
+     que se dibuja distinta de la que sí midió algo. Punteado más largo y sin relleno
+     en la placa: se lee como una propuesta a evaluar, no como un dato de la corrida. */
+  .mri-measure-derived line,
+  .mri-measure-derived polygon { stroke: var(--accent, #7aa2f7); stroke-dasharray: 6 3; }
+  .mri-measure-derived .mri-measure-hit { stroke-dasharray: none; }
+  .mri-measure-derived .mri-measure-plate { color: var(--accent, #7aa2f7); }
+  .mri-measure-derived .mri-measure-handle { fill: var(--accent, #7aa2f7); }
+
+  .toggle-row em {
+    font-style: normal;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    opacity: .6;
+  }
   .mri-measure-handle:active { cursor: grabbing; }
 
   /* En curso: lo que el médico está trazando ahora, todavía sin valor. */

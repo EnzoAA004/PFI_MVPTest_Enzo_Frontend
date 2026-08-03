@@ -127,6 +127,16 @@ export type Measurement = {
    * médico vea de dónde a dónde, y arrastrando un extremo lo corrige.
    */
   points?: { x: number; y: number }[];
+  /**
+   * Derivada de la geometría de otras estructuras, no de una máscara propia.
+   *
+   * El ángulo segmentario y la listesis salen de los ejes de dos cuerpos vecinos. El
+   * modelo no fue entrenado para darlas, así que viajan marcadas y el visor las
+   * muestra en su propia capa: usarlas es una decisión del médico.
+   */
+  experimental?: boolean;
+  /** Segunda magnitud, cuando la medición la tiene: el grado de Meyerding. */
+  detail?: string;
   value: number | string;
   aiValue?: number | string;
   reviewerValue?: number | string | null;

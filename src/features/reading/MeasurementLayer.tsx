@@ -27,7 +27,7 @@ export type MeasurementFigure = {
   /** En la base 0..256 del `coordinateSpace` del plano. */
   points: AnnotationPoint[];
   label: string;
-  source: "ai" | "reviewer";
+  source: "ai" | "reviewer" | "derived";
   /** Medición de la tabla a la que corresponde, cuando arrastrarla la corrige. */
   measurementId?: string;
 };

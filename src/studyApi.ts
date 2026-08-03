@@ -113,6 +113,8 @@ function normalizeMeasurement(value: unknown, index: number, plane?: Plane): Mea
     // area del canal- llega indistinguible de una a la que no se le pudo asignar.
     levelScope: item.levelScope === "study" ? "study" : "level",
     sliceIndex: typeof item.sliceIndex === "number" ? item.sliceIndex : undefined,
+    experimental: item.experimental === true,
+    detail: typeof item.detail === "string" ? item.detail : undefined,
     // Los dos extremos entre los que se midio. Sin ellos el visor no puede dibujar
     // de donde a donde salio el numero, que es lo que permite verificarlo.
     points: Array.isArray(item.points) && item.points.length === 2

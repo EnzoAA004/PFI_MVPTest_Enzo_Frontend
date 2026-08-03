@@ -203,6 +203,8 @@ function toMeasurement(value: unknown, index: number): Measurement {
     // acusa a la IA de un fallo que no tuvo.
     levelScope: record.levelScope === "study" ? "study" : "level",
     sliceIndex: typeof record.sliceIndex === "number" ? record.sliceIndex : undefined,
+    experimental: record.experimental === true,
+    detail: typeof record.detail === "string" ? record.detail : undefined,
     // Los dos extremos entre los que se midió. Es lo que le da un lugar al número:
     // sin ellos el visor no puede dibujar de dónde a dónde, ni dejar corregirlo.
     points: Array.isArray(record.points) && record.points.length === 2

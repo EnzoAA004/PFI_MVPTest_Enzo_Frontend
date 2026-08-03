@@ -51,6 +51,10 @@ type MeasurementRow = {
   levelScope?: string;
   /** Extremos entre los que se midió, en la base 0..256. Vacío si no es distancia. */
   points?: { x: number; y: number }[];
+  /** Derivada de la geometría de otras estructuras, no de una máscara propia. */
+  experimental?: boolean;
+  /** Segunda magnitud, cuando la medición la tiene: el grado de Meyerding. */
+  detail?: string;
   /** Corte y plano de los que salió; sin ellos el segmento no se puede ubicar. */
   sliceIndex?: number;
   plane?: "sagittal" | "axial";
@@ -242,6 +246,8 @@ function normalizeRow(item: any): MeasurementRow {
     level: String(item.level ?? "Nivel no informado"),
     levelScope: item.levelScope === "study" ? "study" : "level",
     points: Array.isArray(item.points) && item.points.length === 2 ? item.points : undefined,
+    experimental: item.experimental === true,
+    detail: typeof item.detail === "string" ? item.detail : undefined,
     sliceIndex: typeof item.sliceIndex === "number" ? item.sliceIndex : undefined,
     plane: item.plane === "sagittal" || item.plane === "axial" ? item.plane : undefined,
     aiValue: value,
@@ -1010,10 +1016,11 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    *
    * El área no aparece: no tiene dos extremos, y la máscara pintada ya la muestra.
    */
-  function aiMeasurementOverlaysFor(plane: "sagittal" | "axial", sliceIndex: number): MeasurementOverlay[] {
+  function aiMeasurementOverlaysFor(plane: "sagittal" | "axial", sliceIndex: number, derived: boolean): MeasurementOverlay[] {
     if (!activeLevel) return [];
     return resultRows
       .filter((row) => {
+        if (Boolean(row.experimental) !== derived) return false;
         const points = measureGeometry[row.id] ?? row.points;
         if (!points || points.length !== 2) return false;
         if (row.sliceIndex !== undefined && row.sliceIndex !== sliceIndex) return false;
@@ -1025,10 +1032,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         const value = firstPresent(row.reviewerValue, row.aiValue);
         return {
           id: `ai-${row.id}`,
-          kind: "distance" as const,
+          // La figura la define la cantidad de puntos, no el nombre de la medición:
+          // dos son una distancia, tres una listesis y cuatro un ángulo.
+          kind: (points.length >= 4 ? "angle" : points.length === 3 ? "listhesis" : "distance") as MeasurementKind,
           measurementId: row.id,
           points,
-          source: "ai" as const,
+          source: (row.experimental ? "derived" : "ai") as "ai" | "derived",
           label: `${value ?? "—"} ${displayUnit(row.unit)}`.trim(),
         };
       });
@@ -1048,8 +1057,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       unit: row.unit,
       aiValue: row.aiValue,
       reviewerValue: row.reviewerValue === "" ? null : row.reviewerValue,
-      measurable: (measureGeometry[row.id] ?? row.points)?.length === 2,
+      measurable: Boolean((measureGeometry[row.id] ?? row.points)?.length),
       source: "ai" as const,
+      detail: [row.experimental ? "derivada" : "", row.detail ?? ""].filter(Boolean).join(" · ") || undefined,
     })),
     ...annotations
       .filter((item) => item.kind === "measurement" && (!activeLevel || item.level === activeLevel))
@@ -1066,7 +1076,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   ];
 
   /** Cuántas mediciones tiene dibujables el nivel activo, para el panel de capas. */
-  const aiMeasurableCount = resultRows.filter((row) => (measureGeometry[row.id] ?? row.points)?.length === 2).length;
+  const aiMeasurableCount = resultRows.filter((row) => !row.experimental && (measureGeometry[row.id] ?? row.points)?.length).length;
+  /** Derivadas de otras estructuras: van en su propia capa, apagada por defecto. */
+  const derivedMeasurableCount = resultRows.filter((row) => row.experimental && (measureGeometry[row.id] ?? row.points)?.length).length;
 
   /**
    * Arrastrar un extremo recalcula la medición desde la geometría nueva.
@@ -1283,8 +1295,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     if (closed) commitMeasurement(closed.kind, closed.points, frame, planeName, data, pixels);
                   }}
                   annotations={measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
-                  aiMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0)}
+                  aiMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, false)}
                   aiMeasurableCount={aiMeasurableCount}
+                  derivedMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, true)}
+                  derivedMeasurableCount={derivedMeasurableCount}
                   highlightedMeasurementId={highlightedMeasurementId ? `ai-${highlightedMeasurementId}` : null}
                   onSelectMeasurement={(id) => setSelectedMeasurementId(id.startsWith("ai-") ? id.slice(3) : id)}
                   selectedMeasurementId={selectedMeasurementId ? `ai-${selectedMeasurementId}` : null}
