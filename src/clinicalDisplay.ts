@@ -118,35 +118,40 @@ const landmarkLabels: Record<string, string> = {
 };
 
 /**
- * Lumbar levels in reading order. A lumbar MRI is read and reported level by
- * level, so this is the fixed spine of the findings panel — the list is always
- * rendered complete, including levels with no finding.
+ * The spine as it is read: craniocaudal, alternating vertebral body and disc space.
+ *
+ * A report describes both — an L4 body height and an L4-L5 disc space are separate
+ * findings at separate places — so both are levels here, in the order they appear on
+ * the image.
  */
-export const LUMBAR_LEVELS = ["L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1"] as const;
+export const SPINE_LEVELS = [
+  "T8", "T8-T9", "T9", "T9-T10", "T10", "T10-T11", "T11", "T11-T12", "T12", "T12-L1",
+  "L1", "L1-L2", "L2", "L2-L3", "L3", "L3-L4", "L4", "L4-L5", "L5", "L5-S1", "S1",
+] as const;
+
+export type SpineLevel = (typeof SPINE_LEVELS)[number];
 
 /**
- * Thoracic levels a lumbar study reaches when the field of view extends upwards,
- * ordered downwards so they sit above L1-L2 in the panel.
+ * The lumbar levels the findings panel always renders, with or without a finding.
  *
- * They are not part of the fixed spine: a lumbar protocol is read L1-L2 through
- * L5-S1, and showing an empty T9-T10 row on every study would state that a level
- * was looked at and found clean when it was never in frame. They appear only when
- * the study actually has them.
+ * "Nothing at L3-L4" is a clinical statement, and a level missing from the list is
+ * indistinguishable from a level nobody looked at. Everything outside this range —
+ * thoracic above, S1 below — appears only when the study reaches it: an always-empty
+ * T9-T10 row would claim a level was examined that was never in the field of view.
  */
-export const THORACIC_LEVELS = ["T8-T9", "T9-T10", "T10-T11", "T11-T12", "T12-L1"] as const;
+export const ALWAYS_SHOWN_LEVELS: readonly SpineLevel[] = [
+  "L1", "L1-L2", "L2", "L2-L3", "L3", "L3-L4", "L4", "L4-L5", "L5", "L5-S1",
+];
 
-export type LumbarLevel = (typeof LUMBAR_LEVELS)[number];
-export type ThoracicLevel = (typeof THORACIC_LEVELS)[number];
-export type SpineLevel = LumbarLevel | ThoracicLevel;
-
-const KNOWN_LEVELS: readonly string[] = [...THORACIC_LEVELS, ...LUMBAR_LEVELS];
+const KNOWN_LEVELS: readonly string[] = SPINE_LEVELS;
 
 /**
  * Accepts l4_l5 / L4L5 / l4-l5 / "L4 L5" and normalizes to the canonical "L4-L5".
  *
- * Thoracic levels are accepted too. While only the lumbar table was, a level the AI
- * had correctly identified as T12-L1 landed in the unassigned bucket, which reads as
- * "the AI could not tell" when in fact it could.
+ * Vertebral bodies ("L4") and thoracic levels are accepted too. While only the five
+ * lumbar disc spaces were, a level the AI had correctly identified as T12-L1 or as
+ * the L4 body landed in the unassigned bucket, which reads as "the AI could not
+ * tell" when in fact it could.
  */
 export function normalizeLevel(value: string | null | undefined): SpineLevel | null {
   if (!value) return null;

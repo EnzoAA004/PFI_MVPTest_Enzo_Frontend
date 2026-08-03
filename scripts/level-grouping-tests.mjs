@@ -8,13 +8,14 @@ import ts from "typescript";
  *
  * Dos reglas opuestas conviven acá, y son las dos que se protegen.
  *
- * Los cinco niveles lumbares se muestran siempre completos, tengan o no hallazgo:
- * "nada en L3-L4" es una afirmación clínica, y un nivel que desaparece de la lista
- * no se distingue de un nivel que nadie miró.
+ * Los diez niveles lumbares -cuerpo y espacio discal, alternados- se muestran
+ * siempre completos, tengan o no hallazgo: "nada en L3-L4" es una afirmación
+ * clínica, y un nivel que desaparece de la lista no se distingue de un nivel que
+ * nadie miró.
  *
- * Los torácicos aparecen solo cuando el estudio los alcanza, por lo mismo: una fila
- * T9-T10 vacía en todos los estudios afirmaría que se miró un nivel que ni siquiera
- * entraba en el encuadre.
+ * Lo de afuera de ese rango aparece solo cuando el estudio lo alcanza, que es la
+ * misma regla al revés: una fila T9-T10 vacía en todos los estudios afirmaría que se
+ * miró un nivel que ni siquiera entraba en el encuadre.
  */
 function load(path) {
   return fs.readFileSync(path, "utf8")
@@ -41,9 +42,18 @@ const check = (name, fn) => {
 
 const finding = (level) => ({ id: `m-${level}`, label: "disc height", level, value: 9, unit: "mm" });
 
-check("los cinco niveles lumbares se muestran aunque el estudio no traiga nada", () => {
+const LUMBAR = ["L1", "L1-L2", "L2", "L2-L3", "L3", "L3-L4", "L4", "L4-L5", "L5", "L5-S1"];
+
+check("los diez niveles lumbares se muestran aunque el estudio no traiga nada", () => {
   const groups = groupFindingsByLevel([]);
-  assert.equal(groups.map((group) => group.label).join(" "), ["L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1"].join(" "));
+  assert.equal(groups.map((group) => group.label).join(" "), LUMBAR.join(" "));
+});
+
+check("un cuerpo vertebral es un nivel y tiene su propia fila", () => {
+  const groups = groupFindingsByLevel([{ id: "m-l4", label: "vertebra height", level: "L4", value: 27.6, unit: "mm" }]);
+  const body = groups.find((group) => group.label === "L4");
+  assert.equal(body.findings.length, 1);
+  assert.equal(groups.find((group) => group.level === null), undefined);
 });
 
 check("un nivel torácico identificado por la IA deja de caer en 'sin nivel'", () => {
@@ -54,14 +64,15 @@ check("un nivel torácico identificado por la IA deja de caer en 'sin nivel'", (
   assert.equal(groups.find((group) => group.level === null), undefined);
 });
 
-check("los torácicos se ordenan arriba de L1-L2, como en la columna", () => {
-  const groups = groupFindingsByLevel([finding("T11-T12"), finding("T12-L1"), finding("L4-L5")]);
-  assert.equal(groups.map((group) => group.label).join(" "), ["T11-T12", "T12-L1", "L1-L2", "L2-L3", "L3-L4", "L4-L5", "L5-S1"].join(" "));
+check("todo se ordena craneocaudal, como se recorre la columna", () => {
+  const groups = groupFindingsByLevel([finding("L4-L5"), finding("T12-L1"), finding("S1"), finding("T11-T12")]);
+  assert.equal(groups.map((group) => group.label).join(" "), ["T11-T12", "T12-L1", ...LUMBAR, "S1"].join(" "));
 });
 
-check("un torácico que el estudio no alcanza no ocupa una fila vacía", () => {
+check("un nivel que el estudio no alcanza no ocupa una fila vacía", () => {
   const groups = groupFindingsByLevel([finding("T12-L1")]);
   assert.equal(groups.some((group) => group.label === "T9-T10"), false);
+  assert.equal(groups.some((group) => group.label === "S1"), false);
 });
 
 check("una medición sin nivel va al cajón aparte y no se reparte por adivinanza", () => {
@@ -82,6 +93,7 @@ check("las variantes de escritura del mismo nivel llegan al mismo grupo", () => 
     assert.equal(normalizeLevel(written), "L4-L5", written);
   }
   assert.equal(normalizeLevel("t11_t12"), "T11-T12");
+  assert.equal(normalizeLevel("l4"), "L4");
 });
 
 check("con todos los niveles asignados el aviso de 'sin nivel' no se muestra", () => {
