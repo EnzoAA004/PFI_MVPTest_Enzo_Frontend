@@ -43,6 +43,14 @@ export type ReviewCorrectionValue = {
   unit?: string;
   confidence?: number;
   plane?: Plane;
+  /**
+   * Los extremos entre los que se midió, cuando el revisor movió la figura.
+   *
+   * Sin esto se guarda el número corregido pero no de dónde salió: al recargar, la
+   * cota vuelve a donde la había puesto la IA mientras la tabla muestra el valor del
+   * médico, y la línea deja de medir lo que dice el número.
+   */
+  points?: { x: number; y: number }[];
 };
 
 export type ReviewMeasurementCorrection = {

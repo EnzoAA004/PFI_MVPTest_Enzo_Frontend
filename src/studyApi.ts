@@ -200,8 +200,12 @@ export function applyCorrectionsToMeasurements(
       if (!entry) return measurement;
       matched.add(measurement.id);
       const reviewerValue = entry.correction.afterValue.value;
+      const corrected = entry.correction.afterValue.points;
       return {
         ...measurement,
+        // La figura vuelve a donde el revisor la dejó, no a donde la puso la IA: si
+        // solo se restaurara el número, la cota mostraría una medición y la tabla otra.
+        points: Array.isArray(corrected) && corrected.length === 2 ? corrected : measurement.points,
         value: reviewerValue ?? measurement.value,
         aiValue: measurement.aiValue ?? entry.correction.beforeValue.value ?? measurement.value,
         reviewerValue,

@@ -346,6 +346,9 @@ export function buildReviewCorrections(measurements: Measurement[] = [], comment
         value: reviewerValue,
         unit: measurement.unit,
         plane: measurement.plane,
+        // La geometría acompaña al valor: es de donde salió, y sin ella la corrección
+        // se guarda a medias.
+        ...(measurement.points?.length ? { points: measurement.points } : {}),
       },
       ...(comment ? { comment } : {}),
     }];

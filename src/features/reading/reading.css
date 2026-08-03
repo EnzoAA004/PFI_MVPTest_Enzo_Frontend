@@ -913,6 +913,10 @@
   }
 
   .rr-panel-body {
+    /* Con overflow-y en auto el navegador convierte overflow-x en auto tambien, y
+       cualquier fila un poco ancha hace aparecer una barra horizontal que corre el
+       nombre de la medicion fuera de la vista. Un panel se recorre hacia abajo. */
+    overflow-x: hidden;
     overflow-y: auto;
     padding: var(--sp-3);
     display: flex;
@@ -993,6 +997,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
 
   .rr-measure {
@@ -1037,6 +1042,102 @@
     background: var(--surface-hover, rgb(255 255 255 / .08));
     box-shadow: inset 2px 0 0 var(--primary);
   }
+
+  /* Una línea por medición, como una tabla: nombre a la izquierda, valor editable a
+     la derecha. Debajo, y solo cuando hay algo que decir, lo que contextualiza el
+     número. Una fila que siempre ocupa tres renglones hace que cinco mediciones no
+     entren en pantalla, y el médico pierde la comparación entre niveles. */
+  .rr-measure {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+
+  .rr-measure-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .rr-measure-main .rr-measure-label { flex: 1; min-width: 0; }
+
+  .rr-measure-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rr-measure-foot:empty { display: none; }
+
+  /* Tiene que ganarle a `.rr-panel input:not([type])`, que estira cualquier campo del
+     panel al 100% — pensado para los de una sola columna. Ese selector empata en
+     especificidad y está más abajo en el archivo, así que ganaba por orden y empujaba
+     el nombre de la medición fuera de la vista. Se agrega la clase de la fila para
+     desempatar sin depender de dónde quede cada bloque. */
+  .rr-panel .rr-measure input.rr-measure-input {
+    width: 76px;
+    flex: none;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    padding: 2px 6px;
+  }
+
+  .rr-panel .rr-measure.rr-measure-edited input.rr-measure-input { color: var(--text-warning-strong); }
+
+  .rr-measure-unit { font-size: 11px; color: var(--text-muted); width: 28px; }
+
+  /* Distingue de un vistazo lo que midió el médico de lo que propuso el modelo. */
+  .rr-measure-source {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-muted);
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    padding: 0 4px;
+  }
+
+  .rr-measure-delete {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+
+  .rr-measure-delete:hover { color: var(--text); }
+
+  .rr-measure-ai,
+  .rr-measure-detail {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* El chip dice contra qué se compara, y su título lleva la fuente del umbral:
+     marcar un valor como fuera de rango es una afirmación, y quien la lea tiene
+     derecho a saber de dónde sale el número que la sostiene. */
+  .rr-range {
+    font-size: 10px;
+    border-radius: 3px;
+    padding: 1px 5px;
+    cursor: help;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rr-range-below,
+  .rr-range-above {
+    color: var(--text-warning-strong);
+    background: rgb(240 180 41 / .14);
+  }
+
+  .rr-range-within { color: var(--text-muted); }
 
   /* Review form ---------------------------------------------------------- */
   .rr-field {

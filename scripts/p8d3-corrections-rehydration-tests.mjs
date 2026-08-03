@@ -139,15 +139,43 @@ test("H la decision se guarda como borrador o se confirma, nunca se 'aprueba'", 
 });
 
 test("I el valor de IA y el del revisor se muestran separados", () => {
-  const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
-  // En la sala de lectura las mediciones viven en el panel derecho: cada fila
-  // muestra el valor de IA y ofrece un campo aparte para el del revisor, de modo
-  // que la correccion nunca pisa el original.
-  assert.match(source, /Valor del revisor para/);
+  // La regla sigue siendo la misma y la fila sigue siendo el lugar: lo que cambio es
+  // que ahora vive en su propio componente, junto a la cota que dibuja sobre la
+  // imagen, en vez de en una segunda lista dentro de otra pestana.
+  const source = readFileSync(join(root, "src/features/reading/MeasurementPanel.tsx"), "utf8");
+  assert.match(source, /Valor de \$\{displayMeasurementLabel/);
+  // El valor de la IA queda visible cuando el revisor lo corrige: la correccion no
+  // pisa el original, lo acompana.
+  assert.match(source, /rr-measure-ai/);
   // El valor de IA se muestra como referencia y ademas como placeholder del campo,
   // de modo que el original permanece visible mientras se corrige.
-  assert.match(source, /item\.aiValue/);
-  assert.match(source, /placeholder=\{String\(item\.aiValue/);
+  assert.match(source, /IA \{ai\}/);
+  assert.match(source, /placeholder=\{ai === null \? "" : String\(ai\)\}/);
+});
+
+test("J la geometria corregida viaja con el valor y vuelve al rehidratar", () => {
+  // Guardar solo el numero deja la cota donde la puso la IA: al recargar, la linea
+  // dibujada dejaria de medir lo que dice la tabla.
+  const puntos = [{ x: 10, y: 20 }, { x: 60, y: 24 }];
+  // La geometria se adjunta al `afterValue`, que el backend guarda como JSONB abierto.
+  const api = readFileSync(join(root, "src/api.ts"), "utf8");
+  assert.match(api, /points: measurement\.points/);
+
+  const rehydrated = applyCorrectionsToMeasurements(
+    { sagittal: [{ id: "sagittal-disc-l4-l5-width", label: "disc width", aiValue: 37.37, value: 37.37, unit: "mm", source: "AI", status: "pendiente", points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }] },
+    [{ measurementId: "sagittal-disc-l4-l5-width", beforeValue: { value: 37.37 }, afterValue: { value: 41.2, points: puntos } }],
+  );
+  assert.deepEqual(rehydrated.sagittal[0].points, puntos);
+  assert.equal(rehydrated.sagittal[0].reviewerValue, 41.2);
+});
+
+test("K sin geometria corregida se conserva la que propuso la IA", () => {
+  const original = [{ x: 3, y: 4 }, { x: 9, y: 4 }];
+  const rehydrated = applyCorrectionsToMeasurements(
+    { sagittal: [{ id: "m1", label: "disc width", aiValue: 30, value: 30, unit: "mm", source: "AI", status: "pendiente", points: original }] },
+    [{ measurementId: "m1", beforeValue: { value: 30 }, afterValue: { value: 31 } }],
+  );
+  assert.deepEqual(rehydrated.sagittal[0].points, original);
 });
 
 console.log(`P8-D3 corrections rehydration tests passed: ${count}`);

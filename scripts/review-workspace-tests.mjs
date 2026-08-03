@@ -135,9 +135,13 @@ test("O axial=null no bloquea la vista", () => assert.equal(readiness.resolveRev
 // medico la elige. La intencion —que no compita con la imagen— se cumple por
 // construccion y ya no hay un wrapper que verificar.
 test("Q humanReviewRequired y notClinicalDiagnosis permanecen visibles", () => {
+  // Cada aviso vive donde corresponde y por eso se verifica por separado: la
+  // advertencia de revision humana esta en la barra de herramientas, y la de uso no
+  // diagnostico en la esquina del viewport, pegada a la imagen que la necesita.
   const source = fs.readFileSync("src/components/StudyReviewView.tsx", "utf8");
+  const viewport = fs.readFileSync("src/features/reading/PlaneViewport.tsx", "utf8");
   assert.match(source, /Revisi.n humana requerida/);
-  assert.match(source, /No apto para diagn.stico cl.nico/);
+  assert.match(viewport, /No apto para diagn.stico cl.nico/);
 });
 
 test("12.11 A sagital real + axial null => sagittal_only", () => assert.equal(readiness.resolveReviewWorkspaceMode(run({ sagittal: sagittalPlane(), axial: null })), "sagittal_only"));
