@@ -42,6 +42,11 @@ type MeasurementRow = {
   level: string;
   /** "study" cuando la medición no describe un nivel. Por defecto, "level". */
   levelScope?: string;
+  /** Extremos entre los que se midió, en la base 0..256. Vacío si no es distancia. */
+  points?: { x: number; y: number }[];
+  /** Corte y plano de los que salió; sin ellos el segmento no se puede ubicar. */
+  sliceIndex?: number;
+  plane?: "sagittal" | "axial";
   aiValue: number | string;
   reviewerValue?: number | string | null;
   unit: string;
@@ -194,6 +199,9 @@ type PlaneViewportProps = {
   onOverlayAvailableChange: (available: boolean) => void;
   measureMode: boolean;
   annotations: MeasurementOverlay[];
+  /** Segmentos de las mediciones de la IA, con sus extremos reales. */
+  aiMeasurements: MeasurementOverlay[];
+  onMoveMeasurePoint: (measurementId: string, end: "from" | "to", point: { x: number; y: number }, frame: { width: number; height: number }) => void;
   onMeasure: (from: { x: number; y: number }, to: { x: number; y: number }, frame: { width: number; height: number }) => void;
   onMeasureComplete: () => void;
   onMoveMaskPoint: (maskId: string, pointIndex: number, point: { x: number; y: number }) => void;
@@ -217,7 +225,7 @@ function PlaneViewport({
   plane, caseLabel, seriesName, model, modelLabel, inferenceLabel, spacingLabel,
   slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
-  measureMode, annotations, onMeasure, onMeasureComplete, annotatedIndices, onMoveMaskPoint,
+  measureMode, annotations, aiMeasurements, onMoveMeasurePoint, onMeasure, onMeasureComplete, annotatedIndices, onMoveMaskPoint,
   segmentation, slicePixels, pixelsBaseUrl, hiddenInstances, onToggleInstance,
 }: PlaneViewportProps) {
   const sliceLabel = slice ? `corte ${slice.current + 1}/${slice.total}` : "corte único";
@@ -248,6 +256,8 @@ function PlaneViewport({
           slice={slice}
           measureMode={measureMode}
           annotations={annotations}
+          aiMeasurements={aiMeasurements}
+          onMoveMeasurePoint={onMoveMeasurePoint}
           onMeasure={onMeasure}
           onMeasureComplete={onMeasureComplete}
           onMoveMaskPoint={onMoveMaskPoint}
@@ -379,6 +389,9 @@ function normalizeRow(item: any): MeasurementRow {
     label,
     level: String(item.level ?? "Nivel no informado"),
     levelScope: item.levelScope === "study" ? "study" : "level",
+    points: Array.isArray(item.points) && item.points.length === 2 ? item.points : undefined,
+    sliceIndex: typeof item.sliceIndex === "number" ? item.sliceIndex : undefined,
+    plane: item.plane === "sagittal" || item.plane === "axial" ? item.plane : undefined,
     aiValue: value,
     reviewerValue: item.reviewerValue ?? null,
     unit: String(item.unit ?? ""),
@@ -480,6 +493,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   // everything technical kept out of the clinical surface entirely.
   const [panelTab, setPanelTab] = useState<"findings" | "review" | "technical">("findings");
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
+  /*
+   * Geometría corregida por el revisor, por id de medición. Se guarda aparte de la
+   * de la IA, que nunca se pisa: lo que el médico corrige queda al lado de lo que la
+   * IA propuso, no encima.
+   */
+  const [measureGeometry, setMeasureGeometry] = useState<Record<string, { x: number; y: number }[]>>({});
   // Corte visible por plano. Arranca en el corte que analizó la IA y se mueve con
   // la rueda o el teclado; queda por plano para que cambiar de serie no lo pierda.
   const [sliceByPlane, setSliceByPlane] = useState<Record<string, number>>({});
@@ -1093,6 +1112,59 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       }));
   }
 
+  /**
+   * Segmentos de las mediciones de la IA para el corte que se está mirando.
+   *
+   * Se filtran por nivel cuando hay uno seleccionado: con siete discos, cinco
+   * vértebras y seis niveles de canal, dibujarlo todo junto tapa la anatomía. El
+   * área no aparece porque no tiene dos extremos.
+   */
+  function aiMeasurementOverlaysFor(plane: "sagittal" | "axial", sliceIndex: number): MeasurementOverlay[] {
+    return resultRows
+      .filter((row) => {
+        const points = measureGeometry[row.id] ?? row.points;
+        if (!points || points.length !== 2) return false;
+        if (row.sliceIndex !== undefined && row.sliceIndex !== sliceIndex) return false;
+        if (row.plane && row.plane !== plane) return false;
+        return !activeLevel || row.level === activeLevel;
+      })
+      .map((row) => {
+        const points = measureGeometry[row.id] ?? row.points!;
+        const value = firstPresent(row.reviewerValue, row.aiValue);
+        return {
+          id: `ai-${row.id}`,
+          measurementId: row.id,
+          from: points[0],
+          to: points[1],
+          source: "ai" as const,
+          label: `${displayMeasurementLabelShort(row.label)} ${value ?? "—"}${displayUnit(row.unit)}`,
+        };
+      });
+  }
+
+  /**
+   * Arrastrar un extremo recalcula la medición desde la geometría nueva.
+   *
+   * El valor pasa a ser el del revisor y el de la IA queda intacto al lado. Escribir
+   * el número en la tabla hace lo mismo con el valor pero no puede mover la línea:
+   * solo arrastrando vuelven a coincidir.
+   */
+  function moveMeasurePoint(
+    measurementId: string,
+    end: "from" | "to",
+    point: { x: number; y: number },
+    frame: { width: number; height: number },
+    spacing?: number[] | null,
+  ) {
+    const row = resultRows.find((item) => item.id === measurementId);
+    const current = measureGeometry[measurementId] ?? row?.points;
+    if (!current || current.length !== 2) return;
+    const next = end === "from" ? [point, current[1]] : [current[0], point];
+    setMeasureGeometry((state) => ({ ...state, [measurementId]: next }));
+    const { value } = measureDistance(next[0], next[1], frame, spacing);
+    setReviewerValues((state) => ({ ...state, [measurementId]: value.toFixed(2) }));
+  }
+
   const caseLabel = displayRun.caseId ?? studyReview?.caseId ?? "Caso sin identificador";
   const subjectLabel = displaySubjectRef(selectedDetail?.study?.subjectRef ?? run.patientId ?? null);
   // La esquina del viewport muestra el corte que se está mirando, no el que analizó
@@ -1206,6 +1278,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   onOverlayAvailableChange={handleOverlayAvailableChange}
                   measureMode={measureMode && activePlano === planeName}
                   annotations={measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
+                  aiMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0)}
+                  onMoveMeasurePoint={(measurementId, end, point, frame) => moveMeasurePoint(measurementId, end, point, frame, data.series.inPlaneSpacingMm)}
                   annotatedIndices={annotatedSlices(annotations, planeName)}
                   onMeasure={(from, to, frame) => {
                     const spacing = data.series.inPlaneSpacingMm;

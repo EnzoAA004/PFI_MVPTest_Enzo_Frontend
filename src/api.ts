@@ -198,7 +198,19 @@ function toMeasurement(value: unknown, index: number): Measurement {
     id: typeof record.id === "string" ? record.id : `measurement-${index}`,
     label,
     level: typeof record.level === "string" ? record.level : undefined,
+    // Sin esto, una medición que no corresponde a ningún nivel -el área del canal-
+    // llega indistinguible de una a la que no se le pudo asignar, y la pantalla
+    // acusa a la IA de un fallo que no tuvo.
+    levelScope: record.levelScope === "study" ? "study" : "level",
     sliceIndex: typeof record.sliceIndex === "number" ? record.sliceIndex : undefined,
+    // Los dos extremos entre los que se midió. Es lo que le da un lugar al número:
+    // sin ellos el visor no puede dibujar de dónde a dónde, ni dejar corregirlo.
+    points: Array.isArray(record.points) && record.points.length === 2
+      ? record.points.filter((point): point is { x: number; y: number } => {
+        const item = asRecord(point);
+        return typeof item?.x === "number" && typeof item?.y === "number";
+      })
+      : undefined,
     value: baseValue,
     aiValue: typeof record.aiValue === "number" || typeof record.aiValue === "string" ? record.aiValue : baseValue,
     reviewerValue,

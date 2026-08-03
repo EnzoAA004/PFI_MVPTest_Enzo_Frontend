@@ -102,8 +102,23 @@ export type Measurement = {
   /** Canonical, untranslated identifier (CanonicalMeasurement.labelKey). Spanish text is resolved only at render time via displayMeasurementLabel(). */
   labelKey?: string;
   level?: string;
+  /**
+   * Qué describe la medición: un nivel vertebral o el estudio entero.
+   *
+   * Separa "no le pude asignar nivel" de "no corresponde a un nivel". El área del
+   * canal no tiene nivel porque su máscara recorre toda la columna, y mostrarla
+   * junto a lo que sí quedó sin identificar acusa a la IA de un fallo que no tuvo.
+   */
+  levelScope?: "level" | "study";
   /** Corte sobre el que se midió; sin él la medición no se puede ubicar en la serie. */
   sliceIndex?: number;
+  /**
+   * Los dos extremos entre los que se midió, en la base 0..256.
+   *
+   * Es lo que le da un lugar al número: el visor dibuja el segmento para que el
+   * médico vea de dónde a dónde, y arrastrando un extremo lo corrige.
+   */
+  points?: { x: number; y: number }[];
   value: number | string;
   aiValue?: number | string;
   reviewerValue?: number | string | null;

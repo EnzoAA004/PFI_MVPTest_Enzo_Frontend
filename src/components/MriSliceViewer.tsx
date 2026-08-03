@@ -79,6 +79,15 @@ type Props = {
   measureMode?: boolean;
   /** Anotaciones ya trazadas que corresponden al corte visible. */
   annotations?: MeasurementOverlay[];
+  /**
+   * Segmentos de las mediciones de la IA, con sus dos extremos reales.
+   *
+   * Le dan un lugar al número: sin esto la tabla dice "37.37 mm" y el médico no
+   * tiene cómo saber de dónde a dónde se midió, ni verificarlo, ni corregirlo.
+   */
+  aiMeasurements?: MeasurementOverlay[];
+  /** Arrastrar un extremo de una medición de la IA la corrige. */
+  onMoveMeasurePoint?: (measurementId: string, end: "from" | "to", point: Point, frame: Size) => void;
   onMeasure?: (from: Point, to: Point, frame: Size) => void;
   onMeasureComplete?: () => void;
   /**
@@ -108,6 +117,13 @@ export type MeasurementOverlay = {
   from: Point;
   to: Point;
   label: string;
+  /**
+   * De quién es la medición. Se distinguen en pantalla porque no valen lo mismo: la
+   * de la IA es una propuesta, la del revisor es lo que él afirma haber medido.
+   */
+  source?: "ai" | "reviewer";
+  /** Medición de la tabla a la que corresponde, cuando arrastrarla la corrige. */
+  measurementId?: string;
 };
 
 const neutralPreset: WindowPreset = { id: "neutral", label: "Neutral PNG", brightness: 100, contrast: 100 };
@@ -242,6 +258,8 @@ export function MriSliceViewer({
   slice,
   measureMode = false,
   annotations = [],
+  aiMeasurements = [],
+  onMoveMeasurePoint,
   onMeasure,
   onMeasureComplete,
   onMoveMaskPoint,
@@ -274,6 +292,7 @@ export function MriSliceViewer({
   // Primer punto del segmento en curso. Vive en estado y no en ref porque la
   // marca provisional tiene que dibujarse apenas se hace el primer clic.
   const [measureAnchor, setMeasureAnchor] = useState<Point | null>(null);
+  const measureDragRef = useRef<{ measurementId: string; end: "from" | "to" } | null>(null);
   /*
    * La segmentación se pinta acá, no llega pintada. `putImageData` escribe los
    * píxeles exactos del mapa de instancias: no hay interpolación ni contorno
@@ -370,6 +389,13 @@ export function MriSliceViewer({
   const [overlayVisible, setOverlayVisible] = useState(overlayEnabled);
   const [overlayAlpha, setOverlayAlpha] = useState(overlayOpacity);
   const [landmarksVisible, setLandmarksVisible] = useState(initialLandmarksVisible);
+  /*
+   * Cada capa se prende y apaga sola. Con siete discos, cinco vértebras y seis
+   * niveles de canal, dibujarlo todo junto tapa la anatomía que se está leyendo: el
+   * ruido visual no es un detalle estético, esconde la imagen que hay que mirar.
+   */
+  const [aiMeasuresVisible, setAiMeasuresVisible] = useState(true);
+  const [myMeasuresVisible, setMyMeasuresVisible] = useState(true);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; brightness: number; contrast: number; panX: number; panY: number; window?: { center: number; width: number } } | null>(null);
   const landmarkDragRef = useRef<string | null>(null);
@@ -378,6 +404,14 @@ export function MriSliceViewer({
   const [selectedContourId, setSelectedContourId] = useState<string | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const landmarks = model.landmarks;
+  /*
+   * Las de la IA van primero para que las del revisor queden encima: si se pisan, lo
+   * que tiene que quedar legible es lo que el médico afirmó, no la propuesta.
+   */
+  const visibleMeasures = [
+    ...(aiMeasuresVisible ? aiMeasurements.map((item) => ({ ...item, source: "ai" as const })) : []),
+    ...(myMeasuresVisible ? annotations.map((item) => ({ ...item, source: "reviewer" as const })) : []),
+  ];
   const groups = useMemo(() => maskGroups(model.masks), [model.masks]);
   const [hiddenClasses, setHiddenClasses] = useState<string[]>([]);
   const classNames = useMemo(() => groups.map((group) => group.technicalName), [groups]);
@@ -545,6 +579,12 @@ export function MriSliceViewer({
   }
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (measureDragRef.current && onMoveMeasurePoint) {
+      const point = pointFromEvent(event);
+      const drag = measureDragRef.current;
+      if (point) onMoveMeasurePoint(drag.measurementId, drag.end, point, imageSize);
+      return;
+    }
     if (contourDragRef.current && canEditContours) {
       const point = pointFromEvent(event);
       if (point) onMoveMaskPoint?.(contourDragRef.current.maskId, contourDragRef.current.index, point);
@@ -575,6 +615,7 @@ export function MriSliceViewer({
   function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
     dragRef.current = null;
     landmarkDragRef.current = null;
+    measureDragRef.current = null;
     contourDragRef.current = null;
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -656,17 +697,26 @@ export function MriSliceViewer({
       </div>
 
       <div className="plane-controls-panel">
+        <strong className="layers-title">Capas</strong>
         <label className="toggle-row">
           <input checked={overlayVisible} disabled={!overlayLoaded} onChange={(event) => setOverlayVisible(event.target.checked)} type="checkbox" />
-          <span>Mostrar segmentación</span>
+          <span>Segmentación</span>
         </label>
         <label className="opacity-control">
           <span>Opacidad {Math.round(overlayAlpha * 100)}%</span>
           <input aria-label="Opacidad de segmentación" disabled={!overlayLoaded} max="1" min="0" onChange={(event) => setOverlayAlpha(Number(event.target.value))} step="0.01" type="range" value={overlayAlpha} />
         </label>
         <label className="toggle-row">
+          <input checked={aiMeasuresVisible} disabled={!aiMeasurements.length} onChange={(event) => setAiMeasuresVisible(event.target.checked)} type="checkbox" />
+          <span>Mediciones de la IA{aiMeasurements.length ? ` (${aiMeasurements.length})` : ""}</span>
+        </label>
+        <label className="toggle-row">
+          <input checked={myMeasuresVisible} disabled={!annotations.length} onChange={(event) => setMyMeasuresVisible(event.target.checked)} type="checkbox" />
+          <span>Mis mediciones{annotations.length ? ` (${annotations.length})` : ""}</span>
+        </label>
+        <label className="toggle-row">
           <input checked={landmarksVisible} onChange={(event) => setLandmarksVisible(event.target.checked)} type="checkbox" />
-          <span>Mostrar puntos de referencia</span>
+          <span>Puntos de referencia</span>
         </label>
       </div>
 
@@ -756,16 +806,31 @@ export function MriSliceViewer({
             ) : overlayVisible && onAiSlice && overlayLoaded && overlayAsset.url ? (
               <img alt={`${seriesName} recurso de superposicion IA`} className="mri-overlay-img" draggable={false} src={overlayAsset.url} style={{ opacity: overlayAlpha, transform: "translateZ(0)" }} />
             ) : null}
-            {(annotations.length > 0 || measureAnchor) && (
-              <svg className="mri-measure-layer" viewBox="0 0 256 256" preserveAspectRatio="none" aria-hidden>
-                {annotations.map((item) => (
-                  <g className="mri-measure" key={item.id}>
-                    <line x1={item.from.x} y1={item.from.y} x2={item.to.x} y2={item.to.y} />
-                    <circle cx={item.from.x} cy={item.from.y} r={2.5} />
-                    <circle cx={item.to.x} cy={item.to.y} r={2.5} />
-                    <text x={(item.from.x + item.to.x) / 2} y={(item.from.y + item.to.y) / 2 - 4}>{item.label}</text>
-                  </g>
-                ))}
+            {(visibleMeasures.length > 0 || measureAnchor) && (
+              <svg className="mri-measure-layer" viewBox="0 0 256 256" preserveAspectRatio="none">
+                {visibleMeasures.map((item) => {
+                  const editable = Boolean(item.measurementId && onMoveMeasurePoint && !readonly);
+                  return (
+                    <g className={`mri-measure mri-measure-${item.source ?? "reviewer"}`} key={item.id}>
+                      <line x1={item.from.x} y1={item.from.y} x2={item.to.x} y2={item.to.y} />
+                      {(["from", "to"] as const).map((end) => (
+                        <circle
+                          className={editable ? "mri-measure-handle" : undefined}
+                          cx={item[end].x}
+                          cy={item[end].y}
+                          key={end}
+                          onPointerDown={editable ? (event) => {
+                            event.stopPropagation();
+                            measureDragRef.current = { measurementId: item.measurementId!, end };
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                          } : undefined}
+                          r={editable ? 3.5 : 2.5}
+                        />
+                      ))}
+                      <text x={(item.from.x + item.to.x) / 2} y={(item.from.y + item.to.y) / 2 - 4}>{item.label}</text>
+                    </g>
+                  );
+                })}
                 {measureAnchor && (
                   <circle className="mri-measure-anchor" cx={measureAnchor.x} cy={measureAnchor.y} r={3} />
                 )}

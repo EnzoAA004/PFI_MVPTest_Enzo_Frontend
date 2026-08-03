@@ -109,7 +109,18 @@ function normalizeMeasurement(value: unknown, index: number, plane?: Plane): Mea
     // El nivel lumbar viaja persistido desde el AI Module; sin copiarlo aca toda
     // medicion llegaba al panel como "sin nivel asignado".
     level: typeof item.level === "string" ? item.level : undefined,
+    // Y sin copiar el alcance, una medicion que no corresponde a ningun nivel -el
+    // area del canal- llega indistinguible de una a la que no se le pudo asignar.
+    levelScope: item.levelScope === "study" ? "study" : "level",
     sliceIndex: typeof item.sliceIndex === "number" ? item.sliceIndex : undefined,
+    // Los dos extremos entre los que se midio. Sin ellos el visor no puede dibujar
+    // de donde a donde salio el numero, que es lo que permite verificarlo.
+    points: Array.isArray(item.points) && item.points.length === 2
+      ? item.points.filter((point: unknown): point is { x: number; y: number } => {
+        const value = asRecord(point);
+        return typeof value?.x === "number" && typeof value?.y === "number";
+      })
+      : undefined,
     value: effectiveValue,
     aiValue,
     reviewerValue,

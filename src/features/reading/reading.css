@@ -301,7 +301,9 @@
 
   .mri-contour-handle:active { cursor: grabbing; }
 
-  /* Mediciones del revisor sobre la imagen ------------------------------- */
+  /* Mediciones sobre la imagen ------------------------------------------- */
+  /* La capa no intercepta el puntero salvo en los tiradores: si lo hiciera, no se
+     podría desplazar ni ventanear la imagen por debajo de una medición. */
   .mri-measure-layer {
     position: absolute;
     inset: 0;
@@ -333,6 +335,33 @@
     stroke: var(--primary);
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
+  }
+
+  /* La de la IA es una propuesta y la del revisor es lo que él afirma: se
+     distinguen por color y por trazo, no solo por color, para que la diferencia
+     sobreviva a una pantalla mal calibrada o a un daltonismo. */
+  .mri-measure-ai line {
+    stroke: var(--warning, #e0a33e);
+    stroke-dasharray: 4 2;
+  }
+
+  .mri-measure-ai circle { fill: var(--warning, #e0a33e); }
+  .mri-measure-ai text { fill: var(--warning, #e0a33e); }
+
+  .mri-measure-handle {
+    pointer-events: auto;
+    cursor: grab;
+  }
+
+  .mri-measure-handle:active { cursor: grabbing; }
+
+  .layers-title {
+    display: block;
+    font-size: 11px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    opacity: .7;
+    margin-bottom: 4px;
   }
 
   /* Marcadores de contenido de la barra de cortes ------------------------ */
