@@ -13,12 +13,24 @@ export type AnnotationScope = "study" | "level" | "slice";
 
 export type AnnotationKind = "measurement" | "marker" | "note";
 
+/**
+ * Qué se midió, dentro de las anotaciones de tipo medición.
+ *
+ * Va aparte de `kind` porque son dos preguntas distintas: `kind` dice si la
+ * anotación es una medición, una marca o una nota —y es lo que la base restringe—
+ * mientras que esto dice con qué herramienta se tomó. Sin este dato, al recargar
+ * un ángulo se redibujaría como una distancia entre sus dos primeros puntos.
+ */
+export type AnnotationMeasurementKind = "distance" | "angle" | "listhesis" | "roi" | "probe";
+
 export type AnnotationPoint = { x: number; y: number };
 
 export type Annotation = {
   id: string;
   scope: AnnotationScope;
   kind: AnnotationKind;
+  /** Con qué herramienta se tomó, cuando `kind` es "measurement". */
+  measurementKind?: AnnotationMeasurementKind;
   /** Requerido si scope = "slice": identifica la serie y el corte exactos. */
   plane?: "sagittal" | "axial";
   seriesId?: string;

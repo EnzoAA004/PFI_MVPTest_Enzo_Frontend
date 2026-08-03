@@ -18,7 +18,12 @@ import { studyRunToMriViewerModel } from "../viewModels/mriViewerViewModel";
 import { useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
-import { MriSliceViewer, type MeasurementOverlay, type SliceNavigation } from "./MriSliceViewer";
+import { MriSliceViewer, type MeasurementOverlay, type RawSlicePixels, type SliceNavigation } from "./MriSliceViewer";
+import { useMeasureTool, TOOL_LABELS, TOOL_SHORTCUTS } from "../features/reading/useMeasureTool";
+import {
+  formatMeasurementValue, intensityStats, polygonArea, probeIntensity, recomputeValue,
+  type MeasurementKind,
+} from "../features/reading/measurements";
 import { SpineReconstructionPreview } from "./SpineReconstructionPreview";
 
 const fallbackSeries: StudySeries[] = [
@@ -197,7 +202,10 @@ type PlaneViewportProps = {
   onAddLandmark: (point: { x: number; y: number }) => void;
   onLandmarkAddComplete: () => void;
   onOverlayAvailableChange: (available: boolean) => void;
-  measureMode: boolean;
+  measureTool: MeasurementKind | null;
+  measureDraft: { x: number; y: number }[];
+  onMeasurePoint: (point: { x: number; y: number }, frame: { width: number; height: number }, pixels: RawSlicePixels | null) => void;
+  onMeasureFreehand: (points: { x: number; y: number }[], frame: { width: number; height: number }, pixels: RawSlicePixels | null) => void;
   annotations: MeasurementOverlay[];
   /** Segmentos de las mediciones de la IA, con sus extremos reales. */
   aiMeasurements: MeasurementOverlay[];
@@ -207,8 +215,6 @@ type PlaneViewportProps = {
   highlightedMeasurementId: string | null;
   onSelectMeasurement: (id: string) => void;
   onMoveMeasurePoint: (measurementId: string, end: "from" | "to", point: { x: number; y: number }, frame: { width: number; height: number }) => void;
-  onMeasure: (from: { x: number; y: number }, to: { x: number; y: number }, frame: { width: number; height: number }) => void;
-  onMeasureComplete: () => void;
   onMoveMaskPoint: (maskId: string, pointIndex: number, point: { x: number; y: number }) => void;
   segmentation?: Segmentation;
   slicePixels?: SlicePixelsMeta;
@@ -230,7 +236,7 @@ function PlaneViewport({
   plane, caseLabel, seriesName, model, modelLabel, inferenceLabel, spacingLabel,
   slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
-  measureMode, annotations, aiMeasurements, aiMeasurableCount, onMoveMeasurePoint, onMeasure, onMeasureComplete, annotatedIndices, onMoveMaskPoint,
+  measureTool, measureDraft, onMeasurePoint, onMeasureFreehand, annotations, aiMeasurements, aiMeasurableCount, onMoveMeasurePoint, annotatedIndices, onMoveMaskPoint,
   selectedMeasurementId, highlightedMeasurementId, onSelectMeasurement,
   segmentation, slicePixels, pixelsBaseUrl, hiddenInstances, onToggleInstance,
 }: PlaneViewportProps) {
@@ -260,7 +266,10 @@ function PlaneViewport({
           overlayEnabled
           onOverlayAvailableChange={onOverlayAvailableChange}
           slice={slice}
-          measureMode={measureMode}
+          measureTool={measureTool}
+          measureDraft={measureDraft}
+          onMeasurePoint={onMeasurePoint}
+          onMeasureFreehand={onMeasureFreehand}
           annotations={annotations}
           aiMeasurements={aiMeasurements}
           aiMeasurableCount={aiMeasurableCount}
@@ -268,8 +277,6 @@ function PlaneViewport({
           onSelectMeasurement={onSelectMeasurement}
           selectedMeasurementId={selectedMeasurementId}
           onMoveMeasurePoint={onMoveMeasurePoint}
-          onMeasure={onMeasure}
-          onMeasureComplete={onMeasureComplete}
           onMoveMaskPoint={onMoveMaskPoint}
           segmentation={segmentation}
           hiddenInstances={hiddenInstances}
@@ -481,7 +488,23 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [reviewerValues, setReviewerValues] = useState<Record<string, string>>({});
   const [landmarkDrafts, setLandmarkDrafts] = useState<Record<string, StudyLandmark>>({});
   const [landmarkAddMode, setLandmarkAddMode] = useState(false);
-  const [measureMode, setMeasureMode] = useState(false);
+  const measureTool = useMeasureTool();
+  /*
+   * Una letra por herramienta, como en cualquier estación de lectura. Se ignora
+   * mientras el foco está en un campo de texto: escribir "distancia" en una nota no
+   * puede ir cambiando de herramienta letra por letra.
+   */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      const tool = TOOL_SHORTCUTS[event.key.toLowerCase()];
+      if (tool) measureTool.select(tool);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [measureTool]);
   /*
    * Contornos corregidos por el revisor, por id de máscara.
    *
@@ -1120,13 +1143,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   function measurementOverlaysFor(plane: "sagittal" | "axial", sliceIndex: number, seriesId?: string): MeasurementOverlay[] {
     const context = { plane, seriesId, sliceIndex, level: activeLevel };
     return annotations
-      .filter((item) => item.kind === "measurement" && item.points?.length === 2 && isAnnotationVisible(item, context))
+      // Cada figura se redibuja con la herramienta que la tomó: un ángulo son cuatro
+      // puntos y una listesis tres, así que dibujarlas todas como distancias entre los
+      // dos primeros mostraría mediciones que el médico nunca tomó.
+      .filter((item) => item.kind === "measurement" && (item.points?.length ?? 0) >= 1 && isAnnotationVisible(item, context))
       .map((item) => ({
         id: item.id,
-        kind: "distance" as const,
+        kind: (item.measurementKind ?? "distance") as MeasurementKind,
         points: item.points!,
         source: "reviewer" as const,
-        label: item.value !== undefined && item.unit ? formatMeasurement(item.value, item.unit) : "",
+        label: item.value !== undefined && item.unit ? formatMeasurement(item.value, item.unit) : (item.text ?? ""),
       }));
   }
 
@@ -1190,6 +1216,76 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     setMeasureGeometry((state) => ({ ...state, [measurementId]: next }));
     const { value } = measureDistance(next[0], next[1], frame, spacing);
     setReviewerValues((state) => ({ ...state, [measurementId]: value.toFixed(2) }));
+  }
+
+  /**
+   * Cierra una medición del revisor y la guarda.
+   *
+   * El valor sale de `recomputeValue`, que es el mismo camino por el que se recalcula
+   * al arrastrar un extremo: así una medición recién tomada y una corregida no pueden
+   * diferir por la vía que las produjo.
+   *
+   * La sonda y el ROI necesitan además los píxeles originales del corte. Si no
+   * llegaron —una corrida vieja no los guardó— la medición no se toma en vez de
+   * informar una intensidad sacada del PNG ya ventaneado, que describiría cómo se ve
+   * la imagen y no lo que el equipo midió.
+   */
+  function commitMeasurement(
+    kind: MeasurementKind,
+    points: { x: number; y: number }[],
+    frame: { width: number; height: number },
+    plane: "sagittal" | "axial",
+    data: { series: StudySeries; nav?: SliceNavigation },
+    pixels: RawSlicePixels | null,
+  ) {
+    const spacing = data.series.inPlaneSpacingMm;
+    const sliceIndex = data.nav?.current ?? data.series.selectedSlice ?? 0;
+    let value: number | undefined;
+    let unit: "mm" | "px" | undefined;
+    let text = "";
+
+    if (kind === "probe" || kind === "roi") {
+      if (!pixels) {
+        setAnnotationsError("Esta corrida no guardó las intensidades originales del corte, así que no se puede medir señal.");
+        return;
+      }
+      if (kind === "probe") {
+        const intensity = probeIntensity(points[0], pixels.data, pixels.meta);
+        if (intensity === null) return;
+        text = `Intensidad ${Math.round(intensity)} (unidades arbitrarias, no comparables entre estudios)`;
+      } else {
+        const stats = intensityStats(points, pixels.data, pixels.meta);
+        const area = polygonArea(points, frame, spacing);
+        if (!stats || !area) return;
+        value = area.value;
+        unit = area.unit === "mm2" ? "mm" : "px";
+        text = `Área ${formatMeasurementValue(area.value, area.unit)} · señal ${Math.round(stats.mean)} ± ${Math.round(stats.deviation)} (unidades arbitrarias)`;
+      }
+    } else {
+      const computed = recomputeValue(kind, points, frame, spacing);
+      if (!computed) return;
+      value = computed.value;
+      unit = computed.unit === "mm" || computed.unit === "px" ? computed.unit : undefined;
+      text = `${TOOL_LABELS[kind].name} ${formatMeasurementValue(computed.value, computed.unit)}${computed.detail ? ` · ${computed.detail}` : ""}`;
+    }
+
+    addAnnotation({
+      id: `measure-${Date.now()}`,
+      scope: "slice",
+      kind: "measurement",
+      measurementKind: kind,
+      plane,
+      seriesId: data.series.id,
+      sliceIndex,
+      level: activeLevel ?? undefined,
+      points,
+      value,
+      unit,
+      text,
+      author: reviewerName,
+      createdAt: new Date().toISOString(),
+    });
+    setAnnotationsError("");
   }
 
   const caseLabel = displayRun.caseId ?? studyReview?.caseId ?? "Caso sin identificador";
@@ -1303,7 +1399,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   }}
                   onLandmarkAddComplete={() => setLandmarkAddMode(false)}
                   onOverlayAvailableChange={handleOverlayAvailableChange}
-                  measureMode={measureMode && activePlano === planeName}
+                  measureTool={activePlano === planeName ? measureTool.tool : null}
+                  measureDraft={measureTool.points}
+                  onMeasurePoint={(point, frame, pixels) => {
+                    const closed = measureTool.addPoint(point);
+                    if (closed) commitMeasurement(closed.kind, closed.points, frame, planeName, data, pixels);
+                  }}
+                  onMeasureFreehand={(points, frame, pixels) => {
+                    const closed = measureTool.closeFreehand(points);
+                    if (closed) commitMeasurement(closed.kind, closed.points, frame, planeName, data, pixels);
+                  }}
                   annotations={measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
                   aiMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0)}
                   aiMeasurableCount={aiMeasurableCount}
@@ -1312,25 +1417,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   selectedMeasurementId={selectedMeasurementId ? `ai-${selectedMeasurementId}` : null}
                   onMoveMeasurePoint={(measurementId, end, point, frame) => moveMeasurePoint(measurementId, end, point, frame, data.series.inPlaneSpacingMm)}
                   annotatedIndices={annotatedSlices(annotations, planeName)}
-                  onMeasure={(from, to, frame) => {
-                    const spacing = data.series.inPlaneSpacingMm;
-                    const { value, unit } = measureDistance(from, to, frame, spacing);
-                    addAnnotation({
-                      id: `measure-${Date.now()}`,
-                      scope: "slice",
-                      kind: "measurement",
-                      plane: planeName,
-                      seriesId: data.series.id,
-                      sliceIndex: data.nav?.current ?? data.series.selectedSlice ?? 0,
-                      level: activeLevel ?? undefined,
-                      points: [from, to],
-                      value,
-                      unit,
-                      author: reviewerName,
-                      createdAt: new Date().toISOString(),
-                    });
-                  }}
-                  onMeasureComplete={() => setMeasureMode(false)}
                   onMoveMaskPoint={moveMaskPoint}
                   segmentation={segmentationForPlane(planeName)}
                   slicePixels={slicePixelsForPlane(planeName)}
@@ -1619,14 +1705,17 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           del revisor sobre la imagen. Sí depende del corte visible, que es a lo que
           la medición queda anclada.
         */}
-        <button
-          className={`rr-tool${measureMode ? " is-active" : ""}`}
-          onClick={() => { setMeasureMode((value) => !value); setLandmarkAddMode(false); }}
-          title="Dos clics sobre la imagen definen una distancia, anclada al corte visible"
-          type="button"
-        >
-          Medir
-        </button>
+        {(Object.keys(TOOL_LABELS) as MeasurementKind[]).map((kind) => (
+          <button
+            className={`rr-tool${measureTool.tool === kind ? " is-active" : ""}`}
+            key={kind}
+            onClick={() => { measureTool.select(kind); setLandmarkAddMode(false); }}
+            title={TOOL_LABELS[kind].hint}
+            type="button"
+          >
+            {TOOL_LABELS[kind].name}
+          </button>
+        ))}
         <span className="rr-toolbar-sep" aria-hidden />
         <button className="rr-tool" disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores"} type="button">
           Deshacer

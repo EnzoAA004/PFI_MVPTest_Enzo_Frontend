@@ -4,6 +4,7 @@ import { displayLandmarkLabel, displayStructureLabel } from "../clinicalDisplay"
 import { paintSegmentation, type Segmentation } from "../features/reading/segmentation";
 import { applyWindow, defaultWindow, fetchSlicePixels, slicePixelsUrl, type SlicePixelsMeta } from "../features/reading/pixels";
 import { MeasurementLayer, type MeasurementFigure } from "../features/reading/MeasurementLayer";
+import type { MeasurementKind } from "../features/reading/measurements";
 import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
 
 /**
@@ -77,7 +78,20 @@ type Props = {
   onOverlayAvailableChange?: (available: boolean) => void;
   slice?: SliceNavigation;
   /** Herramienta de medición: activa el trazado de dos puntos sobre la imagen. */
-  measureMode?: boolean;
+  /** Herramienta de medición activa, o null. Cada tipo pide su cantidad de puntos. */
+  measureTool?: MeasurementKind | null;
+  /** Puntos ya marcados de la figura en curso, para dibujarla mientras se traza. */
+  measureDraft?: Point[];
+  /**
+   * Un punto nuevo de la figura en curso.
+   *
+   * Las intensidades del corte viajan con el punto porque las herramientas de señal
+   * las necesitan y viven acá: son el mismo arreglo que ya se descargó para
+   * ventanear, y volver a pedirlas desde afuera sería descargar dos veces lo mismo.
+   */
+  onMeasurePoint?: (point: Point, frame: Size, pixels: RawSlicePixels | null) => void;
+  /** Trazo libre cerrado: el ROI no termina por cantidad de clics sino al soltar. */
+  onMeasureFreehand?: (points: Point[], frame: Size, pixels: RawSlicePixels | null) => void;
   /** Anotaciones ya trazadas que corresponden al corte visible. */
   annotations?: MeasurementOverlay[];
   /**
@@ -126,6 +140,9 @@ type Props = {
  * geometría, solo decide qué figuras están visibles.
  */
 export type MeasurementOverlay = MeasurementFigure;
+
+/** Intensidades originales del corte visible, para las herramientas de señal. */
+export type RawSlicePixels = { data: Int16Array; meta: { width: number; height: number } };
 
 const neutralPreset: WindowPreset = { id: "neutral", label: "Neutral PNG", brightness: 100, contrast: 100 };
 const customPreset: WindowPreset = { id: "custom", label: "Personalizado", brightness: 100, contrast: 100 };
@@ -257,7 +274,10 @@ export function MriSliceViewer({
   overlayOpacity = initialOverlayOpacity,
   onOverlayAvailableChange,
   slice,
-  measureMode = false,
+  measureTool = null,
+  measureDraft = [],
+  onMeasurePoint,
+  onMeasureFreehand,
   annotations = [],
   aiMeasurements = [],
   aiMeasurableCount = 0,
@@ -296,7 +316,9 @@ export function MriSliceViewer({
    */
   // Primer punto del segmento en curso. Vive en estado y no en ref porque la
   // marca provisional tiene que dibujarse apenas se hace el primer clic.
-  const [measureAnchor, setMeasureAnchor] = useState<Point | null>(null);
+  /* Trazo libre en curso: se acumula mientras el puntero está apretado. */
+  const freehandRef = useRef<Point[] | null>(null);
+  const [freehand, setFreehand] = useState<Point[]>([]);
   const measureDragRef = useRef<{ measurementId: string; end: "from" | "to" } | null>(null);
   /*
    * La segmentación se pinta acá, no llega pintada. `putImageData` escribe los
@@ -315,6 +337,13 @@ export function MriSliceViewer({
 
   const pixelCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pixelsReady, setPixelsReady] = useState(false);
+  /*
+   * Las intensidades originales del corte, guardadas para medir señal sobre ellas.
+   * Se conservan acá y no se vuelven a pedir: es el mismo arreglo que ya se descargó
+   * para ventanear, y sobre el PNG ya ventaneado una media describiría cómo se ve la
+   * imagen, no lo que el equipo midió.
+   */
+  const rawPixelsRef = useRef<Int16Array | null>(null);
   const pixelsUrl = slicePixels && pixelsBaseUrl
     ? slicePixelsUrl(pixelsBaseUrl, slice ? slice.current : 0)
     : undefined;
@@ -332,6 +361,7 @@ export function MriSliceViewer({
         canvas.width = slicePixels.width;
         canvas.height = slicePixels.height;
         context.putImageData(applyWindow(pixels, slicePixels.width, slicePixels.height, windowLevel.center, windowLevel.width), 0, 0);
+        rawPixelsRef.current = pixels;
         setPixelsReady(true);
       })
       .catch(() => {
@@ -548,8 +578,17 @@ export function MriSliceViewer({
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (!imageLoaded || event.button !== 0) return;
-    if (measureMode) {
-      captureMeasurePoint(event);
+    if (measureTool === "roi") {
+      const point = pointFromEvent(event);
+      if (!point) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      freehandRef.current = [point];
+      setFreehand([point]);
+      return;
+    }
+    if (measureTool) {
+      const point = pointFromEvent(event);
+      if (point) onMeasurePoint?.(point, imageSize, rawPixels());
       return;
     }
     if (addMode) {
@@ -584,6 +623,10 @@ export function MriSliceViewer({
   }
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (freehandRef.current) {
+      extendFreehand(event);
+      return;
+    }
     if (measureDragRef.current && onMoveMeasurePoint) {
       const point = pointFromEvent(event);
       const drag = measureDragRef.current;
@@ -621,6 +664,7 @@ export function MriSliceViewer({
     dragRef.current = null;
     landmarkDragRef.current = null;
     measureDragRef.current = null;
+    if (freehandRef.current) finishFreehand();
     contourDragRef.current = null;
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -646,16 +690,35 @@ export function MriSliceViewer({
    * conversión a milímetros necesita el alto y ancho reales de la imagen — la base
    * 0..256 es normalizada y por sí sola no dice cuántos píxeles hay de por medio.
    */
-  function captureMeasurePoint(event: { clientX: number; clientY: number }) {
+  /**
+   * Acumula el trazo libre del ROI.
+   *
+   * Se descartan los puntos que caen a menos de un paso del anterior: un arrastre
+   * lento genera cientos de puntos casi iguales, que engordan la anotación guardada
+   * sin cambiar la figura ni el área.
+   */
+  function extendFreehand(event: { clientX: number; clientY: number }) {
+    const current = freehandRef.current;
+    if (!current) return;
     const point = pointFromEvent(event);
     if (!point) return;
-    if (!measureAnchor) {
-      setMeasureAnchor(point);
-      return;
-    }
-    onMeasure?.(measureAnchor, point, imageSize);
-    setMeasureAnchor(null);
-    onMeasureComplete?.();
+    const last = current[current.length - 1];
+    if (Math.hypot(point.x - last.x, point.y - last.y) < 1.5) return;
+    current.push(point);
+    setFreehand([...current]);
+  }
+
+  function rawPixels(): RawSlicePixels | null {
+    const data = rawPixelsRef.current;
+    if (!data || !slicePixels) return null;
+    return { data, meta: { width: slicePixels.width, height: slicePixels.height } };
+  }
+
+  function finishFreehand() {
+    const current = freehandRef.current;
+    freehandRef.current = null;
+    setFreehand([]);
+    if (current && current.length >= 3) onMeasureFreehand?.(current, imageSize, rawPixels());
   }
 
   function createLandmark(event: { clientX: number; clientY: number }) {
@@ -822,7 +885,9 @@ export function MriSliceViewer({
             <MeasurementLayer
               editable={!readonly && Boolean(onMoveMeasurePoint)}
               figures={visibleMeasures}
-              draft={measureAnchor ? { kind: "distance", points: [measureAnchor] } : null}
+              draft={measureTool && (measureDraft.length > 0 || freehand.length > 0)
+                ? { kind: measureTool, points: freehand.length ? freehand : measureDraft }
+                : null}
               highlightedId={highlightedMeasurementId ?? null}
               onDragStart={(event, measurementId, index) => {
                 event.stopPropagation();
