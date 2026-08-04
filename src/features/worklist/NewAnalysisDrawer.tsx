@@ -287,14 +287,16 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
                   {studyUpload.fileName}: {studyUpload.study.seriesFound.length} series encontradas.
                 </p>
                 <ul className="wl-series-list">
-                  {studyUpload.study.seriesFound.map((series) => {
-                    const usedFor = studyUpload.study?.sagittal?.seriesInstanceUid === series.seriesInstanceUid
+                  {studyUpload.study.seriesFound.map((series, index) => {
+                    // Se empareja por posición: el identificador de la serie no sale
+                    // del backend, porque llevaría de vuelta al estudio de origen.
+                    const usedFor = studyUpload.study?.sagittal?.seriesIndex === index
                       ? "sagital"
-                      : studyUpload.study?.axial?.seriesInstanceUid === series.seriesInstanceUid
+                      : studyUpload.study?.axial?.seriesIndex === index
                         ? "axial"
                         : null;
                     return (
-                      <li className={usedFor ? "is-selected" : ""} key={series.seriesInstanceUid}>
+                      <li className={usedFor ? "is-selected" : ""} key={`${series.plane}-${series.description}-${index}`}>
                         <span>{seriesLabel(series)}</span>
                         {usedFor && <em>se analiza como {usedFor}</em>}
                       </li>

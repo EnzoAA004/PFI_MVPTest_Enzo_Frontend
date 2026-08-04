@@ -19,7 +19,6 @@ export type InputResponse = {
  * del tiempo de eco: son los datos del propio archivo, no una elección del médico.
  */
 export type StudySeriesSummary = {
-  seriesInstanceUid: string;
   description: string;
   plane: "sagittal" | "axial" | "coronal" | string;
   weighting: "t1" | "t2" | string;
@@ -38,11 +37,23 @@ export type StudySeriesSummary = {
  * el axial no es T2 y el modelo axial fue entrenado sobre T2. Son advertencias que
  * tienen que llegar a la pantalla, no descartarse.
  */
+/**
+ * Plano elegido del estudio, con la posición de su serie dentro de `seriesFound`.
+ *
+ * Es una posición y no el identificador DICOM de la serie: ese UID lleva de vuelta al
+ * estudio original en el PACS de origen, así que no sale de un pipeline
+ * de-identificado. La posición alcanza para marcar cuál de las series listadas
+ * produjo los resultados, que es lo único que la pantalla necesita.
+ */
+export type StudyPlaneInput = InputResponse & Omit<StudySeriesSummary, "plane"> & {
+  seriesIndex?: number;
+};
+
 export type StudyIngestionResponse = {
   caseId: string;
   studyId: string;
   seriesFound: StudySeriesSummary[];
   warnings: string[];
-  sagittal?: InputResponse & StudySeriesSummary;
-  axial?: InputResponse & StudySeriesSummary;
+  sagittal?: StudyPlaneInput;
+  axial?: StudyPlaneInput;
 };
