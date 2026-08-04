@@ -5,7 +5,7 @@ import { isDurableMeshAssetUrl, parseMultiplanarRunResponse } from "./adapters/m
 import { toSafeFrontendError } from "./security/safeError";
 import { generateTraceId } from "./security/traceId";
 import type { CanonicalMultiplanarRun } from "./contracts/canonicalMultiplanarRun";
-import type { InputResponse } from "./contracts/inputApiTypes";
+import type { InputResponse, StudyIngestionResponse } from "./contracts/inputApiTypes";
 import type { RunReviewRequest, RunReviewResponse } from "./contracts/reviewApiTypes";
 import type { AssetName, DiagnosticEndpointResponse, MultiplanarRunPayload } from "./contracts/multiplanarHttpTypes";
 import type { MultiplanarContract } from "./multiplanarTypes";
@@ -82,6 +82,25 @@ export async function uploadAiInput(file: File, caseId: string, plane: Plane): P
   formData.append("caseId", caseId);
   formData.append("plane", plane);
   return multiplanarRequest<InputResponse>("/api/ai/inputs", {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData,
+  });
+}
+
+/**
+ * Sube un estudio completo en un solo archivo y deja que el módulo separe las series.
+ *
+ * Es lo contrario de `uploadAiInput`, donde el médico declara a mano qué plano es cada
+ * archivo. Acá el plano lo decide la metadata DICOM, que es quien lo sabe: el estudio
+ * ya trae esa información y pedírsela al médico es pedirle que repita un dato que el
+ * archivo contiene.
+ */
+export async function uploadStudyArchive(file: File, caseId: string): Promise<StudyIngestionResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("caseId", caseId);
+  return multiplanarRequest<StudyIngestionResponse>("/api/ai/studies", {
     method: "POST",
     headers: authHeaders(),
     body: formData,

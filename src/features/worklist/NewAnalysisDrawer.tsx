@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent } from "react";
-import { BackendApiError, runMultiplanarAnalysis, uploadAiInput } from "../../multiplanarApi";
+import { BackendApiError, runMultiplanarAnalysis, uploadAiInput, uploadStudyArchive } from "../../multiplanarApi";
 import type { Plane } from "../../appTypes";
-import type { InputResponse } from "../../contracts/inputApiTypes";
+import type { InputResponse, StudyIngestionResponse } from "../../contracts/inputApiTypes";
 import type { MultiplanarRunPayload } from "../../contracts/multiplanarHttpTypes";
 import { evaluateRealInferenceReadiness } from "../../inferenceReadiness";
 import {
@@ -37,6 +37,27 @@ const emptyUploads: Record<Plane, UploadState> = {
   axial: { status: "idle" },
 };
 
+/**
+ * Carga de un estudio entero en un solo archivo.
+ *
+ * Es el camino normal: un estudio de resonancia sale del PACS como un archivo con
+ * todas sus series adentro. Partirlo a mano en dos zips —uno sagital y otro axial— es
+ * pedirle al médico que haga la clasificación que la metadata DICOM ya trae resuelta,
+ * y que se equivoque cuando el nombre de la serie no coincide con su orientación.
+ */
+type StudyUploadState = {
+  fileName?: string;
+  status: "idle" | "uploading" | "uploaded" | "error";
+  study?: StudyIngestionResponse;
+  error?: string;
+};
+
+function seriesLabel(series: { plane: string; weighting: string; description: string; sliceCount: number }) {
+  const plane = series.plane === "sagittal" ? "Sagital" : series.plane === "axial" ? "Axial" : series.plane === "coronal" ? "Coronal" : series.plane;
+  const weighting = series.weighting === "t1" || series.weighting === "t2" ? series.weighting.toUpperCase() : series.weighting;
+  return `${plane} ${weighting} · ${series.sliceCount} cortes${series.description ? ` · ${series.description}` : ""}`;
+}
+
 type Props = {
   onClose: () => void;
   /** Se invoca con el caseId cuando la corrida terminó y el estudio ya es legible. */
@@ -64,12 +85,42 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const [metadata, setMetadata] = useState<StudyMetadataDraft>(() => emptyStudyMetadataDraft());
   const [metadataError, setMetadataError] = useState("");
   const [uploads, setUploads] = useState<Record<Plane, UploadState>>(emptyUploads);
+  const [studyUpload, setStudyUpload] = useState<StudyUploadState>({ status: "idle" });
+  /* La carga por plano queda plegada: es la salida para un archivo suelto de dataset. */
+  const [byPlaneOpen, setByPlaneOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState("");
 
   const normalizedCaseId = caseId.trim();
-  const sagittalReady = Boolean(normalizedCaseId && uploads.sagittal.input?.inputId);
-  const axialReady = Boolean(uploads.axial.input?.inputId);
+  /*
+   * El identificador de entrada puede venir de las dos vías. La del estudio completo
+   * tiene prioridad porque el plano lo decidió la metadata; la de plano suelto es lo
+   * que el médico declaró a mano.
+   */
+  const sagittalInputId = studyUpload.study?.sagittal?.inputId ?? uploads.sagittal.input?.inputId;
+  const axialInputId = studyUpload.study?.axial?.inputId ?? uploads.axial.input?.inputId;
+  const sagittalReady = Boolean(normalizedCaseId && sagittalInputId);
+  const axialReady = Boolean(axialInputId);
+
+  async function uploadStudy(file?: File) {
+    if (!file) return;
+    if (!normalizedCaseId) {
+      setMessage("Ingresá un identificador de caso de-identificado antes de cargar el estudio.");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      setStudyUpload({ fileName: file.name, status: "error", error: "El estudio completo se carga como .zip. Para un archivo suelto usá la carga por plano." });
+      return;
+    }
+    setStudyUpload({ fileName: file.name, status: "uploading" });
+    try {
+      const study = await uploadStudyArchive(file, normalizedCaseId);
+      setStudyUpload({ fileName: file.name, status: "uploaded", study });
+      setMessage("");
+    } catch (error) {
+      setStudyUpload({ fileName: file.name, status: "error", error: apiErrorMessage(error, "cargar el estudio") });
+    }
+  }
 
   async function upload(plane: Plane, file?: File) {
     if (!file) return;
@@ -120,7 +171,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
       const payload: MultiplanarRunPayload = {
         caseId: normalizedCaseId,
         studyMetadata: normalizedStudyMetadata,
-        sagittalInputId: uploads.sagittal.input?.inputId ?? "",
+        sagittalInputId: sagittalInputId ?? "",
         sagittalModelKey: "sagittal_spider",
         allowContractFallback: false,
         metadata: {
@@ -130,8 +181,11 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
           requestedInferenceMode: "real_baseline",
           allowContractFallback: false,
           axialMode: axialReady ? "experimental_requested" : "optional_not_provided",
+          // Queda registrado si los planos los separo la metadata del estudio o los
+          // declaro el medico: son dos procedencias distintas del mismo dato.
+          planeSource: studyUpload.study ? "study_archive_metadata" : "manual_per_plane",
         },
-        ...(axialReady ? { axialInputId: uploads.axial.input?.inputId, axialModelKey: "axial_t2_alkafri" } : {}),
+        ...(axialReady ? { axialInputId, axialModelKey: "axial_t2_alkafri" } : {}),
       };
       const result = await runMultiplanarAnalysis(payload);
       const readiness = evaluateRealInferenceReadiness(result);
@@ -213,18 +267,74 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
 
           {metadataError && <p className="wl-drawer-error">{metadataError}</p>}
 
-          {(["sagittal", "axial"] as Plane[]).map((plane) => (
-            <div className="wl-upload" key={plane}>
-              <div className="wl-upload-head">
-                <strong>{planeLabel(plane)}</strong>
-                <span>{plane === "sagittal" ? "obligatorio" : "opcional · experimental"}</span>
-              </div>
-              <input accept={uploadAccept} disabled={!normalizedCaseId} onChange={(event) => onFileChange(plane, event)} type="file" />
-              {uploads[plane].status === "uploading" && <p className="wl-upload-state">Cargando {uploads[plane].fileName}…</p>}
-              {uploads[plane].status === "uploaded" && <p className="wl-upload-state is-ok">{uploads[plane].fileName} cargado.</p>}
-              {uploads[plane].status === "error" && <p className="wl-drawer-error">{uploads[plane].error}</p>}
+          <div className="wl-upload">
+            <div className="wl-upload-head">
+              <strong>Estudio completo</strong>
+              <span>.zip · las series se separan solas</span>
             </div>
-          ))}
+            <input accept=".zip" disabled={!normalizedCaseId} onChange={(event) => { void uploadStudy(event.target.files?.[0]); event.target.value = ""; }} type="file" />
+            {studyUpload.status === "uploading" && <p className="wl-upload-state">Leyendo {studyUpload.fileName}…</p>}
+            {studyUpload.status === "error" && <p className="wl-drawer-error">{studyUpload.error}</p>}
+            {studyUpload.status === "uploaded" && studyUpload.study && (
+              <div className="wl-study-result">
+                {/*
+                  Se listan todas las series que traía el estudio y no solo las dos
+                  elegidas. El médico necesita ver qué había para entender por qué se
+                  eligió lo que se eligió, y sobre todo para notar cuando falta una
+                  serie que esperaba encontrar.
+                */}
+                <p className="wl-upload-state is-ok">
+                  {studyUpload.fileName}: {studyUpload.study.seriesFound.length} series encontradas.
+                </p>
+                <ul className="wl-series-list">
+                  {studyUpload.study.seriesFound.map((series) => {
+                    const usedFor = studyUpload.study?.sagittal?.seriesInstanceUid === series.seriesInstanceUid
+                      ? "sagital"
+                      : studyUpload.study?.axial?.seriesInstanceUid === series.seriesInstanceUid
+                        ? "axial"
+                        : null;
+                    return (
+                      <li className={usedFor ? "is-selected" : ""} key={series.seriesInstanceUid}>
+                        <span>{seriesLabel(series)}</span>
+                        {usedFor && <em>se analiza como {usedFor}</em>}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {/*
+                  Las advertencias del módulo llegan tal cual: que no haya sagital, o
+                  que el axial no sea T2 cuando el modelo axial fue entrenado sobre T2,
+                  cambia lo que se puede concluir de la corrida.
+                */}
+                {studyUpload.study.warnings.map((warning) => (
+                  <p className="wl-drawer-warning" key={warning}>{warning}</p>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/*
+            Camino secundario y plegado: acepta lo que el de estudio completo no puede
+            recibir —un .mha o un .npy sueltos de un dataset—, donde el plano no viene
+            en la metadata y lo tiene que declarar el médico.
+          */}
+          <div className="wl-upload">
+            <button className="wl-upload-toggle" onClick={() => setByPlaneOpen((value) => !value)} type="button">
+              {byPlaneOpen ? "▾" : "▸"} Cargar un archivo por plano
+            </button>
+            {byPlaneOpen && (["sagittal", "axial"] as Plane[]).map((plane) => (
+              <div className="wl-upload-plane" key={plane}>
+                <div className="wl-upload-head">
+                  <strong>{planeLabel(plane)}</strong>
+                  <span>{plane === "sagittal" ? "obligatorio" : "opcional · experimental"}</span>
+                </div>
+                <input accept={uploadAccept} disabled={!normalizedCaseId} onChange={(event) => onFileChange(plane, event)} type="file" />
+                {uploads[plane].status === "uploading" && <p className="wl-upload-state">Cargando {uploads[plane].fileName}…</p>}
+                {uploads[plane].status === "uploaded" && <p className="wl-upload-state is-ok">{uploads[plane].fileName} cargado.</p>}
+                {uploads[plane].status === "error" && <p className="wl-drawer-error">{uploads[plane].error}</p>}
+              </div>
+            ))}
+          </div>
 
           {message && <p className="wl-drawer-message">{message}</p>}
         </div>
