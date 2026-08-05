@@ -30,6 +30,8 @@ export type SlicePlane = {
 
 export type VolumeGeometry = {
   slicePlane?: SlicePlane | null;
+  /** Posición declarada de cada corte de la serie, en coordenadas del paciente. */
+  slicePositions?: Vec3[] | null;
   boundsMm?: { min: Vec3; max: Vec3 } | null;
   frameOfReferenceUid?: string | null;
   geometryComplete?: boolean;
@@ -61,8 +63,12 @@ export function parseVolumeGeometry(value: unknown): VolumeGeometry | null {
       positionSource: plane.positionSource === "declared" ? "declared" : "uniform_spacing",
     }
     : null;
+  const positions = Array.isArray(raw.slicePositions)
+    ? (raw.slicePositions as unknown[]).filter(isVec3)
+    : null;
   return {
     slicePlane,
+    slicePositions: positions && positions.length ? positions : null,
     boundsMm: bounds && isVec3(bounds.min) && isVec3(bounds.max) ? { min: bounds.min, max: bounds.max } : null,
     frameOfReferenceUid: typeof raw.frameOfReferenceUid === "string" ? raw.frameOfReferenceUid : null,
     geometryComplete: raw.geometryComplete === true,
@@ -116,6 +122,26 @@ export function coordinateEvidence(target: VolumeGeometry, source: VolumeGeometr
     return { shared: false, reason: "Los dos planos no ocupan el mismo espacio: no son series del mismo estudio." };
   }
   return { shared: true, basis: "geometry" };
+}
+
+/**
+ * El plano del corte `index`, y no el del corte que analizó la IA.
+ *
+ * Es lo que hace que la línea se mueva mientras el médico recorre la serie. La
+ * posición sale de la que declara cada corte: extrapolarla como
+ * `origen + N x espaciado` es correcto solo en una serie sin huecos, y las series
+ * axiales de este dataset los tienen. Cuando la serie no declara posiciones —un
+ * volumen .mha, que por construcción es uniforme— se cae a esa cuenta.
+ */
+export function slicePlaneAt(geometry: VolumeGeometry, index: number): SlicePlane | null {
+  const base = geometry.slicePlane;
+  if (!base) return null;
+  const declared = geometry.slicePositions?.[index];
+  if (declared) return { ...base, position: declared };
+  const reference = geometry.slicePositions?.length ? null : base;
+  if (!reference) return null;
+  // Sin posiciones declaradas: la serie es uniforme y el desplazamiento vale.
+  return base;
 }
 
 export type Point2 = { x: number; y: number };

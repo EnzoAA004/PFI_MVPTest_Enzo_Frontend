@@ -12,7 +12,7 @@ import { MeasurementPanel, type PanelRow } from "../features/reading/Measurement
 import { PlaneViewport } from "../features/reading/PlaneViewport";
 import { instanceColor, instanceLabel, parseSegmentation, type Segmentation } from "../features/reading/segmentation";
 import { parseSlicePixelsMeta, type SlicePixelsMeta } from "../features/reading/pixels";
-import { coordinateEvidence, parseVolumeGeometry, referenceLineOn } from "../features/reading/referenceLine";
+import { coordinateEvidence, parseVolumeGeometry, referenceLineOn, slicePlaneAt } from "../features/reading/referenceLine";
 import { annotatedSlices, displayAnnotationScope, formatMeasurement, isAnnotationVisible, measureDistance, type Annotation, type AnnotationScope } from "../features/reading/annotations";
 import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
@@ -563,6 +563,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     return parseSlicePixelsMeta(asRecord(canonicalPlane?.quality)?.slicePixels);
   }
 
+  /** El corte que se está mirando: el navegado, o el de la IA si aún no se movió. */
+  function currentSliceOf(plane: "sagittal" | "axial") {
+    const series = seriesList.find((item: any) => item.plane === plane);
+    const total = series?.sliceCount ?? 1;
+    return clampSlice(sliceByPlane[plane] ?? series?.selectedSlice ?? 0, total);
+  }
+
   function geometryForPlane(plane: "sagittal" | "axial") {
     const canonicalPlane = asRecord(asRecord(displayRun.canonicalRun?.planes)?.[plane]);
     return parseVolumeGeometry(asRecord(canonicalPlane?.quality)?.volumeGeometry);
@@ -583,7 +590,17 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     }
     const evidence = coordinateEvidence(target, source);
     if (!evidence.shared) return { line: null, reason: evidence.reason };
-    const line = referenceLineOn(target.slicePlane, source.slicePlane);
+    /*
+     * Los dos planos se toman en el corte que el médico está mirando ahora, no en el
+     * que analizó la IA: la línea tiene que moverse mientras recorre la serie. Con el
+     * corte fijo la línea se queda quieta y se lee como que la función está rota.
+     */
+    const targetPlane = slicePlaneAt(target, currentSliceOf(plane));
+    const sourcePlane = slicePlaneAt(source, currentSliceOf(other));
+    if (!targetPlane || !sourcePlane) {
+      return { line: null, reason: "El corte que se está mirando no declara su posición." };
+    }
+    const line = referenceLineOn(targetPlane, sourcePlane);
     if (!line) {
       // Normal en un estudio lumbar: los axiales cubren solo la parte baja.
       return { line: null, reason: `El corte ${other === "sagittal" ? "sagital" : "axial"} no cruza esta parte de la imagen.` };

@@ -20,12 +20,13 @@ const js = ts.transpileModule(source, {
 const sandbox = { exports: {}, console };
 vm.runInNewContext(
   `${js}
+exports.slicePlaneAt = slicePlaneAt;
 exports.referenceLineOn = referenceLineOn;
 exports.coordinateEvidence = coordinateEvidence;
 exports.parseVolumeGeometry = parseVolumeGeometry;`,
   sandbox,
 );
-const { referenceLineOn, coordinateEvidence, parseVolumeGeometry } = sandbox.exports;
+const { referenceLineOn, coordinateEvidence, parseVolumeGeometry, slicePlaneAt } = sandbox.exports;
 
 let passed = 0;
 const check = (name, fn) => { fn(); passed += 1; };
@@ -158,6 +159,43 @@ check("se conserva de dónde salió la posición del corte", () => {
     geometryComplete: true,
   });
   assert.equal(parsed.slicePlane.positionSource, "declared");
+});
+
+// --- La linea sigue al corte que se esta mirando ---------------------------
+
+check("el plano se toma del corte navegado, no del que analizó la IA", () => {
+  /*
+   * Sin esto la línea queda quieta mientras el médico recorre la serie, que se lee
+   * como que la función está rota.
+   */
+  const geometria = {
+    slicePlane: axial(0),
+    slicePositions: [[-100, -100, 0], [-100, -100, 5], [-100, -100, 75]],
+  };
+  assert.deepEqual(slicePlaneAt(geometria, 1).position, [-100, -100, 5]);
+  assert.deepEqual(slicePlaneAt(geometria, 2).position, [-100, -100, 75]);
+});
+
+check("con posiciones declaradas no se extrapola el corte de un hueco", () => {
+  // El tercer corte salta 70 mm: la cuenta uniforme lo pondría en 10.
+  const geometria = {
+    slicePlane: axial(0),
+    slicePositions: [[-100, -100, 0], [-100, -100, 5], [-100, -100, 75]],
+  };
+  const linea = referenceLineOn(sagital, slicePlaneAt(geometria, 2));
+  const uniforme = referenceLineOn(sagital, axial(10));
+  assert.ok(linea, "el corte declarado tiene que cruzar el sagital");
+  assert.notEqual(Math.round(linea[0].y), Math.round(uniforme[0].y), "la posición real y la extrapolada no coinciden");
+});
+
+check("un corte fuera de las posiciones declaradas no inventa una", () => {
+  const geometria = { slicePlane: axial(0), slicePositions: [[-100, -100, 0]] };
+  assert.equal(slicePlaneAt(geometria, 5), null);
+});
+
+check("sin posiciones declaradas se usa el plano informado", () => {
+  const geometria = { slicePlane: axial(30), slicePositions: null };
+  assert.deepEqual(slicePlaneAt(geometria, 3).position, [-100, -100, 30]);
 });
 
 console.log(`reference-line: ${passed} passed`);
