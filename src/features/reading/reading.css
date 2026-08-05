@@ -738,12 +738,8 @@
      dibujar quedaba fuera de la vista, que es justo lo que hay que poder leer. */
   .rr-viewport .plane-controls-panel {
     order: 3;
-    flex-wrap: wrap;
-    height: auto;
-    min-height: var(--rr-strip-h);
-    padding-top: 4px;
-    padding-bottom: 4px;
-    row-gap: 2px;
+    gap: var(--sp-2);
+    overflow: hidden;
   }
 
   .rr-viewport .plane-controls-panel .viewer-limit-note {
@@ -810,15 +806,27 @@
   }
 
   .rr-viewport .control-field,
+  /* Los nombres de las capas no se parten: media palabra por renglon no se lee, y en
+     una franja de una sola linea el corte deja el nombre a la mitad. Prefieren
+     achicarse antes que romperse. */
   .rr-viewport .toggle-row,
   .rr-viewport .opacity-control {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     margin: 0;
     font-size: var(--fs-micro);
     color: var(--text-muted);
+    white-space: nowrap;
+    flex: none;
   }
+
+  .rr-viewport .toggle-row input { flex: none; margin: 0; }
+
+  /* El deslizador de opacidad es lo unico elastico de la franja: cede espacio para
+     que los nombres de las capas entren enteros. */
+  .rr-viewport .opacity-control { flex: 0 1 auto; min-width: 0; }
+  .rr-viewport .opacity-control input[type="range"] { width: 70px; min-width: 40px; }
 
   .rr-viewport .control-field > span,
   .rr-viewport .zoom-readout {

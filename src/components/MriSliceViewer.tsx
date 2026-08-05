@@ -796,12 +796,12 @@ export function MriSliceViewer({
           <span>Segmentación</span>
         </label>
         <label className="opacity-control">
-          <span>Opacidad {Math.round(overlayAlpha * 100)}%</span>
+          <span>Opacidad</span>
           <input aria-label="Opacidad de segmentación" disabled={!overlayLoaded} max="1" min="0" onChange={(event) => setOverlayAlpha(Number(event.target.value))} step="0.01" type="range" value={overlayAlpha} />
         </label>
         <label className="toggle-row" title={aiMeasurableCount ? "Se dibujan las del nivel que esté seleccionado en el panel de hallazgos" : "Esta corrida no guardó los extremos de sus mediciones"}>
           <input checked={aiMeasuresVisible} disabled={!aiMeasurableCount} onChange={(event) => setAiMeasuresVisible(event.target.checked)} type="checkbox" />
-          <span>Mediciones de la IA{aiMeasurements.length ? ` (${aiMeasurements.length})` : ""}</span>
+          <span>Mediciones IA{aiMeasurements.length ? ` (${aiMeasurements.length})` : ""}</span>
         </label>
         {/*
           Sin nivel seleccionado no se dibuja ninguna: treinta segmentos con su rótulo
@@ -818,7 +818,7 @@ export function MriSliceViewer({
             : "Esta corrida no trae mediciones derivadas"}
         >
           <input checked={derivedVisible} disabled={!derivedMeasurableCount} onChange={(event) => setDerivedVisible(event.target.checked)} type="checkbox" />
-          <span>Derivadas{derivedMeasurements.length ? ` (${derivedMeasurements.length})` : ""} <em>experimental</em></span>
+          <span>Derivadas{derivedMeasurements.length ? ` (${derivedMeasurements.length})` : ""}<em> exp</em></span>
         </label>
         <label className="toggle-row">
           <input checked={myMeasuresVisible} disabled={!annotations.length} onChange={(event) => setMyMeasuresVisible(event.target.checked)} type="checkbox" />
@@ -826,14 +826,14 @@ export function MriSliceViewer({
         </label>
         <label className="toggle-row" title={referenceLine ? "Dónde corta el otro plano a esta imagen" : referenceLineReason || "No hay otro plano con el que cruzar"}>
           <input checked={referenceVisible} disabled={!referenceLine} onChange={(event) => setReferenceVisible(event.target.checked)} type="checkbox" />
-          <span>Corte del otro plano</span>
+          <span>Corte cruzado</span>
         </label>
         {!referenceLine && referenceLineReason && (
           <p className="viewer-limit-note">{referenceLineReason}</p>
         )}
         <label className="toggle-row">
           <input checked={landmarksVisible} onChange={(event) => setLandmarksVisible(event.target.checked)} type="checkbox" />
-          <span>Puntos de referencia</span>
+          <span>Landmarks</span>
         </label>
       </div>
 

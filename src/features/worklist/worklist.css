@@ -480,6 +480,10 @@
     padding-top: var(--sp-2);
   }
 
+  /* La regla del identificador se muestra siempre; cuando se rompe, el mismo renglón
+     dice qué carácter sobra en vez de agregar una línea nueva. */
+  .wl-field-error { color: var(--danger); font-style: normal; }
+
   .wl-drawer-error { font-size: var(--fs-micro); color: var(--danger); margin: 0; }
   .wl-drawer-message { font-size: var(--fs-micro); color: var(--text-muted); margin: 0; }
 

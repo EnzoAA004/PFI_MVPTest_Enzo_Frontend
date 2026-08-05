@@ -73,6 +73,30 @@ function hasAllowedExtension(fileName: string) {
   return allowedInputExtensions.some((extension) => lowered.endsWith(extension));
 }
 
+/**
+ * Misma regla que aplica el backend al identificador de caso.
+ *
+ * Se repite acá a propósito: el backend la valida porque es quien no puede confiar en
+ * el cliente, y la pantalla la valida porque el médico tiene que enterarse mientras
+ * escribe y no después de elegir el archivo. Un error que aparece recién al subir
+ * obliga a rehacer el paso entero sin decir qué carácter sobraba.
+ */
+const CASE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
+
+function caseIdError(value: string): string {
+  if (!value) return "";
+  if (!/^[A-Za-z0-9]/.test(value)) return "Tiene que empezar con una letra o un número.";
+  if (value.length > 80) return "Máximo 80 caracteres.";
+  const invalid = [...value].find((character) => !/[A-Za-z0-9._:-]/.test(character));
+  if (invalid) {
+    // Se nombra el carácter que sobra: "caracteres inválidos" obliga a adivinar cuál.
+    return invalid === " "
+      ? "No puede llevar espacios. Usá guion o guion bajo."
+      : `El carácter «${invalid}» no está permitido. Usá letras, números, punto, guion, guion bajo o dos puntos.`;
+  }
+  return CASE_ID_PATTERN.test(value) ? "" : "Formato no permitido.";
+}
+
 function apiErrorMessage(error: unknown, action: string) {
   if (error instanceof BackendApiError) {
     return `No se pudo ${action}: ${error.message}`;
@@ -92,6 +116,10 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const [message, setMessage] = useState("");
 
   const normalizedCaseId = caseId.trim();
+  const caseIdIssue = caseIdError(normalizedCaseId);
+  /* Sin un identificador válido no se habilita la carga: el archivo se subiría para
+     ser rechazado, y el médico tendría que volver a elegirlo. */
+  const caseIdReady = Boolean(normalizedCaseId) && !caseIdIssue;
   /*
    * El identificador de entrada puede venir de las dos vías. La del estudio completo
    * tiene prioridad porque el plano lo decidió la metadata; la de plano suelto es lo
@@ -104,8 +132,8 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
 
   async function uploadStudy(file?: File) {
     if (!file) return;
-    if (!normalizedCaseId) {
-      setMessage("Ingresá un identificador de caso de-identificado antes de cargar el estudio.");
+    if (!caseIdReady) {
+      setMessage(caseIdIssue || "Ingresá un identificador de caso de-identificado antes de cargar el estudio.");
       return;
     }
     if (!file.name.toLowerCase().endsWith(".zip")) {
@@ -124,8 +152,8 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
 
   async function upload(plane: Plane, file?: File) {
     if (!file) return;
-    if (!normalizedCaseId) {
-      setMessage("Ingresá un identificador de caso de-identificado antes de cargar archivos.");
+    if (!caseIdReady) {
+      setMessage(caseIdIssue || "Ingresá un identificador de caso de-identificado antes de cargar archivos.");
       return;
     }
     if (!hasAllowedExtension(file.name)) {
@@ -221,6 +249,9 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
           <label className="wl-field">
             <span>ID de caso de-identificado</span>
             <input onChange={(event) => setCaseId(event.target.value)} placeholder="CASE-XXXX" value={caseId} />
+            {caseIdIssue
+              ? <em className="wl-field-error">{caseIdIssue}</em>
+              : <em>Letras, números, punto, guion, guion bajo o dos puntos.</em>}
           </label>
 
           <label className="wl-field">
@@ -272,7 +303,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
               <strong>Estudio completo</strong>
               <span>.zip · las series se separan solas</span>
             </div>
-            <input accept=".zip" disabled={!normalizedCaseId} onChange={(event) => { void uploadStudy(event.target.files?.[0]); event.target.value = ""; }} type="file" />
+            <input accept=".zip" disabled={!caseIdReady} onChange={(event) => { void uploadStudy(event.target.files?.[0]); event.target.value = ""; }} type="file" />
             {studyUpload.status === "uploading" && <p className="wl-upload-state">Leyendo {studyUpload.fileName}…</p>}
             {studyUpload.status === "error" && <p className="wl-drawer-error">{studyUpload.error}</p>}
             {studyUpload.status === "uploaded" && studyUpload.study && (
@@ -330,7 +361,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
                   <strong>{planeLabel(plane)}</strong>
                   <span>{plane === "sagittal" ? "obligatorio" : "opcional · experimental"}</span>
                 </div>
-                <input accept={uploadAccept} disabled={!normalizedCaseId} onChange={(event) => onFileChange(plane, event)} type="file" />
+                <input accept={uploadAccept} disabled={!caseIdReady} onChange={(event) => onFileChange(plane, event)} type="file" />
                 {uploads[plane].status === "uploading" && <p className="wl-upload-state">Cargando {uploads[plane].fileName}…</p>}
                 {uploads[plane].status === "uploaded" && <p className="wl-upload-state is-ok">{uploads[plane].fileName} cargado.</p>}
                 {uploads[plane].status === "error" && <p className="wl-drawer-error">{uploads[plane].error}</p>}
