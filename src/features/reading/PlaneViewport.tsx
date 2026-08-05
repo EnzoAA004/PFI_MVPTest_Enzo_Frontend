@@ -36,6 +36,8 @@ export type PlaneViewportProps = {
   /** Derivadas de la geometría de otras estructuras: capa aparte. */
   derivedMeasurements: MeasurementOverlay[];
   derivedMeasurableCount: number;
+  referenceLine: [{ x: number; y: number }, { x: number; y: number }] | null;
+  referenceLineReason: string;
   selectedMeasurementId: string | null;
   highlightedMeasurementId: string | null;
   onSelectMeasurement: (id: string) => void;
@@ -62,7 +64,7 @@ export function PlaneViewport({
   slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
   measureTool, measureDraft, onMeasurePoint, onMeasureFreehand, annotations, aiMeasurements, aiMeasurableCount,
-  derivedMeasurements, derivedMeasurableCount, onMoveMeasurePoint, annotatedIndices, onMoveMaskPoint,
+  derivedMeasurements, derivedMeasurableCount, referenceLine, referenceLineReason, onMoveMeasurePoint, annotatedIndices, onMoveMaskPoint,
   selectedMeasurementId, highlightedMeasurementId, onSelectMeasurement,
   segmentation, slicePixels, pixelsBaseUrl, hiddenInstances, onToggleInstance,
 }: PlaneViewportProps) {
@@ -101,6 +103,8 @@ export function PlaneViewport({
           aiMeasurableCount={aiMeasurableCount}
           derivedMeasurements={derivedMeasurements}
           derivedMeasurableCount={derivedMeasurableCount}
+          referenceLine={referenceLine}
+          referenceLineReason={referenceLineReason}
           highlightedMeasurementId={highlightedMeasurementId}
           onSelectMeasurement={onSelectMeasurement}
           selectedMeasurementId={selectedMeasurementId}

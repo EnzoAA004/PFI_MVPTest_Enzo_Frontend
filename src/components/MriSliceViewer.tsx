@@ -104,6 +104,16 @@ type Props = {
   /** Cuántas mediciones dibujables tiene la corrida, con o sin nivel seleccionado. */
   aiMeasurableCount?: number;
   /**
+   * Dónde corta el otro plano a esta imagen, ya resuelto en la base 0..256.
+   *
+   * Llega calculada y no como geometría cruda: decidir si se puede trazar es una
+   * verificación con reglas propias, y repartirla entre el visor y quien la consulta
+   * la haría divergir.
+   */
+  referenceLine?: [Point, Point] | null;
+  /** Por qué no se traza, cuando no se puede. Se dice en vez de callar. */
+  referenceLineReason?: string;
+  /**
    * Mediciones derivadas de la geometría de otras estructuras: ángulo segmentario y
    * listesis. Van en su propia capa, apagada por defecto, porque el modelo no fue
    * entrenado para producirlas y usarlas es una decisión del médico.
@@ -288,6 +298,8 @@ export function MriSliceViewer({
   annotations = [],
   aiMeasurements = [],
   aiMeasurableCount = 0,
+  referenceLine = null,
+  referenceLineReason = "",
   derivedMeasurements = [],
   derivedMeasurableCount = 0,
   onMoveMeasurePoint,
@@ -442,6 +454,7 @@ export function MriSliceViewer({
   const [myMeasuresVisible, setMyMeasuresVisible] = useState(true);
   /* Apagada por defecto: son propuestas a evaluar, no parte de la lectura. */
   const [derivedVisible, setDerivedVisible] = useState(false);
+  const [referenceVisible, setReferenceVisible] = useState(true);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; brightness: number; contrast: number; panX: number; panY: number; window?: { center: number; width: number } } | null>(null);
   const landmarkDragRef = useRef<string | null>(null);
@@ -811,6 +824,13 @@ export function MriSliceViewer({
           <input checked={myMeasuresVisible} disabled={!annotations.length} onChange={(event) => setMyMeasuresVisible(event.target.checked)} type="checkbox" />
           <span>Mis mediciones{annotations.length ? ` (${annotations.length})` : ""}</span>
         </label>
+        <label className="toggle-row" title={referenceLine ? "Dónde corta el otro plano a esta imagen" : referenceLineReason || "No hay otro plano con el que cruzar"}>
+          <input checked={referenceVisible} disabled={!referenceLine} onChange={(event) => setReferenceVisible(event.target.checked)} type="checkbox" />
+          <span>Corte del otro plano</span>
+        </label>
+        {!referenceLine && referenceLineReason && (
+          <p className="viewer-limit-note">{referenceLineReason}</p>
+        )}
         <label className="toggle-row">
           <input checked={landmarksVisible} onChange={(event) => setLandmarksVisible(event.target.checked)} type="checkbox" />
           <span>Puntos de referencia</span>
@@ -904,6 +924,7 @@ export function MriSliceViewer({
               <img alt={`${seriesName} recurso de superposicion IA`} className="mri-overlay-img" draggable={false} src={overlayAsset.url} style={{ opacity: overlayAlpha, transform: "translateZ(0)" }} />
             ) : null}
             <MeasurementLayer
+              referenceLine={referenceVisible ? referenceLine : null}
               editable={!readonly && Boolean(onMoveMeasurePoint)}
               figures={visibleMeasures}
               draft={measureTool && (measureDraft.length > 0 || freehand.length > 0)

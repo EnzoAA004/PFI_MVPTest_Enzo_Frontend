@@ -12,6 +12,7 @@ import { MeasurementPanel, type PanelRow } from "../features/reading/Measurement
 import { PlaneViewport } from "../features/reading/PlaneViewport";
 import { instanceColor, instanceLabel, parseSegmentation, type Segmentation } from "../features/reading/segmentation";
 import { parseSlicePixelsMeta, type SlicePixelsMeta } from "../features/reading/pixels";
+import { coordinateEvidence, parseVolumeGeometry, referenceLineOn } from "../features/reading/referenceLine";
 import { annotatedSlices, displayAnnotationScope, formatMeasurement, isAnnotationVisible, measureDistance, type Annotation, type AnnotationScope } from "../features/reading/annotations";
 import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
@@ -560,6 +561,34 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   function slicePixelsForPlane(plane: "sagittal" | "axial"): SlicePixelsMeta | undefined {
     const canonicalPlane = asRecord(asRecord(displayRun.canonicalRun?.planes)?.[plane]);
     return parseSlicePixelsMeta(asRecord(canonicalPlane?.quality)?.slicePixels);
+  }
+
+  function geometryForPlane(plane: "sagittal" | "axial") {
+    const canonicalPlane = asRecord(asRecord(displayRun.canonicalRun?.planes)?.[plane]);
+    return parseVolumeGeometry(asRecord(canonicalPlane?.quality)?.volumeGeometry);
+  }
+
+  /**
+   * Dónde corta el otro plano a la imagen de este, si la geometría lo sostiene.
+   *
+   * Devuelve también el motivo cuando no se puede: una línea ausente sin explicación
+   * se lee como que la función está rota, y acá la ausencia es la respuesta correcta.
+   */
+  function referenceLineFor(plane: "sagittal" | "axial"): { line: [{ x: number; y: number }, { x: number; y: number }] | null; reason: string } {
+    const other = plane === "sagittal" ? "axial" : "sagittal";
+    const target = geometryForPlane(plane);
+    const source = geometryForPlane(other);
+    if (!target?.slicePlane || !source?.slicePlane) {
+      return { line: null, reason: "Esta corrida no tiene los dos planos con geometría." };
+    }
+    const evidence = coordinateEvidence(target, source);
+    if (!evidence.shared) return { line: null, reason: evidence.reason };
+    const line = referenceLineOn(target.slicePlane, source.slicePlane);
+    if (!line) {
+      // Normal en un estudio lumbar: los axiales cubren solo la parte baja.
+      return { line: null, reason: `El corte ${other === "sagittal" ? "sagital" : "axial"} no cruza esta parte de la imagen.` };
+    }
+    return { line, reason: "" };
   }
 
   function masksForPlane(plane: "sagittal" | "axial"): StudyMask[] {
@@ -1297,6 +1326,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   annotations={measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
                   aiMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, false)}
                   aiMeasurableCount={aiMeasurableCount}
+                  referenceLine={referenceLineFor(planeName).line}
+                  referenceLineReason={referenceLineFor(planeName).reason}
                   derivedMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, true)}
                   derivedMeasurableCount={derivedMeasurableCount}
                   highlightedMeasurementId={highlightedMeasurementId ? `ai-${highlightedMeasurementId}` : null}

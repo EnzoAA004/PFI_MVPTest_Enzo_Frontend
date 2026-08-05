@@ -34,6 +34,8 @@ export type MeasurementFigure = {
 
 type Props = {
   figures: MeasurementFigure[];
+  /** Dónde corta el otro plano, cuando la geometría lo sostiene. */
+  referenceLine?: [AnnotationPoint, AnnotationPoint] | null;
   /** En curso: la figura que el médico está trazando ahora mismo. */
   draft?: { kind: MeasurementKind; points: AnnotationPoint[] } | null;
   selectedId?: string | null;
@@ -156,16 +158,29 @@ function Figure({ figure, kind, tick }: { figure: MeasurementFigure; kind: Measu
 }
 
 export function MeasurementLayer({
-  figures, draft, selectedId, highlightedId, zoom, editable, onSelect, onDragStart,
+  figures, draft, referenceLine, selectedId, highlightedId, zoom, editable, onSelect, onDragStart,
 }: Props) {
   const fontSize = 6 / zoom;
   const tick = 2.2 / zoom;
   const handle = 2.4 / zoom;
   const gap = fontSize * 1.1;
-  if (!figures.length && !draft) return null;
+  if (!figures.length && !draft && !referenceLine) return null;
 
   return (
     <svg className="mri-measure-layer" viewBox={`0 0 ${BASE} ${BASE}`} preserveAspectRatio="none">
+      {/*
+        Dónde corta el otro plano. Va primero para quedar debajo de las mediciones: es
+        contexto de navegación, no un hallazgo, y no debe competir con lo que se mide.
+      */}
+      {referenceLine && (
+        <line
+          className="mri-reference-line"
+          x1={referenceLine[0].x}
+          y1={referenceLine[0].y}
+          x2={referenceLine[1].x}
+          y2={referenceLine[1].y}
+        />
+      )}
       {figures.map((figure) => {
         if (!figure.points.length) return null;
         const selected = figure.id === selectedId;

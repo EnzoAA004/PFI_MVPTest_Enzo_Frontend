@@ -397,6 +397,17 @@
   }
   .mri-measure-handle:active { cursor: grabbing; }
 
+  /* Dónde corta el otro plano. Fina y punteada, y por debajo de las mediciones: es
+     contexto para navegar, no un hallazgo, y no debe competir con lo que se mide. */
+  .mri-reference-line {
+    stroke: var(--accent, #7aa2f7);
+    stroke-width: 1;
+    stroke-dasharray: 8 4;
+    opacity: .8;
+    vector-effect: non-scaling-stroke;
+    pointer-events: none;
+  }
+
   /* En curso: lo que el médico está trazando ahora, todavía sin valor. */
   .mri-measure-draft line { stroke-dasharray: 2 2; }
   .mri-measure-draft circle { fill: var(--primary); }
@@ -722,7 +733,23 @@
    */
   .rr-viewport .real-slice-frame { order: 1; }
   .rr-viewport .viewer-controls { order: 2; }
-  .rr-viewport .plane-controls-panel { order: 3; }
+  /* La barra de capas crece si hace falta en vez de apretar sus controles: con seis
+     capas los nombres se cortaban a la mitad y el aviso de por qué una no se puede
+     dibujar quedaba fuera de la vista, que es justo lo que hay que poder leer. */
+  .rr-viewport .plane-controls-panel {
+    order: 3;
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--rr-strip-h);
+    padding-top: 4px;
+    padding-bottom: 4px;
+    row-gap: 2px;
+  }
+
+  .rr-viewport .plane-controls-panel .viewer-limit-note {
+    flex-basis: 100%;
+    margin: 0;
+  }
 
   .rr-viewport .viewer-controls,
   .rr-viewport .plane-controls-panel {
