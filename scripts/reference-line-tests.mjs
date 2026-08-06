@@ -198,4 +198,60 @@ check("sin posiciones declaradas se usa el plano informado", () => {
   assert.deepEqual(slicePlaneAt(geometria, 3).position, [-100, -100, 30]);
 });
 
+// --- Orientacion por corte -------------------------------------------------
+
+/*
+ * Una serie axial lumbar no es un plano unico repetido: se adquiere en bloques
+ * angulados, uno por disco. En el estudio de referencia los cortes 1-5 estan a 3,5
+ * grados, los 6-10 a 5,9 y los 11-15 a 23. Usar la direccion global del volumen
+ * acertaba en 5 de 15 y en el resto dibujaba 23 grados donde lo real es casi
+ * horizontal, con el sentido antero-posterior invertido.
+ */
+const bloques = {
+  slicePlane: axial(0),
+  slicePositions: [[-100, -100, 0], [-100, -100, -55], [-100, -100, -120]],
+  // Ya normalizadas a [fila, columna]; parseVolumeGeometry las arma asi desde los
+  // seis numeros planos que declara DICOM 0020|0037.
+  sliceOrientations: [
+    [[1, 0, 0], [0, 0.9981, -0.0610]],
+    [[1, 0, 0], [0, 0.9947, 0.1029]],
+    [[1, 0, 0], [0, 0.9205, 0.3908]],
+  ],
+};
+
+check("cada corte usa su propia orientacion, no la del volumen", () => {
+  const primero = slicePlaneAt(bloques, 0);
+  const ultimo = slicePlaneAt(bloques, 2);
+  const inclinacion = (plano) => Math.acos(Math.abs(plano.normal[2])) * 180 / Math.PI;
+  assert.ok(Math.abs(inclinacion(primero) - 3.5) < 0.3, `primer bloque: ${inclinacion(primero)}`);
+  assert.ok(Math.abs(inclinacion(ultimo) - 23) < 0.3, `ultimo bloque: ${inclinacion(ultimo)}`);
+});
+
+check("el sentido antero-posterior de cada bloque se conserva", () => {
+  // Es el signo que estaba invertido: el primer bloque se inclina hacia posterior y
+  // el ultimo hacia anterior, y con una sola direccion los dos salian iguales.
+  assert.ok(slicePlaneAt(bloques, 0).normal[1] > 0, "el primer bloque mira hacia posterior");
+  assert.ok(slicePlaneAt(bloques, 2).normal[1] < 0, "el ultimo bloque mira hacia anterior");
+});
+
+check("cruzar de bloque cambia el angulo de la linea sobre el sagital", () => {
+  const anguloDe = (indice) => {
+    const linea = referenceLineOn(sagital, slicePlaneAt(bloques, indice));
+    assert.ok(linea, `el corte ${indice} tiene que cruzar el sagital`);
+    return Math.atan2(linea[1].y - linea[0].y, linea[1].x - linea[0].x) * 180 / Math.PI;
+  };
+  assert.ok(Math.abs(anguloDe(0) - anguloDe(2)) > 15, "dos bloques distintos no pueden dar la misma recta");
+});
+
+check("sin orientaciones declaradas se usa la del volumen", () => {
+  // Un volumen .mha no las trae, y ahi la direccion unica es correcta por construccion.
+  const sinOrientaciones = { slicePlane: axial(0), slicePositions: [[-100, -100, 5]] };
+  assert.deepEqual(slicePlaneAt(sinOrientaciones, 0).normal, axial(0).normal);
+});
+
+check("una orientacion mal formada no se usa a medias", () => {
+  const rota = parseVolumeGeometry({ slicePlane: null, sliceOrientations: [[1, 0, 0]] });
+  assert.equal(rota.sliceOrientations, null, "seis numeros o nada");
+});
+
 console.log(`reference-line: ${passed} passed`);

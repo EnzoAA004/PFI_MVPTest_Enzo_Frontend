@@ -32,6 +32,14 @@ export type VolumeGeometry = {
   slicePlane?: SlicePlane | null;
   /** Posición declarada de cada corte de la serie, en coordenadas del paciente. */
   slicePositions?: Vec3[] | null;
+  /**
+   * Orientación declarada de cada corte: [fila(3), columna(3)].
+   *
+   * Una serie axial lumbar no es un plano único repetido — se adquiere en bloques
+   * angulados, uno por disco. Sin esto se usaba la dirección global del volumen, que
+   * es la de uno solo de los bloques.
+   */
+  sliceOrientations?: [Vec3, Vec3][] | null;
   boundsMm?: { min: Vec3; max: Vec3 } | null;
   frameOfReferenceUid?: string | null;
   geometryComplete?: boolean;
@@ -66,9 +74,17 @@ export function parseVolumeGeometry(value: unknown): VolumeGeometry | null {
   const positions = Array.isArray(raw.slicePositions)
     ? (raw.slicePositions as unknown[]).filter(isVec3)
     : null;
+  const orientations = Array.isArray(raw.sliceOrientations)
+    ? (raw.sliceOrientations as unknown[])
+      .map((item) => (Array.isArray(item) && item.length === 6 && item.every((v) => typeof v === "number" && Number.isFinite(v))
+        ? [[item[0], item[1], item[2]], [item[3], item[4], item[5]]] as [Vec3, Vec3]
+        : null))
+      .filter((item): item is [Vec3, Vec3] => item !== null)
+    : null;
   return {
     slicePlane,
     slicePositions: positions && positions.length ? positions : null,
+    sliceOrientations: orientations && orientations.length ? orientations : null,
     boundsMm: bounds && isVec3(bounds.min) && isVec3(bounds.max) ? { min: bounds.min, max: bounds.max } : null,
     frameOfReferenceUid: typeof raw.frameOfReferenceUid === "string" ? raw.frameOfReferenceUid : null,
     geometryComplete: raw.geometryComplete === true,
@@ -137,11 +153,31 @@ export function slicePlaneAt(geometry: VolumeGeometry, index: number): SlicePlan
   const base = geometry.slicePlane;
   if (!base) return null;
   const declared = geometry.slicePositions?.[index];
-  if (declared) return { ...base, position: declared };
-  const reference = geometry.slicePositions?.length ? null : base;
-  if (!reference) return null;
-  // Sin posiciones declaradas: la serie es uniforme y el desplazamiento vale.
-  return base;
+  if (!declared) {
+    // Sin posiciones declaradas: la serie es uniforme y el plano informado vale.
+    return geometry.slicePositions?.length ? null : base;
+  }
+  /*
+   * La orientación también sale del corte, no del volumen.
+   *
+   * Una serie axial lumbar se adquiere en bloques angulados, uno por disco: en el
+   * estudio de referencia los cortes 1-5 están a 3,5°, los 6-10 a 5,9° y los 11-15 a
+   * 23°. Con la dirección global del volumen —que es la de uno solo de esos bloques—
+   * la línea salía correcta en 5 de 15 cortes y en el resto marcaba 23° donde lo real
+   * es casi horizontal, con el sentido antero-posterior invertido.
+   */
+  const orientation = geometry.sliceOrientations?.[index];
+  if (!orientation) return { ...base, position: declared };
+  const [row, col] = orientation;
+  return {
+    ...base,
+    position: declared,
+    // DICOM 0020|0037 da primero el vector de la fila —el que recorre las columnas,
+    // horizontal en la imagen— y después el de la columna, vertical.
+    colDirection: row,
+    rowDirection: col,
+    normal: cross(row, col),
+  };
 }
 
 export type Point2 = { x: number; y: number };
