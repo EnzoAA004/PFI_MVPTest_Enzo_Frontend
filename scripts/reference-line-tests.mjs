@@ -254,4 +254,33 @@ check("una orientacion mal formada no se usa a medias", () => {
   assert.equal(rota.sliceOrientations, null, "seis numeros o nada");
 });
 
+check("la línea cruza la imagen entera, no media", () => {
+  /*
+   * Se trazaba desde el punto que resuelve el sistema hacia **un solo lado**, así que
+   * era un rayo y no una recta: el recorte dejaba el corte justo donde caía ese punto.
+   */
+  const linea = referenceLineOn(sagital, axial(50));
+  const xs = [linea[0].x, linea[1].x].sort((a, b) => a - b);
+  assert.ok(xs[0] < 0.01, `la línea tiene que llegar al borde izquierdo, empieza en ${xs[0]}`);
+  assert.ok(xs[1] > 255.99, `la línea tiene que llegar al borde derecho, termina en ${xs[1]}`);
+});
+
+check("recorrer el axial no mueve la línea dentro del propio axial", () => {
+  /*
+   * Regresión del síntoma que se veía en pantalla: al scrollear el axial, su línea
+   * -que marca dónde lo cruza el sagital- se deslizaba verticalmente. Recorrer el
+   * axial cambia z, y dónde lo corta un plano sagital no depende de z.
+   *
+   * El extremo del rayo sí dependía: se movía porque cambia la normal del plano, que
+   * es una de las filas del sistema que ubica el punto.
+   */
+  const posiciones = [0, 10, 20, 30, 40].map((z) => {
+    const linea = referenceLineOn(axial(z), sagital);
+    assert.ok(linea, `el sagital tiene que cruzar el axial en z=${z}`);
+    return [linea[0].x.toFixed(3), [linea[0].y, linea[1].y].sort((a, b) => a - b).map((v) => v.toFixed(3)).join("..")];
+  });
+  const unicas = new Set(posiciones.map((item) => item.join("|")));
+  assert.equal(unicas.size, 1, `la línea se movió al recorrer el axial: ${[...unicas].join(" / ")}`);
+});
+
 console.log(`reference-line: ${passed} passed`);

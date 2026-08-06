@@ -253,14 +253,29 @@ export function referenceLineOn(target: SlicePlane, source: SlicePlane): [Point2
       y: dot(relative, target.rowDirection) / target.rowSpacing,
     };
   };
-  // Dos puntos separados de la recta; el largo no importa porque después se recorta.
-  const span = Math.max(target.rowCount * target.rowSpacing, target.colCount * target.colSpacing);
-  const a = toImage(point);
-  const b = toImage([
-    point[0] + direction[0] * span,
-    point[1] + direction[1] * span,
-    point[2] + direction[2] * span,
-  ] as Vec3);
+  /*
+   * Dos puntos de la recta, uno a cada lado de la imagen.
+   *
+   * `point` no es un punto notable: es el que además cumple `direction·p = 0`, que es
+   * solo lo que hizo falta para cerrar el sistema, y cae donde caiga. Tomarlo como
+   * extremo dibujaba media recta —un rayo— y el recorte dejaba el corte justo ahí. Ese
+   * extremo se movía al cambiar de corte, porque cambia la normal del plano y con ella
+   * la solución del sistema: en el axial se veía la línea deslizándose a lo largo de sí
+   * misma, cuando recorrer el axial no puede mover dónde lo cruza el sagital.
+   *
+   * Así que primero se corre `point` hasta lo más cerca del corte que la recta llega, y
+   * desde ahí se sale para los dos lados más que el tamaño de la imagen.
+   */
+  const unit = direction.map((value) => value / norm(direction)) as Vec3;
+  const offset = dot(sub(target.position, point), unit);
+  const span = Math.hypot(target.rowCount * target.rowSpacing, target.colCount * target.colSpacing);
+  const along = (distance: number): Vec3 => [
+    point[0] + unit[0] * (offset + distance),
+    point[1] + unit[1] * (offset + distance),
+    point[2] + unit[2] * (offset + distance),
+  ];
+  const a = toImage(along(-span));
+  const b = toImage(along(span));
 
   const clipped = clipToRect(a, b, target.colCount, target.rowCount);
   if (!clipped) return null;
