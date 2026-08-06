@@ -919,8 +919,13 @@ export function MriSliceViewer({
         </label>
       </div>
 
-      <div className="segmentation-legend-panel">
-        <strong>Leyenda de segmentación</strong>
+      {/*
+        Plegable y cerrada de arranque. Las dos leyendas flotantes le comian cerca de
+        un tercio del visor a la anatomia, que es justo lo que hay que mirar; se abren
+        cuando hacen falta y el resto del tiempo ocupan una linea.
+      */}
+      <details className="segmentation-legend-panel">
+        <summary>Leyenda de segmentación</summary>
         <div className="segmentation-legend-list">
           {groups.length ? groups.map((group) => (
             <label
@@ -946,7 +951,7 @@ export function MriSliceViewer({
         {!classMasks.ready && groups.length > 0 && (
           <p className="viewer-limit-note">Esta corrida guardó la segmentación como una sola imagen compuesta, así que solo se puede mostrar u ocultar entera. Las corridas nuevas guardan una máscara por clase.</p>
         )}
-      </div>
+      </details>
 
       <p className="viewer-limit-note">W/L es un filtro aproximado de brillo/contraste sobre un PNG de 8 bits. El ventaneo DICOM y la navegacion multicorte requieren AI-009.</p>
 

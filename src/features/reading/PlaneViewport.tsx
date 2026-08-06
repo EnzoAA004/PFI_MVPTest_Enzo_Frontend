@@ -157,7 +157,9 @@ export function PlaneViewport({
           sin perder las demás.
         */}
         {segmentation && segmentation.instances.length > 0 && (
-          <ul className="rr-instances" aria-label={`Estructuras segmentadas en ${plane}`}>
+          <details className="rr-instances-panel">
+            <summary>Estructuras ({segmentation.instances.length})</summary>
+            <ul className="rr-instances" aria-label={`Estructuras segmentadas en ${plane}`}>
             {segmentation.instances.map((instance) => (
               <li key={instance.id}>
                 <label>
@@ -171,7 +173,8 @@ export function PlaneViewport({
                 </label>
               </li>
             ))}
-          </ul>
+            </ul>
+          </details>
         )}
       </div>
       {slice && (
