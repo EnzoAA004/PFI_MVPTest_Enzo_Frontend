@@ -9,6 +9,7 @@ import { BackendApiError, fetchThreeDProxyAsset } from "../multiplanarApi";
 import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type SpineLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
 import { MeasurementPanel, type PanelRow } from "../features/reading/MeasurementPanel";
+import { buildStructuredReport, entryText, type ReportEntry } from "../features/reading/structuredReport";
 import { PlaneViewport } from "../features/reading/PlaneViewport";
 import { instanceColor, instanceLabel, parseSegmentation, type Segmentation } from "../features/reading/segmentation";
 import { parseSlicePixelsMeta, type SlicePixelsMeta } from "../features/reading/pixels";
@@ -366,7 +367,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [saveMessage, setSaveMessage] = useState("");
   // Right panel of the reading room: clinical findings first, review second, and
   // everything technical kept out of the clinical surface entirely.
-  const [panelTab, setPanelTab] = useState<"findings" | "review" | "technical">("findings");
+  const [panelTab, setPanelTab] = useState<"findings" | "review" | "report" | "technical">("findings");
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   /*
    * Geometría corregida por el revisor, por id de medición. Se guarda aparte de la
@@ -763,6 +764,27 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const hasReviewerDrafts = hasMeasurementDrafts || landmarkDraftCount > 0 || contourDraftCount > 0;
   const relevantChanges = resultRows.filter((row) => row.severity === "medium" || row.severity === "high").length;
   const outlierCount = resultRows.filter((row) => row.outlier).length;
+
+  /*
+   * El informe recorre el estudio entero, no el plano que se está mirando: un informe
+   * de columna que dejara afuera el axial porque el médico tenía el sagital en
+   * pantalla sería un informe distinto según desde dónde se lo exporta.
+   */
+  const structuredReport = useMemo(() => buildStructuredReport(
+    (hasPlaneWorkspaces
+      ? [...sagittalWorkspace.measurements, ...axialWorkspace.measurements]
+      : sourceMeasurements
+    ).map((item: any) => ({
+      id: String(item.id),
+      label: displayMeasurementLabel(item.label),
+      labelKey: item.labelKey ?? item.label,
+      level: item.level,
+      levelScope: item.levelScope,
+      unit: item.unit,
+      aiValue: item.aiValue,
+      reviewerValue: reviewerValues[item.id] ?? item.reviewerValue ?? getPersistedReviewerValue(item.id) ?? null,
+    })),
+  ), [axialWorkspace, hasPlaneWorkspaces, reviewerValues, sagittalWorkspace, sourceMeasurements]);
   const confirmDisabled = saving || reviewStatus === "pendiente";
 
   function selectSeries(series: any) {
@@ -933,11 +955,31 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-mediciones.csv`, csv, "text/csv;charset=utf-8");
   }
 
+  /*
+   * El HTML se arma acá y no en el backend, que sigue emitiendo el resumen plano.
+   * El documento exportado tiene que ser el mismo que se está viendo en la pestaña:
+   * si el archivo que la médica se lleva estuviera organizado de otra forma que la
+   * pantalla donde lo revisó, no hay manera de saber cuál de los dos leyó.
+   */
+  function reportSections() {
+    const entryLine = (entry: ReportEntry) => `<li>${escapeHtml(entryText(entry))}</li>`;
+    const levels = structuredReport.levels.map((level) => `<section class="level"><h3>${escapeHtml(level.level)}${level.flagged ? ` <em class="flag">${level.flagged} fuera de rango</em>` : ""}</h3>${
+      level.evaluated
+        ? `<ul>${level.entries.map(entryLine).join("")}</ul>`
+        : `<p class="muted">No evaluado en esta corrida.</p>`
+    }</section>`).join("");
+    const loose = (title: string, entries: typeof structuredReport.studyWide, note: string) => entries.length
+      ? `<section class="level"><h3>${escapeHtml(title)}</h3><p class="muted">${escapeHtml(note)}</p><ul>${entries.map(entryLine).join("")}</ul></section>`
+      : "";
+    return levels
+      + loose("Del estudio", structuredReport.studyWide, "Aplican al estudio, no a un nivel.")
+      + loose("Sin nivel asignado", structuredReport.unassigned, "La corrida no pudo asociarlas a un nivel. No es lo mismo que no aplicar a ninguno.");
+  }
+
   async function exportHtml() {
-    try { await tryBackendExport("html"); return; } catch { /* local fallback */ }
     const payload = exportPayload();
     const measurementRows = payload.measurements.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong><br><span>${escapeHtml(row.level)}</span></td><td>${escapeHtml(row.aiValue)} ${escapeHtml(row.unit)}</td><td>${escapeHtml(row.reviewerValue ?? "sin cambios")}</td><td>${escapeHtml(row.deltaFormatted)}</td><td>${escapeHtml(row.status)}</td><td>${row.outlier ? "Si" : "No"}</td></tr>`).join("");
-    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Corrida ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatusLabel)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
+    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}.level{border-top:1px solid #e2e8f0;padding:12px 0}.level h3{margin:0 0 6px;font-size:15px}.level ul{margin:0;padding-left:20px}.level li{margin:3px 0;font-size:14px}.flag{color:#b45309;font-style:normal;font-size:12px;font-weight:700}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Corrida ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatusLabel)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Hallazgos por nivel</h2>${reportSections()}<h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
     downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-informe.html`, html, "text/html;charset=utf-8");
   }
 
@@ -1388,6 +1430,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           <div className="rr-tabs" role="tablist">
             <button className={panelTab === "findings" ? "is-active" : ""} onClick={() => setPanelTab("findings")} role="tab" aria-selected={panelTab === "findings"} type="button">Hallazgos</button>
             <button className={panelTab === "review" ? "is-active" : ""} onClick={() => setPanelTab("review")} role="tab" aria-selected={panelTab === "review"} type="button">Revisión</button>
+            <button className={panelTab === "report" ? "is-active" : ""} onClick={() => setPanelTab("report")} role="tab" aria-selected={panelTab === "report"} type="button">Informe</button>
             <button className={panelTab === "technical" ? "is-active" : ""} onClick={() => setPanelTab("technical")} role="tab" aria-selected={panelTab === "technical"} type="button">Técnico</button>
           </div>
 
@@ -1557,6 +1600,63 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
                 <p className="rr-section-title">Auditoría</p>
                 <AuditTrail events={auditTrail.slice(0, 4)} />
+              </>
+            )}
+
+            {panelTab === "report" && (
+              <>
+                <p className="rr-section-title">Informe por nivel</p>
+                <p className="rr-note">
+                  Cubre los dos planos del estudio. {structuredReport.flaggedTotal > 0
+                    ? `${structuredReport.flaggedTotal} medición${structuredReport.flaggedTotal === 1 ? "" : "es"} fuera del rango de referencia.`
+                    : "Ninguna medición fuera del rango de referencia."}
+                </p>
+
+                <ol className="rr-report">
+                  {structuredReport.levels.map((level) => (
+                    <li className={`rr-report-level${level.evaluated ? "" : " is-empty"}${level.flagged ? " is-flagged" : ""}`} key={level.level}>
+                      <strong>{level.level}</strong>
+                      {/*
+                        Un nivel sin medir se declara. Omitirlo lo dejaría leer como si
+                        no hubiera nada que informar ahí, que es una afirmación que la
+                        corrida no hizo.
+                      */}
+                      {level.evaluated
+                        ? <ul>{level.entries.map((entry) => <li key={entry.id}>{entryText(entry)}</li>)}</ul>
+                        : <p className="rr-note">No evaluado en esta corrida.</p>}
+                    </li>
+                  ))}
+                </ol>
+
+                {structuredReport.studyWide.length > 0 && (
+                  <>
+                    <p className="rr-section-title">Del estudio</p>
+                    <ul className="rr-report-loose">
+                      {structuredReport.studyWide.map((entry) => <li key={entry.id}>{entryText(entry)}</li>)}
+                    </ul>
+                  </>
+                )}
+
+                {structuredReport.unassigned.length > 0 && (
+                  <>
+                    <p className="rr-section-title">Sin nivel asignado</p>
+                    <p className="rr-note">Medidas que la corrida no pudo asociar a un nivel. No es lo mismo que no aplicar a ninguno.</p>
+                    <ul className="rr-report-loose">
+                      {structuredReport.unassigned.map((entry) => <li key={entry.id}>{entryText(entry)}</li>)}
+                    </ul>
+                  </>
+                )}
+
+                <p className="rr-section-title">Exportar</p>
+                <div className="rr-report-actions">
+                  <button onClick={() => { void exportHtml(); }} type="button">HTML</button>
+                  <button onClick={() => { void exportCsv(); }} type="button">CSV</button>
+                  <button onClick={() => { void exportJson(); }} type="button">JSON</button>
+                </div>
+                <p className="rr-note">
+                  Uso académico y de investigación sobre datos de-identificados. Requiere revisión
+                  profesional y no constituye un diagnóstico.
+                </p>
               </>
             )}
 

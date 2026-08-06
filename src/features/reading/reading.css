@@ -948,6 +948,50 @@
   .rr-slice-cine:disabled { opacity: .4; cursor: default; }
   .rr-slice-cine.is-on { color: var(--text-primary-strong); border-color: var(--border-info); background: var(--surface-raised); }
 
+  /* Informe por nivel ----------------------------------------------------- */
+  .rr-report { list-style: none; margin: 0; padding: 0; }
+
+  .rr-report-level {
+    border-top: 1px solid var(--border);
+    padding: var(--sp-2) 0;
+  }
+
+  .rr-report-level > strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    color: var(--text-primary-strong);
+    letter-spacing: .04em;
+  }
+
+  .rr-report-level ul { margin: var(--sp-1) 0 0; padding-left: var(--sp-4); }
+  .rr-report-level li { font-size: var(--fs-small); line-height: 1.45; margin: 2px 0; }
+  /* Un nivel no evaluado se atenúa pero no se esconde: tiene que poder leerse. */
+  .rr-report-level.is-empty > strong { color: var(--text-muted); }
+  .rr-report-level.is-flagged > strong::after {
+    content: " ●";
+    color: var(--border-warning, #d97706);
+  }
+
+  .rr-report-loose { margin: var(--sp-1) 0 0; padding-left: var(--sp-4); }
+  .rr-report-loose li { font-size: var(--fs-small); line-height: 1.45; margin: 2px 0; }
+
+  .rr-report-actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-1); }
+
+  .rr-report-actions button {
+    flex: 1;
+    height: 28px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    cursor: pointer;
+  }
+
+  .rr-report-actions button:hover { color: var(--text-primary-strong); border-color: var(--border-info); }
+
   /* Right panel ---------------------------------------------------------- */
   .rr-panel {
     background: var(--surface);
