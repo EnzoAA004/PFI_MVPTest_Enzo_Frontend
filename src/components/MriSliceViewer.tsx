@@ -6,6 +6,7 @@ import { applyWindow, defaultWindow, fetchSlicePixels, percentileWindow, slicePi
 import { MeasurementLayer, type MeasurementFigure } from "../features/reading/MeasurementLayer";
 import type { MeasurementKind } from "../features/reading/measurements";
 import { spokenOrientation, type OrientationLabels } from "../features/reading/orientationMarkers";
+import { scaleBarFor } from "../features/reading/scaleBar";
 import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
 
 /**
@@ -875,33 +876,13 @@ export function MriSliceViewer({
     onLandmarkAddComplete?.();
   }
 
-  /*
-   * Largo de la barra de escala, en pixeles de pantalla.
-   *
-   * `imageSize` es el tamano natural de la imagen y `asset-transform` la escala por
-   * `zoom`, asi que un pixel de imagen mide `zoom` pixeles de pantalla. Cuanto mide en
-   * milimetros sale del espaciado del DICOM, corregido por si el PNG que se muestra no
-   * tiene la misma resolucion que la serie.
-   *
-   * Se elige el escalon que deje la barra en un largo legible: una de 3 px o uno de 900
-   * no se puede comparar contra nada.
-   */
-  const scaleBar = useMemo(() => {
-    if (!pixelSpacingMm || imageSize.width <= 0 || zoom <= 0) return null;
-    // DICOM PixelSpacing es [entre filas, entre columnas]: para una barra horizontal va
-    // el segundo.
-    const spacing = pixelSpacingMm[1] ?? pixelSpacingMm[0];
-    if (!Number.isFinite(spacing) || spacing <= 0) return null;
-    const sourceWidth = slicePixels?.width ?? imageSize.width;
-    const mmPerImagePixel = spacing * (sourceWidth / imageSize.width);
-    if (!Number.isFinite(mmPerImagePixel) || mmPerImagePixel <= 0) return null;
-    const pxPerMm = zoom / mmPerImagePixel;
-    for (const mm of [10, 20, 50, 100]) {
-      const px = mm * pxPerMm;
-      if (px >= 40 && px <= 160) return { mm, px };
-    }
-    return null;
-  }, [imageSize.width, pixelSpacingMm, slicePixels?.width, zoom]);
+  // La eleccion del escalon vive en scaleBar.ts, donde se puede probar.
+  const scaleBar = useMemo(() => scaleBarFor({
+    pixelSpacingMm,
+    imageWidth: imageSize.width,
+    sourceWidth: slicePixels?.width,
+    zoom,
+  }), [imageSize.width, pixelSpacingMm, slicePixels?.width, zoom]);
 
   /*
    * La ventana actual, hacia afuera. Es un dato de lectura, no de depuracion: sin verlo,
