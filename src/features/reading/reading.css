@@ -929,6 +929,25 @@
   .rr-slice-ai:hover:not(:disabled) { color: var(--text-primary-strong); border-color: var(--border-info); }
   .rr-slice-ai:disabled { opacity: .4; cursor: default; }
 
+  /* Cine: mismo cuerpo que el botón del corte IA, encendido bien visible porque
+     mientras corre la imagen cambia sola y hay que poder ver de un vistazo por qué. */
+  .rr-slice-cine {
+    height: 22px;
+    padding: 0 var(--sp-2);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-family: var(--font-mono);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .rr-slice-cine:hover:not(:disabled) { color: var(--text-primary-strong); border-color: var(--border-info); }
+  .rr-slice-cine:disabled { opacity: .4; cursor: default; }
+  .rr-slice-cine.is-on { color: var(--text-primary-strong); border-color: var(--border-info); background: var(--surface-raised); }
+
   /* Right panel ---------------------------------------------------------- */
   .rr-panel {
     background: var(--surface);

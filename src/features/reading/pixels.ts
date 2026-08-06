@@ -36,6 +36,54 @@ export function defaultWindow(meta: SlicePixelsMeta) {
   return { center: (meta.max + meta.min) / 2, width: Math.max(1, meta.max - meta.min) };
 }
 
+export type WindowSetting = { center: number; width: number };
+
+/**
+ * Ventana que deja fuera las colas del histograma del corte.
+ *
+ * **Por qué por percentiles y no por tejido.** Un PACS de TC ofrece "hueso 300/1500"
+ * porque la unidad Hounsfield está calibrada: el mismo tejido da el mismo número en
+ * cualquier equipo. La resonancia no tiene esa calibración — la intensidad depende de
+ * la secuencia, de la bobina y de la ganancia del receptor, y en este dataset los
+ * rangos por corte varían en un orden de magnitud. Un preset "hueso" con números fijos
+ * mostraría negro en la mitad de los estudios, y en la otra mitad estaría acertando
+ * por casualidad. Los percentiles se calculan sobre el corte que se está mirando, así
+ * que valen siempre y no afirman qué tejido se está viendo.
+ *
+ * El histograma se arma con recuento entero sobre el rango real del corte; no se
+ * ordena el arreglo, que en un corte de 512x512 costaría más que dibujarlo.
+ */
+export function percentileWindow(
+  pixels: Int16Array,
+  meta: SlicePixelsMeta,
+  lowFraction: number,
+  highFraction: number,
+): WindowSetting {
+  const span = meta.max - meta.min;
+  if (!(span > 0) || pixels.length === 0) return defaultWindow(meta);
+  const BINS = 1024;
+  const bins = new Uint32Array(BINS);
+  for (let index = 0; index < pixels.length; index += 1) {
+    const position = Math.floor((pixels[index] - meta.min) / span * (BINS - 1));
+    bins[position < 0 ? 0 : position > BINS - 1 ? BINS - 1 : position] += 1;
+  }
+  const valueAt = (fraction: number) => {
+    const target = fraction * pixels.length;
+    let seen = 0;
+    for (let bin = 0; bin < BINS; bin += 1) {
+      seen += bins[bin];
+      if (seen >= target) return meta.min + bin / (BINS - 1) * span;
+    }
+    return meta.max;
+  };
+  const low = valueAt(lowFraction);
+  const high = valueAt(highFraction);
+  // Un corte casi uniforme puede dar las dos puntas en el mismo bin: sin ancho no hay
+  // imagen, solo blanco y negro puros.
+  if (!(high - low > 0)) return defaultWindow(meta);
+  return { center: (high + low) / 2, width: high - low };
+}
+
 /**
  * URL del corte crudo, derivada de la del corte inferido.
  *

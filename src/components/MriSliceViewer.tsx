@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import { startAuthenticatedImageLoad, useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { displayLandmarkLabel, displayStructureLabel } from "../clinicalDisplay";
 import { paintSegmentation, type Segmentation } from "../features/reading/segmentation";
-import { applyWindow, defaultWindow, fetchSlicePixels, slicePixelsUrl, type SlicePixelsMeta } from "../features/reading/pixels";
+import { applyWindow, defaultWindow, fetchSlicePixels, percentileWindow, slicePixelsUrl, type SlicePixelsMeta } from "../features/reading/pixels";
 import { MeasurementLayer, type MeasurementFigure } from "../features/reading/MeasurementLayer";
 import type { MeasurementKind } from "../features/reading/measurements";
 import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
@@ -170,6 +170,19 @@ const windowPresets: WindowPreset[] = [
   { id: "soft", label: "Tejido blando aprox.", brightness: 108, contrast: 118 },
   { id: "bone", label: "Hueso aprox.", brightness: 96, contrast: 138 },
   customPreset,
+];
+
+/**
+ * Presets de ventana sobre las intensidades originales.
+ *
+ * Van por percentiles del corte y no llevan nombre de tejido: la resonancia no está
+ * calibrada como la TC, así que un "hueso 300/1500" fijo no significa lo mismo en dos
+ * equipos. Ver `percentileWindow` para el razonamiento completo.
+ */
+const rawWindowPresets: { id: string; label: string; low: number; high: number; hint: string }[] = [
+  { id: "full", label: "Rango completo", low: 0, high: 1, hint: "Todo el rango de intensidades del corte." },
+  { id: "p2", label: "Contraste medio", low: 0.02, high: 0.98, hint: "Recorta el 2% de cada cola del histograma." },
+  { id: "p10", label: "Alto contraste", low: 0.1, high: 0.9, hint: "Recorta el 10% de cada cola: separa mejor tejidos parecidos." },
 ];
 
 export function computeFitZoom(frame: Size, image: Size) {
@@ -352,6 +365,8 @@ export function MriSliceViewer({
    * preset de tejido que esta corrida no informa.
    */
   const [windowLevel, setWindowLevel] = useState<{ center: number; width: number } | null>(null);
+  /* Preset de ventana real. Convive con el del PNG, que es un filtro de brillo. */
+  const [rawPresetId, setRawPresetId] = useState("full");
   useEffect(() => {
     setWindowLevel(slicePixels ? defaultWindow(slicePixels) : null);
   }, [slicePixels]);
@@ -392,6 +407,28 @@ export function MriSliceViewer({
       });
     return () => controller.abort();
   }, [pixelsUrl, slicePixels, windowLevel?.center, windowLevel?.width]);
+
+  /*
+   * Al cambiar de corte se recalcula el preset sobre los píxeles nuevos. Sin esto la
+   * ventana del corte 0 se arrastraba por toda la serie, y los cortes de los extremos
+   * —que tienen menos señal— salían casi negros.
+   *
+   * La comparación antes de escribir corta el ciclo: el efecto de arriba depende de
+   * `windowLevel`, así que devolver un objeto nuevo con los mismos números lo volvería
+   * a disparar para siempre.
+   */
+  useEffect(() => {
+    if (!pixelsReady || rawPresetId === "custom") return;
+    const preset = rawWindowPresets.find((item) => item.id === rawPresetId);
+    const data = rawPixelsRef.current;
+    if (!preset || !data || !slicePixels) return;
+    const next = percentileWindow(data, slicePixels, preset.low, preset.high);
+    setWindowLevel((current) => (current
+      && Math.abs(current.center - next.center) < 0.5
+      && Math.abs(current.width - next.width) < 0.5
+      ? current
+      : next));
+  }, [pixelsReady, pixelsUrl, rawPresetId, slicePixels]);
 
   const segmentationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const hiddenKey = (hiddenInstances ?? []).join(",");
@@ -551,6 +588,7 @@ export function MriSliceViewer({
 
   function resetWindowLevel() {
     applyPreset(neutralPreset);
+    setRawPresetId("full");
   }
 
   function resetView() {
@@ -645,6 +683,20 @@ export function MriSliceViewer({
       center: base.center + dy * span * 0.002,
       width: Math.max(1, base.width + dx * span * 0.002),
     });
+    setRawPresetId("custom");
+  }
+
+  /*
+   * El preset se recalcula sobre el corte visible, no sobre el primero de la serie:
+   * el rango de intensidades cambia entre cortes y una ventana heredada del corte 0
+   * puede dejar el corte 8 casi en blanco.
+   */
+  function applyRawPreset(id: string) {
+    const preset = rawWindowPresets.find((item) => item.id === id);
+    const data = rawPixelsRef.current;
+    if (!preset || !data || !slicePixels) return;
+    setRawPresetId(id);
+    setWindowLevel(percentileWindow(data, slicePixels, preset.low, preset.high));
   }
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -762,8 +814,11 @@ export function MriSliceViewer({
           <span>{imageLoaded ? storageMessage : inputState === "failed" ? storageMessage : "Verificando recurso real"}</span>
         </div>
         <div className="dicom-meta">
-          <em>PNG servido único</em>
-          <em>W/L aprox. {Math.round(contrast)} / {Math.round(brightness)}</em>
+          <em>{pixelsReady ? "Intensidades originales (16 bits)" : "PNG servido único"}</em>
+          {/* Con datos crudos el número es la ventana real; sobre el PNG es un filtro. */}
+          <em>{pixelsReady && windowLevel
+            ? `W ${Math.round(windowLevel.width)} / L ${Math.round(windowLevel.center)}`
+            : `W/L aprox. ${Math.round(contrast)} / ${Math.round(brightness)}`}</em>
           <em>Zoom {formatZoomPercent(zoom, fitZoom)}</em>
           {model.coordinateSpace && <em>{model.coordinateSpace}</em>}
         </div>
@@ -772,12 +827,29 @@ export function MriSliceViewer({
       <div className="viewer-controls professional-viewer-controls" role="toolbar" aria-label="Controles del visor 2D">
         <label className="control-field">
           <span>Ventana/Nivel</span>
-          <select aria-label="Preset de ventana y nivel" onChange={(event) => {
-            const preset = windowPresets.find((item) => item.id === event.target.value);
-            if (preset) applyPreset(preset);
-          }} value={selectedPresetId}>
-            {windowPresets.map((preset) => <option disabled={preset.id === "custom"} key={preset.id} value={preset.id}>{preset.label}</option>)}
-          </select>
+          {pixelsReady
+            ? (
+              <select
+                aria-label="Preset de ventana y nivel"
+                onChange={(event) => applyRawPreset(event.target.value)}
+                title={rawWindowPresets.find((item) => item.id === rawPresetId)?.hint
+                  ?? "Ventana ajustada a mano sobre las intensidades originales."}
+                value={rawPresetId}
+              >
+                {rawWindowPresets.map((preset) => (
+                  <option key={preset.id} title={preset.hint} value={preset.id}>{preset.label}</option>
+                ))}
+                <option disabled value="custom">Personalizado</option>
+              </select>
+            )
+            : (
+              <select aria-label="Preset de ventana y nivel" onChange={(event) => {
+                const preset = windowPresets.find((item) => item.id === event.target.value);
+                if (preset) applyPreset(preset);
+              }} value={selectedPresetId}>
+                {windowPresets.map((preset) => <option disabled={preset.id === "custom"} key={preset.id} value={preset.id}>{preset.label}</option>)}
+              </select>
+            )}
         </label>
         <button className={mode === "window" ? "active" : ""} disabled={!imageLoaded} onClick={() => setMode("window")} type="button">Arrastrar W/L</button>
         <button className={mode === "pan" ? "active" : ""} disabled={!imageLoaded} onClick={() => setMode("pan")} type="button">Desplazar</button>

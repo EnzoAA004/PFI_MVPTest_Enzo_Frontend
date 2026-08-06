@@ -1,9 +1,16 @@
+import { useEffect, useRef, useState } from "react";
 import { MriSliceViewer, type MeasurementOverlay, type RawSlicePixels, type SliceNavigation } from "../../components/MriSliceViewer";
 import { instanceColor, instanceLabel, type Segmentation } from "./segmentation";
 import { displayStructureLabel } from "../../clinicalDisplay";
 import type { SlicePixelsMeta } from "./pixels";
 import type { MeasurementKind } from "./measurements";
 import type { studyRunToMriViewerModel } from "../../viewModels/mriViewerViewModel";
+
+/*
+ * Ritmo del cine. Un PACS ronda los 10-15 cuadros por segundo, pero acá cada corte se
+ * descarga entero: a esa velocidad la red no llega y el cine muestra el corte anterior.
+ */
+const CINE_INTERVAL_MS = 200;
 
 export type PlaneViewportProps = {
   plane: "sagittal" | "axial";
@@ -68,6 +75,35 @@ export function PlaneViewport({
   selectedMeasurementId, highlightedMeasurementId, onSelectMeasurement,
   segmentation, slicePixels, pixelsBaseUrl, hiddenInstances, onToggleInstance,
 }: PlaneViewportProps) {
+  /*
+   * Cine: recorrer la serie sola, que es como se lee un stack cuando se busca por
+   * dónde entra una hernia. Va y vuelve en vez de saltar del último al primero: el
+   * salto se lee como un corte de continuidad y obliga a reubicarse cada vuelta.
+   *
+   * Se detiene al llegar a una punta si el usuario arrastró el slider mientras corría,
+   * y se apaga sola cuando el plano deja de estar activo — dos series corriendo a la
+   * vez no se pueden mirar, y la de atrás solo gasta descargas de cortes.
+   */
+  const [cineOn, setCineOn] = useState(false);
+  const cineDirection = useRef(1);
+  const total = slice?.total ?? 0;
+  const step = slice?.onStep;
+  const current = slice?.current ?? 0;
+
+  useEffect(() => {
+    if (!active) setCineOn(false);
+  }, [active]);
+
+  useEffect(() => {
+    if (!cineOn || !step || total < 2) return;
+    const timer = setInterval(() => {
+      if (current + cineDirection.current >= total) cineDirection.current = -1;
+      else if (current + cineDirection.current < 0) cineDirection.current = 1;
+      step(cineDirection.current);
+    }, CINE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [cineOn, current, step, total]);
+
   const sliceLabel = slice ? `corte ${slice.current + 1}/${slice.total}` : "corte único";
   return (
     <section className={`rr-plane${active ? " is-active" : ""}`} onPointerDownCapture={onActivate}>
@@ -168,6 +204,16 @@ export function PlaneViewport({
           </span>
           <button className="rr-slice-step" type="button" onClick={() => slice.onStep(1)} disabled={slice.current >= slice.total - 1} aria-label={`Corte siguiente en ${plane}`}>›</button>
           <span className="rr-slice-index">{slice.current + 1}/{slice.total}</span>
+          <button
+            aria-pressed={cineOn}
+            className={`rr-slice-cine${cineOn ? " is-on" : ""}`}
+            disabled={slice.total < 2}
+            onClick={() => setCineOn((value) => !value)}
+            title={cineOn ? "Detener el recorrido automático" : "Recorrer la serie automáticamente"}
+            type="button"
+          >
+            {cineOn ? "■" : "▶"} cine
+          </button>
           <button
             className="rr-slice-ai"
             type="button"
