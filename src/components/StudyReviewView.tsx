@@ -1210,6 +1210,18 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    * el número en la tabla hace lo mismo con el valor pero no puede mover la línea:
    * solo arrastrando vuelven a coincidir.
    */
+  /**
+   * Identificador de la figura para una medicion elegida en el panel.
+   *
+   * Las de la IA se dibujan con el prefijo `ai-` y las del revisor con su id crudo, asi
+   * que traducir mal esto no rompe nada visible salvo lo unico que importa: que la
+   * figura se sepa seleccionada y muestre por donde agarrarla.
+   */
+  function figureIdOf(id: string | null) {
+    if (!id) return null;
+    return annotations.some((item) => item.id === id) ? id : `ai-${id}`;
+  }
+
   function moveMeasurePoint(
     measurementId: string,
     end: "from" | "to",
@@ -1453,9 +1465,17 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   referenceLineReason={referenceLineFor(planeName).reason}
                   derivedMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, true)}
                   derivedMeasurableCount={derivedMeasurableCount}
-                  highlightedMeasurementId={highlightedMeasurementId ? `ai-${highlightedMeasurementId}` : null}
+                  /*
+                   * El prefijo `ai-` distingue las figuras de la IA de las del revisor,
+                   * que pueden compartir identificador. Antes se anteponia siempre, asi
+                   * que una medicion propia jamas coincidia con la seleccionada: la capa
+                   * la daba por no elegida y no le dibujaba los tiradores. Sin tiradores
+                   * no habia de donde agarrarla, y por eso editar lo propio no funcionaba
+                   * por ninguna via.
+                   */
+                  highlightedMeasurementId={figureIdOf(highlightedMeasurementId)}
                   onSelectMeasurement={(id) => setSelectedMeasurementId(id.startsWith("ai-") ? id.slice(3) : id)}
-                  selectedMeasurementId={selectedMeasurementId ? `ai-${selectedMeasurementId}` : null}
+                  selectedMeasurementId={figureIdOf(selectedMeasurementId)}
                   onMoveMeasurePoint={(measurementId, end, point, frame) => moveMeasurePoint(measurementId, end, point, frame, data.series.inPlaneSpacingMm)}
                   annotatedIndices={annotatedSlices(annotations, planeName)}
                   onMoveMaskPoint={moveMaskPoint}

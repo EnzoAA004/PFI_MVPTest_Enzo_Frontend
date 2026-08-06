@@ -478,7 +478,19 @@ export function MriSliceViewer({
    */
   useEffect(() => {
     if (!slice?.previewUrlFor) return;
-    const cleanups = [slice.current - 1, slice.current + 1]
+    /*
+     * Se precargan cuatro cortes hacia cada lado, no uno.
+     *
+     * Con un solo vecino había que pasar varias veces por la serie para que las
+     * imágenes terminaran de aparecer: al mover el slider o al poner el cine, el salto
+     * era siempre mayor que lo precargado y el corte llegaba después de mostrarse
+     * vacío. Cuatro cubre un arrastre normal y el ritmo del cine sin pedir la serie
+     * entera, que serían decenas de imágenes que quizás nunca se miran.
+     */
+    const RADIUS = 4;
+    const cleanups = Array.from({ length: RADIUS * 2 }, (_, offset) => (offset < RADIUS
+      ? slice.current - RADIUS + offset
+      : slice.current + offset - RADIUS + 1))
       .filter((index) => index >= 0 && index < slice.total && index !== slice.aiIndex)
       .map((index) => slice.previewUrlFor?.(index))
       .filter((url): url is string => Boolean(url))
