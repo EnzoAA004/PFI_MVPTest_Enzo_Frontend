@@ -553,9 +553,21 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    */
   const hasPlaneWorkspaces = sagittalWorkspace.measurements.length > 0 || axialWorkspace.measurements.length > 0;
   const persistedMeasurements = activePlano === "axial" ? axialWorkspace.measurements : sagittalWorkspace.measurements;
+  /*
+   * La cadena de respaldo también respeta el plano activo.
+   *
+   * `selectedDetail.measurements` viene fijado al sagital desde `fetchStudyDetail`
+   * (`runs[0].measurementsByPlane.sagittal`), así que en cuanto la corrida caía a esta
+   * rama el panel mostraba mediciones sagitales estuviera donde estuviera el médico:
+   * el arreglo de más arriba, que sí conmuta, quedaba sin efecto justo acá. Se prefiere
+   * el plano que se está mirando y solo después lo que traiga el detalle.
+   */
+  const runPlaneMeasurements = displayRun.measurementsByPlane?.[activePlano] ?? [];
   const sourceMeasurements = hasPlaneWorkspaces
     ? persistedMeasurements
-    : selectedDetail?.measurements?.length ? selectedDetail.measurements : pipelineMeasurements.length ? pipelineMeasurements : measurements;
+    : runPlaneMeasurements.length ? runPlaneMeasurements
+      : selectedDetail?.measurements?.length ? selectedDetail.measurements
+        : pipelineMeasurements.length ? pipelineMeasurements : measurements;
 
   /*
    * Las máscaras de una corrida persistida viven en el plano canónico, no en el

@@ -59,6 +59,34 @@ const measurementLabels: Record<string, string> = {
   "disc_group area": "Área del grupo de discos intervertebrales",
   "disc_group width": "Ancho del grupo de discos intervertebrales",
   "disc_group height": "Altura del grupo de discos intervertebrales",
+
+  /*
+   * Clases del modelo axial (dataset Al-Kafri).
+   *
+   * Las claves son valores de gris de la máscara original y el AI Module las deja así
+   * a propósito, porque el manifest del artefacto declara esa misma lista. La
+   * traducción vivía solo en `structureLabels`, que es lo que rotula las máscaras, así
+   * que toda medición axial caía al `readableFallback` y se leía "Raw 50 area".
+   *
+   * En un corte axial el eje horizontal de la imagen es el transverso y el vertical es
+   * el anteroposterior. Como `oriented_extent` informa como `width` el eje más
+   * horizontal y como `height` el otro, acá `width` es el diámetro transverso y
+   * `height` el anteroposterior — que es como se nombran en un informe, y no "ancho" y
+   * "alto", que en un axial no dicen nada.
+   */
+  "raw_50 area": "Área del disco intervertebral",
+  "raw_50 width": "Diámetro transverso del disco intervertebral",
+  "raw_50 height": "Diámetro anteroposterior del disco intervertebral",
+  "raw_100 area": "Área del elemento posterior",
+  "raw_100 width": "Diámetro transverso del elemento posterior",
+  "raw_100 height": "Diámetro anteroposterior del elemento posterior",
+  "raw_150 area": "Área del saco tecal",
+  "raw_150 width": "Diámetro transverso del saco tecal",
+  // El diámetro AP del saco tecal es la medición con la que se describe una estenosis.
+  "raw_150 height": "Diámetro anteroposterior del saco tecal",
+  "raw_200 area": "Área de la región anteroposterior",
+  "raw_200 width": "Diámetro transverso de la región anteroposterior",
+  "raw_200 height": "Diámetro anteroposterior de la región anteroposterior",
 };
 
 /**
@@ -85,6 +113,18 @@ const measurementShortLabels: Record<string, string> = {
   "disc_group area": "Área discal",
   "disc_group width": "Ancho discal",
   "disc_group height": "Altura discal",
+  "raw_50 area": "Área disco",
+  "raw_50 width": "Disco transv.",
+  "raw_50 height": "Disco AP",
+  "raw_100 area": "Área elem. post.",
+  "raw_100 width": "Elem. post. transv.",
+  "raw_100 height": "Elem. post. AP",
+  "raw_150 area": "Área saco tecal",
+  "raw_150 width": "Saco tecal transv.",
+  "raw_150 height": "Saco tecal AP",
+  "raw_200 area": "Área región AP",
+  "raw_200 width": "Región AP transv.",
+  "raw_200 height": "Región AP",
 };
 
 /** Segmentation class keys emitted by the sagittal model. */
