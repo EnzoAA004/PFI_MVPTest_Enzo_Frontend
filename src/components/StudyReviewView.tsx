@@ -483,8 +483,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const persistedSeries = useMemo(() => [seriesFromPlaneRun(displayRun, sagittalWorkspace), seriesFromPlaneRun(displayRun, axialWorkspace)].filter((item): item is StudySeries => Boolean(item)), [axialWorkspace, displayRun, sagittalWorkspace]);
   const hasPipelineVisualContract = demoMode && Array.isArray(run.series) && run.series.length > 0;
   const pipelineMeasurements = hasPipelineVisualContract && Array.isArray(run.normalizedMeasurements) ? run.normalizedMeasurements : [];
-  const persistedMeasurements = sagittalWorkspace.measurements.length ? sagittalWorkspace.measurements : axialWorkspace.measurements;
-  const sourceMeasurements = persistedMeasurements.length ? persistedMeasurements : selectedDetail?.measurements?.length ? selectedDetail.measurements : pipelineMeasurements.length ? pipelineMeasurements : measurements;
   const review = useMemo(() => displayRun.review ?? { status: run.reviewStatus ?? "pendiente" as ReviewStatus }, [displayRun.review, run.reviewStatus]);
   const seriesList = persistedSeries.length ? persistedSeries : demoMode ? hasPipelineVisualContract ? run.series ?? fallbackSeries : Array.isArray(studyReview?.series) && studyReview.series.length ? studyReview.series : fallbackSeries : [];
   const landmarks: StudyLandmark[] = demoMode ? hasPipelineVisualContract && Array.isArray(run.landmarks) ? run.landmarks : Array.isArray(studyReview?.landmarks) ? studyReview.landmarks : [] : Array.isArray(run.landmarks) ? run.landmarks : [];
@@ -501,6 +499,22 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   };
   const currentSeries = seriesList.find((item: any) => item.id === selectedSeriesId) ?? seriesList.find((item: any) => item.plane === tab.toLowerCase()) ?? seriesList[0];
   const activePlano = currentSeries?.plane === "axial" ? "axial" : "sagittal";
+
+  /*
+   * Las mediciones se leen del plano que se está mirando.
+   *
+   * Antes se prefería siempre el sagital, así que al pasar al axial el panel seguía
+   * mostrando alturas y anchos discales sagitales: números reales, del corte
+   * equivocado, sobre una imagen que no los sostiene. Cuando la corrida tiene planos
+   * persistidos manda el plano activo aunque quede vacío — "este plano no midió esto"
+   * es una respuesta correcta; mostrar lo del otro plano no lo es. La cadena de
+   * respaldo queda solo para las corridas viejas, que no separan por plano.
+   */
+  const hasPlaneWorkspaces = sagittalWorkspace.measurements.length > 0 || axialWorkspace.measurements.length > 0;
+  const persistedMeasurements = activePlano === "axial" ? axialWorkspace.measurements : sagittalWorkspace.measurements;
+  const sourceMeasurements = hasPlaneWorkspaces
+    ? persistedMeasurements
+    : selectedDetail?.measurements?.length ? selectedDetail.measurements : pipelineMeasurements.length ? pipelineMeasurements : measurements;
 
   /*
    * Las máscaras de una corrida persistida viven en el plano canónico, no en el
@@ -1415,6 +1429,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   disco no hay forma de saber cuál corresponde a cuál número.
                 */}
                 <MeasurementPanel
+                  emptyNote={hasPlaneWorkspaces && !persistedMeasurements.length
+                    ? `La serie ${activePlano === "axial" ? "axial" : "sagital"} de este estudio no aporta mediciones. Cambiá de plano o medí a mano.`
+                    : undefined}
                   onChangeValue={(row, value) => {
                     if (row.source === "reviewer") return;
                     const measurement = resultRows.find((item) => item.id === row.id);

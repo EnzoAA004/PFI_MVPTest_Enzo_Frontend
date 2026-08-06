@@ -40,6 +40,8 @@ type Props = {
   onChangeValue: (row: PanelRow, value: string) => void;
   onDelete: (id: string) => void;
   readonly: boolean;
+  /** Por qué no hay filas: no es lo mismo un nivel sin medir que un plano que no mide. */
+  emptyNote?: string;
 };
 
 function asNumber(value: number | string | null | undefined) {
@@ -50,9 +52,9 @@ function asNumber(value: number | string | null | undefined) {
 }
 
 export function MeasurementPanel({
-  rows, selectedId, onSelect, onHighlight, onChangeValue, onDelete, readonly,
+  rows, selectedId, onSelect, onHighlight, onChangeValue, onDelete, readonly, emptyNote,
 }: Props) {
-  if (!rows.length) return <p className="rr-note">Sin mediciones en este nivel.</p>;
+  if (!rows.length) return <p className="rr-note">{emptyNote ?? "Sin mediciones en este nivel."}</p>;
 
   return (
     <div className="rr-measures">
