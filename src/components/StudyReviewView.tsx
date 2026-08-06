@@ -14,6 +14,7 @@ import { parseDegenerativeFindings, viewerPointToImagePixels, type DegenerativeF
 import {
   levelForSlice, missingFieldReason, parseSliceLevels, sideFromSliceOrientation, type SubarticularRoiDraft,
 } from "../features/reading/subarticularRoi";
+import { orientationLabels } from "../features/reading/orientationMarkers";
 import { MeasurementPanel, type PanelRow } from "../features/reading/MeasurementPanel";
 import { buildStructuredReport, entryText, type ReportEntry } from "../features/reading/structuredReport";
 import { PlaneViewport } from "../features/reading/PlaneViewport";
@@ -741,6 +742,21 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     if (!finding || finding.slicePosition === null) return;
     const total = seriesList.find((item: any) => item.plane === "axial")?.sliceCount ?? 1;
     setSliceByPlane((state) => ({ ...state, axial: clampSlice(finding.slicePosition as number, total) }));
+  }
+
+  /**
+   * Letras de orientación del corte que se está mirando de un plano.
+   *
+   * Sale del mismo vector que usa la derivación de lado del ROI, para que la letra del
+   * borde y el lado del panel no puedan contradecirse. Si la serie no publica
+   * orientación, devuelve null y no se dibuja ninguna letra.
+   */
+  function orientationFor(plane: "sagittal" | "axial") {
+    const geometry = geometryForPlane(plane);
+    const pair = geometry?.sliceOrientations?.[currentSliceOf(plane)];
+    if (!pair) return null;
+    // DICOM 0020|0037: primero el vector de la fila, después el de la columna.
+    return orientationLabels(pair[0], pair[1]);
   }
 
   function cancelRoi() {
@@ -1727,6 +1743,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   readonly={Boolean(viewed) || !editMode || activePlano !== planeName}
                   addMode={landmarkAddMode && activePlano === planeName}
                   // Solo el axial: el clasificador subarticular corre sobre esa serie.
+                  orientation={orientationFor(planeName)}
+                  // El mismo espaciado que usa el texto de la esquina y que las
+                  // mediciones: la barra no puede contradecir al número que hay al lado.
+                  pixelSpacingMm={data.series.inPlaneSpacingMm?.length === 2
+                    ? [data.series.inPlaneSpacingMm[0], data.series.inPlaneSpacingMm[1]]
+                    : null}
                   subarticularMode={subarticularMode && planeName === "axial"}
                   onSubarticularPoint={(point) => {
                     const draft = buildRoiDraft(point);

@@ -962,6 +962,75 @@
     opacity: .85;
   }
 
+  /* Orientación del paciente ---------------------------------------------
+   *
+   * Las letras van sobre los bordes y no en las esquinas, que ya están ocupadas por
+   * caso, serie, modelo y escala. Es donde las pone cualquier PACS, y es donde el ojo
+   * las busca: pegadas al lado del que hablan.
+   *
+   * Se dibujan un poco más brillantes que el resto de las anotaciones a propósito. No
+   * son metadatos: son la referencia con la que el médico decide de qué lado está
+   * mirando, y equivocarse ahí cambia el informe.
+   */
+  .rr-orientation {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+  }
+
+  .rr-orientation span {
+    position: absolute;
+    font-family: var(--font-mono);
+    font-size: var(--fs-small, 13px);
+    font-weight: var(--fw-medium);
+    color: var(--viewport-annotation-strong);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .95);
+    opacity: .9;
+  }
+
+  .rr-orientation-l { left: var(--sp-2); top: 50%; transform: translateY(-50%); }
+  .rr-orientation-r { right: var(--sp-2); top: 50%; transform: translateY(-50%); }
+  .rr-orientation-t { top: var(--sp-2); left: 50%; transform: translateX(-50%); }
+  /* Sube por encima de las dos barras de control, igual que las esquinas de abajo. */
+  .rr-orientation-b {
+    bottom: calc(2 * var(--rr-strip-h) + var(--sp-2));
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* Barra de escala -------------------------------------------------------
+   *
+   * Va abajo a la izquierda, encima de las barras de control y por debajo de las
+   * anotaciones de esquina. El texto arriba de la regla y no al costado: al costado
+   * se lee como parte de la escala y corre el punto donde termina.
+   */
+  .rr-scalebar {
+    position: absolute;
+    bottom: calc(2 * var(--rr-strip-h) + 3.2em);
+    left: var(--sp-3);
+    z-index: 4;
+    pointer-events: none;
+    block-size: 0;
+    border-block-end: 2px solid var(--viewport-annotation-strong);
+    /* Los topes en las puntas: sin ellos no se ve donde empieza y donde termina. */
+    box-shadow:
+      0 -4px 0 -2px var(--viewport-annotation-strong),
+      inset 4px -4px 0 -2px var(--viewport-annotation-strong);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .9));
+  }
+
+  .rr-scalebar span {
+    position: absolute;
+    inset-block-end: 4px;
+    inset-inline-start: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    color: var(--viewport-annotation-strong);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
+    white-space: nowrap;
+  }
+
   /* Slice bar ------------------------------------------------------------- */
   .rr-slicebar {
     display: flex;
