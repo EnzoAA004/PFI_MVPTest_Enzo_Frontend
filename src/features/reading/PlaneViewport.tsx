@@ -41,6 +41,9 @@ export type PlaneViewportProps = {
   onSelectLandmark: (id: string) => void;
   readonly: boolean;
   addMode: boolean;
+  /** Marcado del receso subarticular: solo lo activa el viewport axial. */
+  subarticularMode?: boolean;
+  onSubarticularPoint?: (point: { x: number; y: number }, frame: { width: number; height: number }) => void;
   onMoveLandmark: (landmarkId: string, point: { x: number; y: number }) => void;
   onAddLandmark: (point: { x: number; y: number }) => void;
   onLandmarkAddComplete: () => void;
@@ -92,6 +95,7 @@ export type PlaneViewportProps = {
 export function PlaneViewport({
   plane, caseLabel, seriesName, model, modelLabel, inferenceLabel, spacingLabel,
   slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
+  subarticularMode, onSubarticularPoint,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
   measureTool, measureDraft, onMeasurePoint, onMeasureFreehand, annotations, aiMeasurements, aiMeasurableCount,
   derivedMeasurements, derivedMeasurableCount, referenceLine, referenceLineReason, onMoveMeasurePoint, annotatedIndices, onMoveMaskPoint,
@@ -184,6 +188,8 @@ export function PlaneViewport({
           onSelectLandmark={onSelectLandmark}
           readonly={readonly}
           addMode={addMode}
+          subarticularMode={subarticularMode}
+          onSubarticularPoint={onSubarticularPoint}
           onMoveLandmark={onMoveLandmark}
           onAddLandmark={onAddLandmark}
           onLandmarkAddComplete={onLandmarkAddComplete}

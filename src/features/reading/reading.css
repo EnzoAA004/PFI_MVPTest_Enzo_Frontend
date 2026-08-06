@@ -1521,4 +1521,142 @@
     color: var(--text-success-strong);
     font-size: var(--fs-micro);
   }
+
+  /* ---- Hallazgos degenerativos candidatos ---- */
+  .rr-findings { display: flex; flex-direction: column; gap: 8px; }
+
+  /* El aviso de alcance y el de coordenada externa no son decorativos: son la
+     condicion bajo la cual se lee la clasificacion. Van arriba, no al pie. */
+  .rr-findings-notice,
+  .rr-findings-warning,
+  .rr-findings-empty,
+  .rr-findings-foot {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  .rr-findings-warning {
+    border-left: 2px solid var(--warning, #b8860b);
+    padding-left: 8px;
+  }
+
+  .rr-finding {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .rr-finding.is-selected { border-color: var(--primary); }
+  .rr-finding > header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .rr-finding-anatomy { font-weight: 800; font-size: 13px; }
+  .rr-finding-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  /* El color codifica severidad y no llama la atencion sobre el caso normal: la
+     escala tiene que dejar que "moderada" y "severa" salten sin que la pantalla
+     grite en un estudio sin hallazgos. */
+  .rr-finding-label.is-normal_mild { background: #e8f0ea; color: #2c5f3f; }
+  .rr-finding-label.is-moderate { background: #fbf0dc; color: #8a5a08; }
+  .rr-finding-label.is-severe { background: #fae7e7; color: #8f2d2d; }
+
+  .rr-finding-probs { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+  .rr-finding-probs > div {
+    display: grid;
+    grid-template-columns: 5.5rem 1fr;
+    align-items: center;
+    gap: 8px;
+  }
+  .rr-finding-probs dt { font-size: 11px; color: var(--muted); }
+  .rr-finding-probs dd {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .rr-prob-bar {
+    block-size: 6px;
+    border-radius: 3px;
+    background: var(--primary);
+    min-inline-size: 1px;
+    flex-shrink: 0;
+  }
+  .rr-prob-value {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+
+  .rr-finding > footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .rr-finding-review.is-pending { font-weight: 800; color: var(--warning, #b8860b); }
+  .rr-finding-scope { font-style: italic; }
+
+  /* ---- Marcado del receso subarticular ---- */
+  .rr-roi {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+  }
+  .rr-roi-toggle { width: 100%; }
+  .rr-roi-toggle.is-active { font-weight: 800; }
+  .rr-roi-hint,
+  .rr-roi-missing,
+  .rr-roi-error {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+  /* Lo que falta y lo que fallo no se leen igual: uno guia, el otro frena. */
+  .rr-roi-missing { border-left: 2px solid var(--warning, #b8860b); padding-left: 8px; }
+  .rr-roi-error { border-left: 2px solid var(--danger, #b3261e); padding-left: 8px; color: var(--danger, #b3261e); }
+
+  .rr-roi-draft { display: flex; flex-direction: column; gap: 8px; }
+  .rr-roi-fields { display: flex; gap: 16px; margin: 0; font-size: 11px; color: var(--muted); }
+  .rr-roi-fields dt { font-weight: 700; }
+  .rr-roi-fields dd { margin: 0; }
+
+  .rr-roi-choice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 12px;
+  }
+  .rr-roi-choice legend,
+  .rr-roi-choice > span { font-size: 11px; color: var(--muted); }
+  .rr-roi-choice label { display: inline-flex; align-items: center; gap: 4px; }
+
+  .rr-roi-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .rr-roi-submit { font-weight: 800; }
+
+  /* El cursor dice que el proximo clic marca, y no panea ni ventanea. */
+  .subarticular-add-mode { cursor: crosshair; }
+
 }

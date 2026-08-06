@@ -6,9 +6,14 @@ import { parseThreeD } from "../adapters/multiplanarRunAdapter";
 import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
 import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
 import { API_BASE_URL } from "../api";
-import { BackendApiError, fetchThreeDProxyAsset } from "../multiplanarApi";
+import { BackendApiError, fetchThreeDProxyAsset, requestSubarticularClassification } from "../multiplanarApi";
 import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type SpineLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
+import { DegenerativeFindingsPanel } from "../features/reading/DegenerativeFindingsPanel";
+import { parseDegenerativeFindings, viewerPointToImagePixels, type DegenerativeFinding, type FindingSide } from "../features/reading/degenerativeFindings";
+import {
+  levelForSlice, missingFieldReason, parseSliceLevels, sideFromSliceOrientation, type SubarticularRoiDraft,
+} from "../features/reading/subarticularRoi";
 import { MeasurementPanel, type PanelRow } from "../features/reading/MeasurementPanel";
 import { buildStructuredReport, entryText, type ReportEntry } from "../features/reading/structuredReport";
 import { PlaneViewport } from "../features/reading/PlaneViewport";
@@ -480,6 +485,52 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     () => (demoMode ? undefined : parseThreeD(run.canonicalRun?.threeD ?? run.metricsSnapshot?.threeD)),
     [demoMode, run.canonicalRun, run.metricsSnapshot],
   );
+  /*
+   * Hallazgos degenerativos candidatos, reabiertos desde el snapshot durable del
+   * backend igual que threeD: nunca desde el AI Module en vivo. El backend persiste
+   * `degenerativeFindings` con la forma exacta que produce el modulo, asi que alcanza
+   * con el mismo parser del contrato.
+   *
+   * En modo demo no se muestran. Una clasificacion de estenosis inventada, al lado de
+   * una imagen y con su barra de probabilidad, no se distingue de una real.
+   */
+  const degenerativeFindings = useMemo(
+    () => (demoMode ? [] : parseDegenerativeFindings(run.canonicalRun?.degenerativeFindings ?? run.metricsSnapshot?.degenerativeFindings)),
+    [demoMode, run.canonicalRun, run.metricsSnapshot],
+  );
+
+  const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
+
+  /*
+   * Marcado del receso subarticular.
+   *
+   * El modelo no localiza la anatomia: necesita que alguien le diga sobre que coordenada
+   * mirar, y por eso el hallazgo que vuelve es de alcance de investigacion. El lado y el
+   * nivel se derivan del DICOM y se le muestran al profesional para que los confirme o
+   * los corrija antes de mandar nada, que es como lo resuelven los PACS.
+   *
+   * Los resultados viven solo en la pantalla: la prediccion es puntual y no se persiste.
+   */
+  const [subarticularMode, setSubarticularMode] = useState(false);
+  const [roiDraft, setRoiDraft] = useState<SubarticularRoiDraft | null>(null);
+  const [roiPending, setRoiPending] = useState(false);
+  const [roiError, setRoiError] = useState<string | undefined>(undefined);
+  const [roiFindings, setRoiFindings] = useState<DegenerativeFinding[]>([]);
+
+  /* Los pedidos de esta sesión encabezan la lista: es lo que el revisor acaba de pedir. */
+  const visibleDegenerativeFindings = useMemo(
+    () => [...roiFindings, ...degenerativeFindings],
+    [roiFindings, degenerativeFindings],
+  );
+
+  /*
+   * En modo demo no se ofrece pedir una clasificacion: no habria contra que pedirla, y
+   * un resultado inventado al lado de una imagen no se distingue de uno real.
+   */
+  const degenerativeRequestBlockedReason = demoMode && !degenerativeFindings.length
+    ? "En modo demostración no se piden clasificaciones: el resultado sería inventado y no se distinguiría de uno real."
+    : undefined;
+
   const [threeDAssetState, setThreeDAssetState] = useState<ThreeDProxyAssetFetchState>({ status: "idle" });
   const threeDMeshAssetUrl = persistedThreeD?.enabled ? persistedThreeD.assets.find((asset) => asset.assetName.endsWith(".json"))?.url : undefined;
 
@@ -640,6 +691,122 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   function geometryForPlane(plane: "sagittal" | "axial") {
     const canonicalPlane = asRecord(asRecord(displayRun.canonicalRun?.planes)?.[plane]);
     return parseVolumeGeometry(asRecord(canonicalPlane?.quality)?.volumeGeometry);
+  }
+
+  /**
+   * Nivel discal de cada corte axial, tal como lo publica la corrida.
+   *
+   * Es por corte y no uno solo para la serie: una serie axial lumbar son bloques
+   * angulados, uno por disco, asi que el corte de al lado puede mirar otro nivel.
+   */
+  function axialSliceLevels() {
+    const canonicalPlane = asRecord(asRecord(displayRun.canonicalRun?.planes)?.axial);
+    return parseSliceLevels(asRecord(canonicalPlane?.quality)?.sliceLevels);
+  }
+
+  /**
+   * El punto marcado, con lado y nivel derivados del DICOM.
+   *
+   * El lado sale de la orientacion del corte y no del signo de x en pantalla: en una
+   * axial en orientacion neutra la izquierda de la imagen es la derecha del paciente.
+   * Ver sideFromSliceOrientation.
+   */
+  function buildRoiDraft(point: { x: number; y: number }): SubarticularRoiDraft | null {
+    const pixels = viewerPointToImagePixels(point, slicePixelsForPlane("axial"));
+    if (!pixels) return null;
+    const index = currentSliceOf("axial");
+    const geometry = geometryForPlane("axial");
+    // DICOM 0020|0037 da primero el vector de la fila, el horizontal en la imagen.
+    const rowDirection = geometry?.sliceOrientations?.[index]?.[0] ?? null;
+    const width = slicePixelsForPlane("axial")?.width ?? 0;
+    return {
+      x: pixels.x,
+      y: pixels.y,
+      instanceNumber: index,
+      side: sideFromSliceOrientation(pixels, width, rowDirection),
+      level: levelForSlice(axialSliceLevels(), index),
+    };
+  }
+
+  /**
+   * Seleccionar un hallazgo lleva el visor a su corte.
+   *
+   * Antes la seleccion no hacia nada: se resaltaba la tarjeta y el corte seguia donde
+   * estaba, asi que el revisor tenia que buscar a mano el corte del que hablaba la
+   * clasificacion. Si el hallazgo no declara corte, solo se marca como seleccionado.
+   */
+  function selectDegenerativeFinding(findingId: string) {
+    setSelectedFindingId(findingId);
+    const finding = visibleDegenerativeFindings.find((item) => item.findingId === findingId);
+    if (!finding || finding.slicePosition === null) return;
+    const total = seriesList.find((item: any) => item.plane === "axial")?.sliceCount ?? 1;
+    setSliceByPlane((state) => ({ ...state, axial: clampSlice(finding.slicePosition as number, total) }));
+  }
+
+  function cancelRoi() {
+    setSubarticularMode(false);
+    setRoiDraft(null);
+    setRoiError(undefined);
+  }
+
+  /**
+   * El `inputId` de la serie axial sobre la que se marcó.
+   *
+   * Sale del catálogo del estudio y no de `seriesList`: esa lista se arma desde la
+   * corrida y describe lo que se analizó, no las series registradas, así que no lleva
+   * `inputId`. Si el médico está mirando otra serie axial, es esa la que vale.
+   */
+  function axialInputId(): string | null {
+    const viewed = viewedSeriesByPlane.axial;
+    if (viewed) return String(viewed);
+    const analyzed = studySeries.find((item) => item.plane === "axial" && item.analyzable);
+    return analyzed?.inputId ?? studySeries.find((item) => item.plane === "axial")?.inputId ?? null;
+  }
+
+  async function submitRoi() {
+    if (!roiDraft) return;
+    const inputId = axialInputId();
+    // Salir en silencio deja el boton apretado y nada pasando, que se lee como que la
+    // pantalla esta rota. Si falta algo, se dice cual.
+    if (!roiDraft.side || !roiDraft.level) {
+      setRoiError(missingFieldReason(roiDraft) ?? "Faltan datos del pedido.");
+      return;
+    }
+    if (!inputId) {
+      setRoiError("No se pudo identificar la serie axial registrada de este estudio.");
+      return;
+    }
+    setRoiPending(true);
+    setRoiError(undefined);
+    try {
+      const raw = await requestSubarticularClassification({
+        inputId: String(inputId),
+        instanceNumber: roiDraft.instanceNumber,
+        // Pixeles del DICOM, no la base del visor: la conversion ya se hizo al marcar.
+        x: roiDraft.x,
+        y: roiDraft.y,
+        side: roiDraft.side,
+        level: roiDraft.level,
+      });
+      // Parseo estricto: un hallazgo que no cumple el contrato se descarta en vez de
+      // mostrarse a medias, igual que los que vienen adentro de una corrida.
+      const parsed = parseDegenerativeFindings(asRecord(raw)?.degenerativeFindings);
+      if (!parsed.length) {
+        setRoiError("La respuesta no trae un hallazgo que cumpla el contrato.");
+        return;
+      }
+      setRoiFindings((current) => [...parsed, ...current]);
+      setSubarticularMode(false);
+      setRoiDraft(null);
+    } catch (error) {
+      // El mensaje ya viene saneado por toSafeFrontendError/BackendApiError: nunca es el
+      // crudo del backend.
+      setRoiError(error instanceof Error
+        ? `No se pudo pedir la clasificación: ${error.message}`
+        : "No se pudo pedir la clasificación.");
+    } finally {
+      setRoiPending(false);
+    }
   }
 
   /**
@@ -1559,6 +1726,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   // se guardan contra la corrida, y esta serie no tiene una.
                   readonly={Boolean(viewed) || !editMode || activePlano !== planeName}
                   addMode={landmarkAddMode && activePlano === planeName}
+                  // Solo el axial: el clasificador subarticular corre sobre esa serie.
+                  subarticularMode={subarticularMode && planeName === "axial"}
+                  onSubarticularPoint={(point) => {
+                    const draft = buildRoiDraft(point);
+                    if (draft) { setRoiDraft(draft); setRoiError(undefined); }
+                    else setRoiError("No se conocen las dimensiones del corte, así que el punto no se puede ubicar en píxeles del DICOM.");
+                  }}
                   onMoveLandmark={(landmarkId, point) => {
                     const landmark = displayLandmarks.find((item) => item.id === landmarkId);
                     if (!landmark) return;
@@ -1685,6 +1859,34 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   readonly={reviewLocked}
                   rows={panelRows}
                   selectedId={selectedMeasurementId}
+                />
+
+                {/*
+                  Los hallazgos degenerativos van despues de las mediciones y no antes:
+                  una clasificacion candidata no puede encabezar la lectura por encima
+                  de las magnitudes que el revisor puede verificar sobre la imagen.
+                */}
+                <DegenerativeFindingsPanel
+                  findings={visibleDegenerativeFindings}
+                  onSelectFinding={selectDegenerativeFinding}
+                  requestBlockedReason={degenerativeRequestBlockedReason}
+                  roi={demoMode ? undefined : {
+                    active: subarticularMode,
+                    available: axialAvailable && visiblePlanes.includes("axial"),
+                    onToggle: () => {
+                      if (subarticularMode) cancelRoi();
+                      else { setSubarticularMode(true); setRoiDraft(null); setRoiError(undefined); }
+                    },
+                    draft: roiDraft,
+                    missingReason: roiDraft ? missingFieldReason(roiDraft) : "Todavía no se marcó ningún punto.",
+                    onChangeSide: (side: FindingSide) => setRoiDraft((draft) => (draft ? { ...draft, side } : draft)),
+                    onChangeLevel: (level: string) => setRoiDraft((draft) => (draft ? { ...draft, level } : draft)),
+                    onCancel: cancelRoi,
+                    onSubmit: () => { void submitRoi(); },
+                    pending: roiPending,
+                    error: roiError,
+                  }}
+                  selectedFindingId={selectedFindingId}
                 />
 
                 <p className="rr-section-title">Anotaciones</p>
@@ -1902,7 +2104,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         </aside>
       </div>
 
-      <footer className="rr-toolbar" role="toolbar" aria-label="Herramientas de lectura">
+      {/* div y no footer: role="toolbar" ya describe la barra, y un contentinfo con rol
+          de toolbar encima le da al lector de pantalla dos semanticas en pugna. */}
+      <div className="rr-toolbar" role="toolbar" aria-label="Herramientas de lectura">
         <button
           className={`rr-tool${editMode ? " is-active" : ""}`}
           disabled={!activeCoordinateSpace}
@@ -1951,7 +2155,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           <span className="rr-kbd">?</span>
           <span>Revisión humana requerida</span>
         </span>
-      </footer>
+      </div>
 
       {metadataDialogOpen && (
         <div className="rr-dialog-backdrop" role="presentation">

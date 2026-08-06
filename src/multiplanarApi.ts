@@ -147,6 +147,35 @@ export async function runMultiplanarAnalysis(payload: MultiplanarRunPayload): Pr
   return parseMultiplanarRunResponse(raw);
 }
 
+/**
+ * Clasificación subarticular sobre un punto marcado por el profesional.
+ *
+ * El modelo no localiza el receso por su cuenta, así que la coordenada la pone el médico
+ * y el hallazgo que vuelve es de alcance de investigación. Va por el Backend, nunca
+ * directo a FastAPI: la arquitectura es Frontend -> Backend -> AI Module.
+ *
+ * La coordenada viaja en **píxeles del DICOM**, no en la base del visor. La conversión la
+ * hace `viewerPointToImagePixels`; mandar la coordenada sin convertir devuelve un
+ * resultado de otra parte de la anatomía, con la misma pinta de ser correcto.
+ *
+ * No se parsea acá: el llamador lo pasa por `parseDegenerativeFindings`, que es el
+ * parseo estricto del contrato y descarta un hallazgo mal formado en vez de mostrarlo a
+ * medias.
+ */
+export async function requestSubarticularClassification(payload: {
+  inputId: string;
+  instanceNumber: number;
+  x: number;
+  y: number;
+  side: "left" | "right";
+  level: string;
+}): Promise<unknown> {
+  return multiplanarRequest<unknown>("/api/ai/degenerative-findings/subarticular", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 /*
  * getRunReview/submitRunReview vivían acá con estados accepted/observed/rejected/
  * edited, en paralelo al pendiente/observado/aceptado/descartado de updateReview.

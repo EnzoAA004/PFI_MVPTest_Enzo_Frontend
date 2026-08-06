@@ -73,6 +73,17 @@ type Props = {
   onLandmarkAddComplete?: () => void;
   readonly?: boolean;
   addMode?: boolean;
+  /**
+   * Modo de marcado del receso subarticular: un clic sobre el corte axial.
+   *
+   * Va aparte de `measureTool` y no como una `MeasurementKind` más porque no es una
+   * medición: no produce un valor, no tiene unidad, no se recalcula al mover un tirador
+   * y no se persiste con las mediciones del revisor. Lo único que comparte es que se
+   * marca con un clic.
+   */
+  subarticularMode?: boolean;
+  /** El punto marcado, con el tamaño del corte para poder pasarlo a píxeles del DICOM. */
+  onSubarticularPoint?: (point: Point, frame: Size) => void;
   overlayEnabled?: boolean;
   overlayOpacity?: number;
   onOverlayAvailableChange?: (available: boolean) => void;
@@ -300,6 +311,8 @@ export function MriSliceViewer({
   onLandmarkAddComplete,
   readonly = true,
   addMode = false,
+  subarticularMode = false,
+  onSubarticularPoint,
   overlayEnabled = true,
   overlayOpacity = initialOverlayOpacity,
   onOverlayAvailableChange,
@@ -671,6 +684,12 @@ export function MriSliceViewer({
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (!imageLoaded || event.button !== 0) return;
+    // Antes que las mediciones: mientras se marca el receso, el clic no mide ni panea.
+    if (subarticularMode) {
+      const point = pointFromEvent(event);
+      if (point) onSubarticularPoint?.(point, imageSize);
+      return;
+    }
     if (measureTool === "roi") {
       const point = pointFromEvent(event);
       if (!point) return;
@@ -986,7 +1005,7 @@ export function MriSliceViewer({
       <p className="viewer-limit-note">W/L es un filtro aproximado de brillo/contraste sobre un PNG de 8 bits. El ventaneo DICOM y la navegacion multicorte requieren AI-009.</p>
 
       <div
-        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"} ${addMode ? "landmark-add-mode" : ""}`}
+        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"} ${addMode ? "landmark-add-mode" : ""} ${subarticularMode ? "subarticular-add-mode" : ""}`}
         onPointerCancel={handlePointerUp}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

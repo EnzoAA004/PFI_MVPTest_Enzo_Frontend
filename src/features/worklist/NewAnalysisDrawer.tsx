@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { BackendApiError, runMultiplanarAnalysis, uploadAiInput, uploadStudyArchive } from "../../multiplanarApi";
 import type { Plane } from "../../appTypes";
 import type { InputResponse, StudyIngestionResponse } from "../../contracts/inputApiTypes";
@@ -114,6 +114,20 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const [byPlaneOpen, setByPlaneOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState("");
+
+  /*
+   * Escape cierra el drawer. Es el equivalente por teclado del clic en el fondo, y lo
+   * que cualquiera espera de un modal. No cierra durante una corrida: perder de vista
+   * un análisis en curso por apoyar una tecla es peor que tener que apuntar al botón.
+   */
+  useEffect(() => {
+    if (running) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose, running]);
 
   const normalizedCaseId = caseId.trim();
   const caseIdIssue = caseIdError(normalizedCaseId);
@@ -242,7 +256,15 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   }
 
   return (
+    // El fondo cierra el drawer al hacerle clic. Es una comodidad de mouse: el
+    // equivalente por teclado es Escape, que se maneja arriba, mas el boton de cerrar.
     <div className="wl-drawer-backdrop" role="presentation" onClick={onClose}>
+      {/*
+        El onClick del panel no hace nada propio: solo frena la propagacion para que un
+        clic adentro no llegue al fondo y cierre el drawer. Es una preocupacion de mouse
+        y no tiene equivalente de teclado, porque por teclado nunca se dispara el fondo.
+      */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
       <aside
         aria-label="Nuevo análisis"
         className="wl-drawer"
