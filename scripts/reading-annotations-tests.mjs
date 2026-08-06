@@ -21,9 +21,13 @@ exports.isAnnotationVisible = isAnnotationVisible;
 exports.annotatedSlices = annotatedSlices;
 exports.measureDistance = measureDistance;
 exports.formatMeasurement = formatMeasurement;
-exports.displayAnnotationScope = displayAnnotationScope;`, sandbox);
+exports.displayAnnotationScope = displayAnnotationScope;
+exports.landmarkToAnnotation = landmarkToAnnotation;
+exports.annotationToLandmark = annotationToLandmark;
+exports.withLandmarkAnnotations = withLandmarkAnnotations;`, sandbox);
 
-const { isAnnotationVisible, annotatedSlices, measureDistance, formatMeasurement, displayAnnotationScope } = sandbox.exports;
+const { isAnnotationVisible, annotatedSlices, measureDistance, formatMeasurement, displayAnnotationScope,
+  landmarkToAnnotation, annotationToLandmark, withLandmarkAnnotations } = sandbox.exports;
 
 let count = 0;
 function test(name, fn) {
@@ -118,6 +122,54 @@ test("M el alcance se rotula con su contexto", () => {
   assert.equal(displayAnnotationScope({ ...base, scope: "study" }), "Todo el estudio");
   assert.equal(displayAnnotationScope({ ...base, scope: "level", level: "L3-L4" }), "L3-L4");
   assert.equal(displayAnnotationScope({ ...base, scope: "slice", sliceIndex: 6 }), "Corte 7");
+});
+
+/*
+ * Landmarks persistidos como marcas.
+ *
+ * Se editaban y se perdían al recargar. Lo que se protege es la ida y vuelta: lo que
+ * se guarda tiene que volver en el mismo corte y en la misma posición, porque un
+ * landmark que reaparece corrido señala otra estructura.
+ */
+const landmark = { id: "lm-1", label: "Borde posterior L4", seriesId: "s-sag", sliceIndex: 7, x: 120.5, y: 88.25 };
+
+test("un landmark ida y vuelta conserva corte y posición", () => {
+  const marca = landmarkToAnnotation(landmark, "sagittal", "revisor");
+  assert.equal(marca.kind, "marker");
+  assert.equal(marca.scope, "slice");
+  assert.equal(marca.plane, "sagittal");
+  const vuelto = annotationToLandmark(marca);
+  assert.equal(vuelto.id, landmark.id);
+  assert.equal(vuelto.label, landmark.label);
+  assert.equal(vuelto.sliceIndex, 7);
+  assert.equal(vuelto.x, 120.5);
+  assert.equal(vuelto.y, 88.25);
+});
+
+test("una anotación que no es marca no se lee como landmark", () => {
+  assert.equal(annotationToLandmark({ id: "a", kind: "measurement", scope: "slice", points: [{ x: 1, y: 2 }] }), null);
+});
+
+test("una marca sin corte o sin punto no inventa una posición", () => {
+  // Devolver (0,0) pondría una marca en la esquina de la imagen, que se lee como que
+  // el revisor señaló algo ahí.
+  assert.equal(annotationToLandmark({ id: "a", kind: "marker", scope: "slice", seriesId: "s", points: [] }), null);
+  assert.equal(annotationToLandmark({ id: "a", kind: "marker", scope: "slice", points: [{ x: 1, y: 2 }] }), null);
+});
+
+test("mover un landmark varias veces deja una sola marca", () => {
+  const primera = landmarkToAnnotation(landmark, "sagittal", "revisor");
+  const segunda = landmarkToAnnotation({ ...landmark, x: 200 }, "sagittal", "revisor");
+  const lista = withLandmarkAnnotations([primera], [segunda]);
+  assert.equal(lista.length, 1, "el mismo identificador no puede acumular copias");
+  assert.equal(lista[0].points[0].x, 200, "queda la última posición");
+});
+
+test("guardar landmarks no borra las demás anotaciones", () => {
+  const medicion = { id: "med-1", kind: "measurement", scope: "slice", points: [{ x: 0, y: 0 }] };
+  const lista = withLandmarkAnnotations([medicion], [landmarkToAnnotation(landmark, "sagittal", "revisor")]);
+  assert.equal(lista.length, 2);
+  assert.ok(lista.some((item) => item.id === "med-1"));
 });
 
 console.log(`Reading annotations tests passed: ${count}`);

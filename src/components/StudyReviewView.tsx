@@ -14,7 +14,7 @@ import { PlaneViewport } from "../features/reading/PlaneViewport";
 import { instanceColor, instanceLabel, parseSegmentation, type Segmentation } from "../features/reading/segmentation";
 import { parseSlicePixelsMeta, type SlicePixelsMeta } from "../features/reading/pixels";
 import { coordinateEvidence, parseVolumeGeometry, referenceLineOn, slicePlaneAt } from "../features/reading/referenceLine";
-import { annotatedSlices, displayAnnotationScope, formatMeasurement, isAnnotationVisible, measureDistance, type Annotation, type AnnotationScope } from "../features/reading/annotations";
+import { annotatedSlices, annotationToLandmark, displayAnnotationScope, formatMeasurement, isAnnotationVisible, landmarkToAnnotation, measureDistance, withLandmarkAnnotations, type Annotation, type AnnotationScope } from "../features/reading/annotations";
 import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { emptyStudyMetadataDraft, normalizeStudyMetadataInput, priorityToBackend, subjectRefErrorMessage, validateSubjectRef, type StudyMetadataDraft } from "../studyMetadata";
@@ -490,9 +490,15 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const displayLandmarks = useMemo(() => {
     const byId = new Map<string, StudyLandmark>();
     landmarks.forEach((landmark) => byId.set(landmark.id, landmark));
+    // Los guardados vienen como marcas en las anotaciones, y son editables: son del
+    // revisor, no de la corrida.
+    annotations.forEach((annotation) => {
+      const landmark = annotationToLandmark(annotation);
+      if (landmark) byId.set(landmark.id, { ...landmark, editable: true });
+    });
     Object.values(landmarkDrafts).forEach((landmark) => byId.set(landmark.id, landmark));
     return Array.from(byId.values());
-  }, [landmarkDrafts, landmarks]);
+  }, [annotations, landmarkDrafts, landmarks]);
   const aiOutput = hasPipelineVisualContract && run.aiOutput ? run.aiOutput : studyReview?.aiOutput ?? {
     status: run.measurementsStatus ?? "ai_output_pending",
     label: run.measurementsStatus === "pending_real_inference" ? "Salida IA pendiente" : "Salida técnica",
@@ -997,8 +1003,18 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     const runId = displayRun.runId;
     if (runId) {
       try {
-        const saved = await saveRunAnnotations(runId, annotations);
+        /*
+         * Los landmarks del revisor viajan con las anotaciones, como marcas. Antes se
+         * editaban y se perdían al recargar: vivían solo en el estado de la sesión.
+         */
+        const markers = Object.values(landmarkDrafts).map((landmark) => landmarkToAnnotation(
+          landmark,
+          seriesList.find((item: any) => item.id === landmark.seriesId)?.plane === "axial" ? "axial" : "sagittal",
+          "revisor",
+        ));
+        const saved = await saveRunAnnotations(runId, withLandmarkAnnotations(annotations, markers));
         setAnnotations(saved as Annotation[]);
+        setLandmarkDrafts({});
         setAnnotationsError("");
       } catch (error) {
         // La revisión sí se guardó: se dice qué quedó sin persistir en vez de

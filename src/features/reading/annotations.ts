@@ -125,3 +125,73 @@ export function displayAnnotationScope(annotation: Annotation) {
   if (annotation.scope === "level") return annotation.level ?? "Nivel";
   return `Corte ${(annotation.sliceIndex ?? 0) + 1}`;
 }
+
+/**
+ * Landmarks del revisor, guardados como anotaciones de tipo `marker`.
+ *
+ * Los landmarks se editaban y se perdían al recargar: vivían solo en el estado de la
+ * sesión. La tabla de anotaciones ya acepta `kind: "marker"` con plano, corte y
+ * puntos, que es exactamente un landmark, así que persisten por ahí sin inventar un
+ * almacenamiento nuevo ni tocar el backend.
+ *
+ * El identificador se conserva tal cual para que un landmark corregido dos veces
+ * sobrescriba el suyo en vez de acumular copias.
+ */
+export type MarkerLandmark = {
+  id: string;
+  label: string;
+  seriesId: string;
+  sliceIndex: number;
+  x: number;
+  y: number;
+};
+
+export function landmarkToAnnotation(
+  landmark: MarkerLandmark,
+  plane: "sagittal" | "axial",
+  author: string,
+): Annotation {
+  return {
+    id: landmark.id,
+    scope: "slice",
+    kind: "marker",
+    plane,
+    seriesId: landmark.seriesId,
+    sliceIndex: landmark.sliceIndex,
+    points: [{ x: landmark.x, y: landmark.y }],
+    text: landmark.label,
+    author,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/** Null cuando la anotación no es un landmark utilizable, en vez de un punto en (0,0). */
+export function annotationToLandmark(annotation: Annotation): MarkerLandmark | null {
+  if (annotation.kind !== "marker") return null;
+  const point = annotation.points?.[0];
+  if (!point || typeof point.x !== "number" || typeof point.y !== "number") return null;
+  if (typeof annotation.sliceIndex !== "number" || !annotation.seriesId) return null;
+  return {
+    id: annotation.id,
+    label: annotation.text || "Marca del revisor",
+    seriesId: annotation.seriesId,
+    sliceIndex: annotation.sliceIndex,
+    x: point.x,
+    y: point.y,
+  };
+}
+
+/**
+ * Une los borradores de landmark a la lista que se va a persistir.
+ *
+ * Reemplaza por identificador en vez de agregar: mover un landmark tres veces antes de
+ * guardar tiene que dejar una marca en la última posición, no tres marcas.
+ */
+export function withLandmarkAnnotations(
+  annotations: Annotation[],
+  markers: Annotation[],
+): Annotation[] {
+  const byId = new Map(annotations.map((item) => [item.id, item]));
+  markers.forEach((marker) => byId.set(marker.id, marker));
+  return Array.from(byId.values());
+}
