@@ -367,6 +367,8 @@ export function MriSliceViewer({
   const [windowLevel, setWindowLevel] = useState<{ center: number; width: number } | null>(null);
   /* Preset de ventana real. Convive con el del PNG, que es un filtro de brillo. */
   const [rawPresetId, setRawPresetId] = useState("full");
+  /* Clases apagadas desde la leyenda. Se declara acá porque el pintado la necesita. */
+  const [hiddenClasses, setHiddenClasses] = useState<string[]>([]);
   useEffect(() => {
     setWindowLevel(slicePixels ? defaultWindow(slicePixels) : null);
   }, [slicePixels]);
@@ -439,9 +441,26 @@ export function MriSliceViewer({
     if (!context) return;
     canvas.width = segmentation.width;
     canvas.height = segmentation.height;
-    context.putImageData(paintSegmentation(segmentation, new Set(hiddenInstances ?? [])), 0, 0);
+    /*
+     * Apagar una clase apaga sus instancias.
+     *
+     * `hiddenClasses` solo filtraba los contornos poligonales de `model.masks`, que no
+     * son lo que se pinta: la segmentación sale del mapa de instancias. Así que
+     * destildar "Grupo discal" no sacaba un solo disco de la pantalla y la leyenda de
+     * clases parecía decorativa. Cada instancia declara su `classKey`, que es lo que
+     * une las dos vistas.
+     */
+    const hidden = new Set(hiddenInstances ?? []);
+    segmentation.instances
+      // Se compara por el rótulo mostrado: la leyenda de clases guarda el `labelKey`
+      // de la máscara y la instancia trae su `classKey`, y en algunas corridas son dos
+      // nombres técnicos distintos para la misma estructura.
+      .filter((instance) => hiddenClasses.some((name) => name === instance.classKey
+        || displayStructureLabel(name) === displayStructureLabel(instance.classKey)))
+      .forEach((instance) => hidden.add(instance.index));
+    context.putImageData(paintSegmentation(segmentation, hidden), 0, 0);
     // `hiddenInstances` se reconstruye en cada render; `hiddenKey` es su contenido.
-  }, [segmentation, hiddenKey]);
+  }, [segmentation, hiddenKey, hiddenClasses]);
 
   const lastLoadedUrl = useRef<string | undefined>(undefined);
   if (inputAsset.state === "loaded" && inputAsset.url) lastLoadedUrl.current = inputAsset.url;
@@ -510,7 +529,6 @@ export function MriSliceViewer({
     ...(myMeasuresVisible ? annotations : []),
   ];
   const groups = useMemo(() => maskGroups(model.masks), [model.masks]);
-  const [hiddenClasses, setHiddenClasses] = useState<string[]>([]);
   const classNames = useMemo(() => groups.map((group) => group.technicalName), [groups]);
   const classMasks = useClassMaskLayers(onAiSlice ? inputUrl : undefined, classNames);
   /*
