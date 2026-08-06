@@ -1401,7 +1401,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   })}
                   modelLabel={displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}
                   inferenceLabel={inferenceModeLabel(inferenceMode)}
-                  spacingLabel={quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm/px` : "escala no informada"}
+                  /*
+                   * La escala sale de la serie que se está mostrando, que es la misma
+                   * que usan las mediciones. Antes leía `quality.pixelSpacingMm`, un
+                   * campo global que esta corrida no publica: el visor anunciaba
+                   * "escala no informada" mientras la tabla, al lado, informaba
+                   * milímetros. Una de las dos cosas tenía que estar mintiendo.
+                   */
+                  spacingLabel={data.series.inPlaneSpacingMm?.length === 2
+                    ? `${data.series.inPlaneSpacingMm[0].toFixed(3)} x ${data.series.inPlaneSpacingMm[1].toFixed(3)} mm/px`
+                    : quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm/px` : "escala no informada"}
                   slice={data.nav}
                   active={activePlano === planeName}
                   onActivate={() => selectSeries(data.series)}
