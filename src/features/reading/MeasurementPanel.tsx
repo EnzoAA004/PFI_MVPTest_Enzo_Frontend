@@ -77,6 +77,12 @@ export function MeasurementPanel({
                 {displayMeasurementLabelShort(row.label)}
               </span>
               {row.source === "reviewer" && <span className="rr-measure-source">mía</span>}
+              {/*
+                El valor de una medición propia sale de la figura y no se teclea: se
+                corrige moviendo sus extremos sobre la imagen. El campo se muestra de
+                solo lectura y lo dice, en vez de aceptar lo que se escriba y
+                descartarlo en silencio, que es lo que hacía antes.
+              */}
               <input
                 aria-label={`Valor de ${displayMeasurementLabel(row.label)}`}
                 className="rr-measure-input"
@@ -85,6 +91,8 @@ export function MeasurementPanel({
                 onChange={(event) => onChangeValue(row, event.target.value)}
                 onClick={(event) => event.stopPropagation()}
                 placeholder={ai === null ? "" : String(ai)}
+                readOnly={row.source === "reviewer"}
+                title={row.source === "reviewer" ? "Se ajusta moviendo los extremos sobre la imagen." : undefined}
                 value={row.reviewerValue === null || row.reviewerValue === undefined ? "" : String(row.reviewerValue)}
               />
               <span className="rr-measure-unit">{displayUnit(row.unit)}</span>

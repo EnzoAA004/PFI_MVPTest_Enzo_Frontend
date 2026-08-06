@@ -1180,7 +1180,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       detail: [row.experimental ? "derivada" : "", row.detail ?? ""].filter(Boolean).join(" · ") || undefined,
     })),
     ...annotations
-      .filter((item) => item.kind === "measurement" && (!activeLevel || item.level === activeLevel))
+      /*
+       * Una medición propia sin nivel se muestra siempre. Filtrarla por el nivel
+       * activo la hacía desaparecer apenas se elegía uno —que es lo normal al leer— y
+       * desde afuera se veía igual que si no se hubiera guardado.
+       */
+      .filter((item) => item.kind === "measurement" && (!activeLevel || !item.level || item.level === activeLevel))
       .map((item) => ({
         id: item.id,
         labelKey: item.measurementKind ?? "distance",
@@ -1212,6 +1217,26 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     frame: { width: number; height: number },
     spacing?: number[] | null,
   ) {
+    /*
+     * Una medición del revisor se corrige moviendo sus puntos, no escribiendo otro
+     * número: el valor sale de la figura y las dos cosas no pueden separarse. Antes
+     * esto solo buscaba entre las mediciones de la IA, así que arrastrar el extremo de
+     * una medición propia no hacía nada —y el campo de la tabla tampoco—, con lo cual
+     * lo que uno mismo medía quedaba congelado apenas se soltaba el mouse.
+     */
+    const own = annotations.find((item) => item.id === measurementId && item.kind === "measurement");
+    if (own) {
+      const points = own.points ?? [];
+      if (points.length < 2) return;
+      const moved = end === "from" ? [point, ...points.slice(1)] : [...points.slice(0, -1), point];
+      const recomputed = recomputeValue(own.measurementKind ?? "distance", moved, frame, spacing);
+      if (!recomputed) return;
+      setAnnotations((state) => state.map((item) => (item.id === measurementId
+        ? { ...item, points: moved, value: recomputed.value, unit: recomputed.unit as Annotation["unit"] }
+        : item)));
+      return;
+    }
+
     const row = resultRows.find((item) => item.id === measurementId);
     const current = measureGeometry[measurementId] ?? row?.points;
     if (!current || current.length !== 2) return;

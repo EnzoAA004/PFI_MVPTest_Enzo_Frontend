@@ -903,9 +903,19 @@ export function MriSliceViewer({
         {!referenceLine && referenceLineReason && (
           <p className="viewer-limit-note">{referenceLineReason}</p>
         )}
-        <label className="toggle-row">
-          <input checked={landmarksVisible} onChange={(event) => setLandmarksVisible(event.target.checked)} type="checkbox" />
-          <span>Landmarks</span>
+        {/*
+          Se deshabilita cuando no hay ninguno. Encendido sobre una capa vacía el
+          control no cambia nada en pantalla y se lee como que está roto; el rótulo
+          dice que no hay landmarks, que es distinto de que no se vean.
+        */}
+        <label className="toggle-row" title={landmarks.length ? undefined : "Esta corrida no generó landmarks."}>
+          <input
+            checked={landmarksVisible && landmarks.length > 0}
+            disabled={landmarks.length === 0}
+            onChange={(event) => setLandmarksVisible(event.target.checked)}
+            type="checkbox"
+          />
+          <span>{landmarks.length ? `Landmarks (${landmarks.length})` : "Landmarks (ninguno)"}</span>
         </label>
       </div>
 

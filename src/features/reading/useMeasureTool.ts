@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AnnotationPoint } from "./annotations";
 import { POINTS_REQUIRED, type MeasurementKind } from "./measurements";
 
@@ -33,11 +33,32 @@ export type UseMeasureTool = {
 
 export function useMeasureTool(onCancelled?: () => void): UseMeasureTool {
   const [state, setState] = useState<MeasureToolState>({ tool: null, points: [] });
+  /*
+   * Espejo del estado, y la razón por la que existe.
+   *
+   * `addPoint` y `closeFreehand` tienen que decidir **en el momento** si la figura
+   * quedó completa, porque quien las llama usa el resultado para crear la medición.
+   * Antes eso se leía desde adentro de un updater de `setState`, que React no
+   * garantiza ejecutar en el acto: cuando la cola de ese hook no estaba vacía el
+   * updater corría en el render siguiente, la función ya había devuelto `null` y la
+   * medición no se creaba nunca. En el ROI pasaba siempre: se trazaba la región, se
+   * soltaba y desaparecía.
+   *
+   * Con el ref la decisión es sincrónica y no depende de cómo React agrupe las
+   * actualizaciones. El estado se sigue publicando por `setState` para que la figura
+   * en curso se redibuje.
+   */
+  const stateRef = useRef<MeasureToolState>(state);
+
+  const write = useCallback((next: MeasureToolState) => {
+    stateRef.current = next;
+    setState(next);
+  }, []);
 
   const cancel = useCallback(() => {
-    setState({ tool: null, points: [] });
+    write({ tool: null, points: [] });
     onCancelled?.();
-  }, [onCancelled]);
+  }, [onCancelled, write]);
 
   /*
    * Escape cancela desde cualquier parte de la pantalla, no solo con el foco sobre la
@@ -54,36 +75,34 @@ export function useMeasureTool(onCancelled?: () => void): UseMeasureTool {
   }, [cancel, state.tool]);
 
   const select = useCallback((tool: MeasurementKind | null) => {
-    setState((current) => ({ tool: current.tool === tool ? null : tool, points: [] }));
-  }, []);
+    write({ tool: stateRef.current.tool === tool ? null : tool, points: [] });
+  }, [write]);
 
   const addPoint = useCallback((point: AnnotationPoint) => {
-    let completed: { kind: MeasurementKind; points: AnnotationPoint[] } | null = null;
-    setState((current) => {
-      if (!current.tool) return current;
-      const required = POINTS_REQUIRED[current.tool];
-      const points = [...current.points, point];
-      if (required > 0 && points.length >= required) {
-        completed = { kind: current.tool, points };
-        // La herramienta queda activa: medir un nivel y seguir con el de al lado es
-        // el gesto normal de una lectura, y obligar a re-elegirla cada vez la vuelve
-        // incómoda justo cuando más se usa.
-        return { tool: current.tool, points: [] };
-      }
-      return { ...current, points };
-    });
-    return completed;
-  }, []);
+    const current = stateRef.current;
+    if (!current.tool) return null;
+    const required = POINTS_REQUIRED[current.tool];
+    const points = [...current.points, point];
+    if (required > 0 && points.length >= required) {
+      // La herramienta queda activa: medir un nivel y seguir con el de al lado es
+      // el gesto normal de una lectura, y obligar a re-elegirla cada vez la vuelve
+      // incómoda justo cuando más se usa.
+      write({ tool: current.tool, points: [] });
+      return { kind: current.tool, points };
+    }
+    write({ ...current, points });
+    return null;
+  }, [write]);
 
   const closeFreehand = useCallback((points: AnnotationPoint[]) => {
-    let completed: { kind: MeasurementKind; points: AnnotationPoint[] } | null = null;
-    setState((current) => {
-      if (current.tool !== "roi" || points.length < 3) return { ...current, points: [] };
-      completed = { kind: "roi", points };
-      return { tool: current.tool, points: [] };
-    });
-    return completed;
-  }, []);
+    const current = stateRef.current;
+    if (current.tool !== "roi" || points.length < 3) {
+      write({ ...current, points: [] });
+      return null;
+    }
+    write({ tool: current.tool, points: [] });
+    return { kind: "roi" as MeasurementKind, points };
+  }, [write]);
 
   return { tool: state.tool, points: state.points, select, addPoint, closeFreehand, cancel };
 }
