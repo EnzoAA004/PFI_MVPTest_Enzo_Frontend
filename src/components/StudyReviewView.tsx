@@ -1,10 +1,11 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { exportReviewReport, getRunAnnotations, saveRunAnnotations } from "../api";
 import { resolvePersistedPlaneWorkspace, type PersistedPlaneWorkspace } from "../appDataGuards";
-import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudyMetadataInput, StudySeries } from "../appTypes";
+import type { AiModelArtifact, AiRunResponse, AgentQuality, AuditEvent, Measurement, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyLandmark, StudyMask, StudyMetadataInput, StudySeries, StudyArchiveSeries } from "../appTypes";
 import { parseThreeD } from "../adapters/multiplanarRunAdapter";
 import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
 import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
+import { API_BASE_URL } from "../api";
 import { BackendApiError, fetchThreeDProxyAsset } from "../multiplanarApi";
 import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type SpineLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
@@ -189,6 +190,39 @@ function slicePreviewUrl(inputUrl: string | null | undefined, index: number) {
 
 function clampSlice(index: number, total: number) {
   return Math.min(Math.max(index, 0), Math.max(0, total - 1));
+}
+
+/**
+ * Un corte de una serie del estudio sobre la que no corrió la IA.
+ *
+ * No pasa por los assets de una corrida porque no hay corrida: se pide por la serie
+ * guardada, que es lo que el módulo de IA conserva desde que el estudio deja de
+ * descartar lo que no analiza.
+ */
+function seriesSliceUrl(inputId: string, index: number) {
+  return `${API_BASE_URL}/api/ai/series/${encodeURIComponent(inputId)}/slices/${index}`;
+}
+
+/** Cómo se nombra una serie en el selector: lo que dice el estudio, más su ponderación. */
+function seriesDisplayName(series: StudyArchiveSeries) {
+  const weighting = series.weighting === "t1" || series.weighting === "t2" ? series.weighting.toUpperCase() : "";
+  const description = series.description.trim();
+  if (description && weighting) return `${description} · ${weighting}`;
+  return description || weighting || "Serie sin descripción";
+}
+
+/**
+ * Por qué una serie no trae segmentación. Los tres motivos se parecen en pantalla y
+ * llevan a decisiones distintas: "no hay modelo" es una limitación del sistema, "no es
+ * un volumen" y "no es una imagen del paciente" son propiedades de la serie.
+ */
+function seriesUnsegmentedReason(series: StudyArchiveSeries) {
+  if (series.derived) return "Es una captura de la consola, no una imagen adquirida del paciente.";
+  if (series.multiplanar) return "Es un localizer: sus cortes son de planos distintos, no forman un volumen.";
+  if (series.plane === "axial" && series.weighting === "t1") {
+    return "No hay modelo axial T1: el modelo axial se entrenó solo sobre T2.";
+  }
+  return "La IA no corrió sobre esta serie; se muestra como imagen.";
 }
 
 
@@ -668,6 +702,33 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     setOverlayAvailableByPlano((current) => (current[activePlano] === available ? current : { ...current, [activePlano]: available }));
   }, [activePlano]);
 
+  /*
+   * Las series que traía el estudio, y cuál se está mirando en cada viewport.
+   *
+   * Son dos cosas distintas que hasta acá estaban pegadas: **la serie que se muestra**
+   * y **la serie sobre la que corrió la IA**. Un estudio de RM lumbar trae siete series
+   * y la IA analiza dos, así que el médico necesita poder mirar las otras cinco — la T1
+   * es la que muestra la grasa y la médula ósea — sin que eso signifique que hay
+   * segmentación para ellas.
+   *
+   * `null` es "la serie analizada de este plano", que es el estado inicial y el que
+   * lleva las máscaras y las mediciones.
+   */
+  const studySeries = selectedDetail?.archiveSeries ?? [];
+  const [viewedSeriesByPlane, setViewedSeriesByPlane] = useState<Record<string, string | null>>({ sagittal: null, axial: null });
+
+  /** Las series que se pueden ofrecer en el selector de un viewport. */
+  function seriesChoicesFor(plane: "sagittal" | "axial") {
+    // Un localizer no se ofrece bajo un plano porque no tiene uno: sus cortes son de
+    // planos distintos. Se ofrece aparte, en los dos, marcado como tal.
+    return studySeries.filter((item) => item.plane === plane || item.multiplanar);
+  }
+
+  function viewedSeriesFor(plane: "sagittal" | "axial") {
+    const inputId = viewedSeriesByPlane[plane];
+    return inputId ? studySeries.find((item) => item.inputId === inputId) ?? null : null;
+  }
+
   /**
    * Datos por plano para poder montar sagital y axial a la vez. Cada plano tiene su
    * propia serie, su propio modelo de visor y su propio corte: los stacks son
@@ -675,6 +736,42 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    */
   function planeViewportData(plane: "sagittal" | "axial"): { series: any; nav?: SliceNavigation } | null {
     const series = seriesList.find((item: any) => item.plane === plane);
+    const viewed = viewedSeriesFor(plane);
+    /*
+     * Una serie que la IA no analizó se navega igual que las demás, pero sus cortes
+     * salen del catálogo del estudio y no de los assets de la corrida — no hay
+     * corrida. Enganchar acá y no más abajo hace que el scroll, el cine y la barra de
+     * cortes funcionen sin enterarse de la diferencia.
+     */
+    if (viewed) {
+      const total = Math.max(viewed.sliceCount, 1);
+      const current = clampSlice(sliceByPlane[plane] ?? 0, total);
+      return {
+        series: {
+          id: viewed.inputId,
+          name: seriesDisplayName(viewed),
+          plane,
+          sliceCount: total,
+          selectedSlice: 0,
+          imageUrl: null,
+        },
+        nav: total > 1 ? {
+          current,
+          total,
+          // No hay corte de la IA en esta serie: sin esto la barra marcaría uno
+          // cualquiera como "el que analizó el modelo", que es falso.
+          aiIndex: -1,
+          hasImage: true,
+          previewUrl: seriesSliceUrl(viewed.inputId, current),
+          previewUrlFor: (index: number) => seriesSliceUrl(viewed.inputId, index),
+          onChange: (index: number) => setSliceByPlane((state) => ({ ...state, [plane]: clampSlice(index, total) })),
+          onStep: (delta: number) => setSliceByPlane((state) => ({
+            ...state,
+            [plane]: clampSlice((state[plane] ?? 0) + delta, total),
+          })),
+        } : undefined,
+      };
+    }
     if (!series) return null;
     const total = series.sliceCount ?? 1;
     const aiIndex = clampSlice(series.selectedSlice ?? 0, total);
@@ -1398,18 +1495,36 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               const data = planeViewportData(planeName);
               if (!data) return null;
               const workspace = planeName === "axial" ? axialWorkspace : sagittalWorkspace;
+              /*
+               * La serie que se mira puede no ser la que analizó la IA. Cuando no lo
+               * es, no hay máscara, ni mediciones, ni línea de referencia que le
+               * correspondan: una segmentación pertenece al corte exacto sobre el que
+               * corrió, y pintarla sobre otra serie afirmaría algo que nadie calculó.
+               * Se apagan acá, en un solo lugar, y la pantalla dice por qué.
+               */
+              const viewed = viewedSeriesFor(planeName);
               return (
                 <PlaneViewport
                   key={planeName}
                   plane={planeName}
                   caseLabel={caseLabel}
                   seriesName={data.series.name}
+                  seriesChoices={seriesChoicesFor(planeName)}
+                  viewedSeriesId={viewedSeriesByPlane[planeName]}
+                  analyzedSeriesName={seriesList.find((item: any) => item.plane === planeName)?.name ?? null}
+                  unsegmentedReason={viewed ? seriesUnsegmentedReason(viewed) : ""}
+                  onSelectSeries={(inputId) => {
+                    setViewedSeriesByPlane((state) => ({ ...state, [planeName]: inputId }));
+                    // El corte vuelve al principio: los stacks tienen largos distintos
+                    // y el índice de una serie no significa nada en otra.
+                    setSliceByPlane((state) => ({ ...state, [planeName]: 0 }));
+                  }}
                   model={studyRunToMriViewerModel({
                     plane: planeName,
                     planeRunId: workspace.planeRunId ?? undefined,
                     series: data.series,
-                    masks: masksForPlane(planeName),
-                    landmarks: displayLandmarks,
+                    masks: viewed ? [] : masksForPlane(planeName),
+                    landmarks: viewed ? [] : displayLandmarks,
                   })}
                   modelLabel={displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}
                   inferenceLabel={inferenceModeLabel(inferenceMode)}
@@ -1428,7 +1543,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   onActivate={() => selectSeries(data.series)}
                   selectedLandmarkId={selectedLandmark}
                   onSelectLandmark={setSelectedLandmark}
-                  readonly={!editMode || activePlano !== planeName}
+                  // Una serie que la IA no analizó no se anota ni se mide: las anotaciones
+                  // se guardan contra la corrida, y esta serie no tiene una.
+                  readonly={Boolean(viewed) || !editMode || activePlano !== planeName}
                   addMode={landmarkAddMode && activePlano === planeName}
                   onMoveLandmark={(landmarkId, point) => {
                     const landmark = displayLandmarks.find((item) => item.id === landmarkId);
@@ -1458,13 +1575,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     const closed = measureTool.closeFreehand(points);
                     if (closed) commitMeasurement(closed.kind, closed.points, frame, planeName, data, pixels);
                   }}
-                  annotations={measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
-                  aiMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, false)}
-                  aiMeasurableCount={aiMeasurableCount}
-                  referenceLine={referenceLineFor(planeName).line}
-                  referenceLineReason={referenceLineFor(planeName).reason}
-                  derivedMeasurements={aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, true)}
-                  derivedMeasurableCount={derivedMeasurableCount}
+                  annotations={viewed ? [] : measurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, data.series.id)}
+                  aiMeasurements={viewed ? [] : aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, false)}
+                  aiMeasurableCount={viewed ? 0 : aiMeasurableCount}
+                  referenceLine={viewed ? null : referenceLineFor(planeName).line}
+                  referenceLineReason={viewed ? "La línea cruza los planos que analizó la IA; esta serie no es uno de ellos." : referenceLineFor(planeName).reason}
+                  derivedMeasurements={viewed ? [] : aiMeasurementOverlaysFor(planeName, data.nav?.current ?? data.series.selectedSlice ?? 0, true)}
+                  derivedMeasurableCount={viewed ? 0 : derivedMeasurableCount}
                   /*
                    * El prefijo `ai-` distingue las figuras de la IA de las del revisor,
                    * que pueden compartir identificador. Antes se anteponia siempre, asi
@@ -1477,10 +1594,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   onSelectMeasurement={(id) => setSelectedMeasurementId(id.startsWith("ai-") ? id.slice(3) : id)}
                   selectedMeasurementId={figureIdOf(selectedMeasurementId)}
                   onMoveMeasurePoint={(measurementId, end, point, frame) => moveMeasurePoint(measurementId, end, point, frame, data.series.inPlaneSpacingMm)}
-                  annotatedIndices={annotatedSlices(annotations, planeName)}
+                  annotatedIndices={viewed ? undefined : annotatedSlices(annotations, planeName)}
                   onMoveMaskPoint={moveMaskPoint}
-                  segmentation={segmentationForPlane(planeName)}
-                  slicePixels={slicePixelsForPlane(planeName)}
+                  segmentation={viewed ? undefined : segmentationForPlane(planeName)}
+                  slicePixels={viewed ? undefined : slicePixelsForPlane(planeName)}
                   pixelsBaseUrl={data.series.imageUrl ?? undefined}
                   hiddenInstances={hiddenInstances[planeName] ?? []}
                   onToggleInstance={(index) => setHiddenInstances((current) => {

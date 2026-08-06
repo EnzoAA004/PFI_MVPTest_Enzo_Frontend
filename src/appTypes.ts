@@ -449,12 +449,49 @@ export type ReviewableRun = AiRunResponse & {
   modelKey?: string;
 };
 
+/**
+ * Una serie del estudio subido, haya corrido la IA sobre ella o no.
+ *
+ * Un estudio de RM lumbar trae sagital T1 y T2, axial T1 y T2, a veces coronales, el
+ * localizer y las capturas de la consola. La IA analiza dos; el médico lee todas. Esto
+ * es lo que permite ofrecerlas en el visor.
+ *
+ * No confundir con `StudySeries`, que es la serie **de una corrida**: esa tiene
+ * assets, máscara y corte inferido porque un modelo pasó por ella. Ésta es lo que el
+ * archivo del estudio traía, y la mayoría de sus entradas no tienen corrida detrás.
+ */
+export type StudyArchiveSeries = {
+  inputId: string;
+  plane: "sagittal" | "axial" | "coronal" | "unknown";
+  /** Cómo la nombró el equipo: `t2_tse_sag_384`. */
+  description: string;
+  /** `t1`, `t2` o `unknown`. */
+  weighting: string;
+  sliceCount: number;
+  /** Serie cuyos cortes no comparten plano: un localizer. No es un volumen. */
+  multiplanar: boolean;
+  /** Captura de consola o reformateo, no imagen adquirida. */
+  derived: boolean;
+  /**
+   * Si la serie pudo ser entrada de una corrida.
+   *
+   * `false` cubre tres motivos que en pantalla se parecen y no son lo mismo: no hay
+   * modelo para su ponderación (axial T1), no es un volumen de un plano (localizer),
+   * o no es dato adquirido (captura). La pantalla los distingue con los otros dos
+   * campos, porque "no se puede segmentar" y "no es una imagen del paciente" llevan
+   * a decisiones distintas.
+   */
+  analyzable: boolean;
+};
+
 export type StudyDetailResponse = {
   status: string;
   study: StudyRow;
   review?: ReviewStatusResponse;
   measurements?: Measurement[];
   runs?: StudyRun[];
+  /** Todas las series que traía el estudio, para el selector de cada viewport. */
+  archiveSeries?: StudyArchiveSeries[];
   auditTrail?: AuditEvent[];
   humanReviewRequired?: boolean;
   notClinicalDiagnosis?: boolean;

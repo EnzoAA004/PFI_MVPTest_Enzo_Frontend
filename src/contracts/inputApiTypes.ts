@@ -19,10 +19,24 @@ export type InputResponse = {
  * del tiempo de eco: son los datos del propio archivo, no una elección del médico.
  */
 export type StudySeriesSummary = {
+  /**
+   * Identificador de la serie guardada, para poder mostrarla después.
+   *
+   * Ahora se conservan las siete series del estudio y no solo las dos que analiza la
+   * IA: la T1 es la que muestra la grasa y la médula ósea, y el médico la lee aunque
+   * ningún modelo la toque.
+   */
+  inputId: string;
   description: string;
   plane: "sagittal" | "axial" | "coronal" | string;
   weighting: "t1" | "t2" | string;
   sliceCount: number;
+  /** Serie cuyos cortes no comparten plano: un localizer. No es un volumen. */
+  multiplanar: boolean;
+  /** Captura de consola o reformateo, no imagen adquirida. */
+  derived: boolean;
+  /** Si pudo ser entrada de una corrida. Ver `StudySeries` en appTypes. */
+  analyzable: boolean;
 };
 
 /**

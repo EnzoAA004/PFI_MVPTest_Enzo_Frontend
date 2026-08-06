@@ -3,8 +3,39 @@ import { authHeaders, refreshDoctorSession } from "./authClient";
 import { resolveMeasurementLabel } from "./clinicalDisplay";
 import { toSafeFrontendError } from "./security/safeError";
 import { generateTraceId } from "./security/traceId";
-import type { DataOrigin, Measurement, PersistedArtifact, PersistedReviewCorrection, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyMetadataInput, StudyRow, StudyRun } from "./appTypes";
+import type { DataOrigin, Measurement, PersistedArtifact, PersistedReviewCorrection, Plane, Priority, ReviewStatus, ReviewStatusResponse, StudyDetailResponse, StudyMetadataInput, StudyRow, StudyRun, StudyArchiveSeries } from "./appTypes";
 import { priorityFromBackend } from "./studyMetadata";
+
+const VIEWABLE_PLANES = new Set(["sagittal", "axial", "coronal", "unknown"]);
+
+/**
+ * Las series que traía el estudio, desde los `inputs` del detalle.
+ *
+ * Se descarta la serie sin `inputId` en vez de mostrarla inerte: una fila que no se
+ * puede abrir se lee como que el visor está roto, cuando lo que pasa es que esa serie
+ * se registró antes de que el estudio las guardara a todas.
+ */
+function normalizeArchiveSeries(value: unknown): StudyArchiveSeries[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const row = asRecord(item);
+    const inputId = row ? optionalString(row, "inputId") : null;
+    if (!row || !inputId) return [];
+    const plane = optionalString(row, "plane") ?? "unknown";
+    return [{
+      inputId,
+      plane: (VIEWABLE_PLANES.has(plane) ? plane : "unknown") as StudyArchiveSeries["plane"],
+      description: optionalString(row, "description") ?? "",
+      weighting: optionalString(row, "weighting") ?? "unknown",
+      sliceCount: typeof row.sliceCount === "number" ? row.sliceCount : 0,
+      multiplanar: row.multiplanar === true,
+      derived: row.derived === true,
+      // Ausente significa analizable: son las filas anteriores a que el estudio
+      // guardara todas sus series, y esas son justamente las que se infirieron.
+      analyzable: row.analyzable !== false,
+    }];
+  });
+}
 
 function mapPriority(value?: string): Priority {
   if (value === "alta" || value === "high") return "alta";
@@ -398,6 +429,7 @@ export async function fetchStudyDetail(study: Pick<StudyRow, "caseId"> & Partial
     runs,
     review,
     measurements,
+    archiveSeries: normalizeArchiveSeries(payload.inputs),
     auditTrail: Array.isArray(payload.auditTrail) ? payload.auditTrail as any[] : [],
     humanReviewRequired: payload.humanReviewRequired === undefined ? true : Boolean(payload.humanReviewRequired),
     notClinicalDiagnosis: payload.notClinicalDiagnosis === undefined ? true : Boolean(payload.notClinicalDiagnosis),

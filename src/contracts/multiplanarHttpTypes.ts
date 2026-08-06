@@ -1,4 +1,5 @@
 import type { StudyMetadataInput } from "../appTypes";
+import type { StudySeriesSummary } from "./inputApiTypes";
 
 /**
  * DTO HTTP legítimo para el corredor multiplanar: solicitud de corrida y
@@ -36,6 +37,13 @@ export type MultiplanarRunRequest = {
   sagittalModelKey?: string;
   axialModelKey?: string;
   allowContractFallback: boolean;
+  /**
+   * Todas las series del estudio, para que la sala de lectura pueda ofrecerlas.
+   *
+   * Ausente cuando el análisis se armó con dos archivos por plano en vez de un estudio
+   * completo: ahí no hay catálogo, y es un caso legítimo y no una omisión.
+   */
+  studySeries?: StudySeriesSummary[];
   metadata?: Record<string, unknown>;
 };
 

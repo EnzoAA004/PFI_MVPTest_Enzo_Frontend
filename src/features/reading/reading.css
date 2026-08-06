@@ -673,6 +673,52 @@
     background: var(--viewport-bg);
   }
 
+  /* Selector de serie: barra fina arriba de la imagen, fuera del área diagnóstica.
+     No se superpone al viewport como las esquinas informativas, porque es un control
+     y taparía justo el borde superior de la anatomía. */
+  .rr-series-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 10px;
+    background: var(--viewport-bg);
+    border-bottom: 1px solid rgba(255, 255, 255, .12);
+  }
+
+  .rr-series-picker label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .rr-series-picker > label > span {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: .04em;
+    flex-shrink: 0;
+  }
+
+  .rr-series-picker select {
+    flex: 1;
+    min-width: 0;
+    background: rgba(255, 255, 255, .06);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .rr-series-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
   /* Con un solo plano el borde activo no distingue nada: sería puro adorno. */
   .rr-stage[data-layout="dual"] .rr-plane {
     outline: 1px solid transparent;

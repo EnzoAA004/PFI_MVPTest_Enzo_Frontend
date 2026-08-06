@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MriSliceViewer, type MeasurementOverlay, type RawSlicePixels, type SliceNavigation } from "../../components/MriSliceViewer";
 import { instanceColor, instanceLabel, type Segmentation } from "./segmentation";
 import { displayStructureLabel } from "../../clinicalDisplay";
+import type { StudyArchiveSeries } from "../../appTypes";
 import type { SlicePixelsMeta } from "./pixels";
 import type { MeasurementKind } from "./measurements";
 import type { studyRunToMriViewerModel } from "../../viewModels/mriViewerViewModel";
@@ -11,6 +12,19 @@ import type { studyRunToMriViewerModel } from "../../viewModels/mriViewerViewMod
  * descarga entero: a esa velocidad la red no llega y el cine muestra el corte anterior.
  */
 const CINE_INTERVAL_MS = 200;
+
+/**
+ * Cómo se lista una serie en el selector.
+ *
+ * Lleva la cantidad de cortes porque es lo que distingue dos series que el equipo
+ * describió igual, y marca el localizer y las capturas de consola: son navegables, pero
+ * saber que lo son evita que el médico las lea como una adquisición más.
+ */
+function seriesOptionLabel(series: StudyArchiveSeries) {
+  const weighting = series.weighting === "t1" || series.weighting === "t2" ? ` ${series.weighting.toUpperCase()}` : "";
+  const kind = series.multiplanar ? " · localizer" : series.derived ? " · captura de consola" : "";
+  return `${series.description || "Serie sin descripción"}${weighting} · ${series.sliceCount} cortes${kind}`;
+}
 
 export type PlaneViewportProps = {
   plane: "sagittal" | "axial";
@@ -57,6 +71,15 @@ export type PlaneViewportProps = {
   onToggleInstance: (index: number) => void;
   /** Cortes de este plano con anotaciones, para marcarlos en la barra de stack. */
   annotatedIndices?: Set<number>;
+  /** Series del estudio que se pueden mostrar en este viewport. */
+  seriesChoices: StudyArchiveSeries[];
+  /** `null` es la serie que analizó la IA, que es la que trae la segmentación. */
+  viewedSeriesId: string | null;
+  /** Nombre de la serie analizada, para poder volver a ella desde el selector. */
+  analyzedSeriesName: string | null;
+  /** Por qué la serie que se está viendo no tiene segmentación. Vacío si la tiene. */
+  unsegmentedReason: string;
+  onSelectSeries: (inputId: string | null) => void;
 };
 
 /**
@@ -74,6 +97,7 @@ export function PlaneViewport({
   derivedMeasurements, derivedMeasurableCount, referenceLine, referenceLineReason, onMoveMeasurePoint, annotatedIndices, onMoveMaskPoint,
   selectedMeasurementId, highlightedMeasurementId, onSelectMeasurement,
   segmentation, slicePixels, pixelsBaseUrl, hiddenInstances, onToggleInstance,
+  seriesChoices, viewedSeriesId, analyzedSeriesName, unsegmentedReason, onSelectSeries,
 }: PlaneViewportProps) {
   /*
    * Cine: recorrer la serie sola, que es como se lee un stack cuando se busca por
@@ -107,6 +131,42 @@ export function PlaneViewport({
   const sliceLabel = slice ? `corte ${slice.current + 1}/${slice.total}` : "corte único";
   return (
     <section className={`rr-plane${active ? " is-active" : ""}`} onPointerDownCapture={onActivate}>
+      {/*
+        Selector de serie del viewport.
+
+        Separa dos cosas que estaban pegadas: la serie que se muestra y la serie sobre
+        la que corrió la IA. Un estudio trae siete series y el modelo analiza dos, pero
+        el médico lee todas — la T1 es la que distingue un hemangioma de una metástasis
+        y ningún modelo la toca. Solo aparece cuando el estudio trajo alternativas: con
+        una sola serie por plano el control sería una lista de un elemento.
+      */}
+      {seriesChoices.length > 1 && (
+        <div className="rr-series-picker">
+          <label>
+            <span>Serie</span>
+            <select
+              onChange={(event) => onSelectSeries(event.target.value || null)}
+              value={viewedSeriesId ?? ""}
+            >
+              <option value="">
+                {analyzedSeriesName ? `${analyzedSeriesName} — analizada por la IA` : "Serie analizada por la IA"}
+              </option>
+              {seriesChoices.map((item) => (
+                <option key={item.inputId} value={item.inputId}>
+                  {seriesOptionLabel(item)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/*
+            El motivo va siempre que se mire otra serie. Una imagen sin máscaras y sin
+            explicación se lee como que la segmentación falló, cuando lo que pasa es
+            que sobre esta serie nunca corrió: son dos situaciones distintas y la
+            segunda no es un error.
+          */}
+          {unsegmentedReason && <p className="rr-series-note">{unsegmentedReason}</p>}
+        </div>
+      )}
       <div className="rr-viewport">
         <div className="rr-corner rr-corner-tl"><strong>{caseLabel}</strong></div>
         <div className="rr-corner rr-corner-tr">

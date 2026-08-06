@@ -213,6 +213,16 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
           // declaro el medico: son dos procedencias distintas del mismo dato.
           planeSource: studyUpload.study ? "study_archive_metadata" : "manual_per_plane",
         },
+        /*
+         * Todas las series del estudio viajan con la corrida, no solo las dos que se
+         * infieren. Es lo que después le permite a la sala de lectura ofrecerlas: sin
+         * esto el backend guarda los dos planos y las otras cinco quedan registradas
+         * en el módulo de IA sin que nada las vincule a este estudio.
+         *
+         * Va vacío cuando el análisis se armó con dos archivos sueltos en vez de un
+         * estudio completo, que es el caso donde no hay catálogo que llevar.
+         */
+        ...(studyUpload.study?.seriesFound?.length ? { studySeries: studyUpload.study.seriesFound } : {}),
         ...(axialReady ? { axialInputId, axialModelKey: "axial_t2_alkafri" } : {}),
       };
       const result = await runMultiplanarAnalysis(payload);
