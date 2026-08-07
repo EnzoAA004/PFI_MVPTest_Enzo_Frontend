@@ -148,6 +148,35 @@ export async function runMultiplanarAnalysis(payload: MultiplanarRunPayload): Pr
 }
 
 /**
+ * Los resultados de una corrida en formato DICOM: la segmentación como SEG, las mediciones
+ * como SR.
+ *
+ * Es lo que permite abrirlos en 3D Slicer, OHIF o un PACS de hospital sin este software en
+ * el medio. Las otras exportaciones —HTML, CSV, JSON— solo las entiende este producto.
+ *
+ * Devuelve el binario tal cual. No se parsea nada acá: un DICOM es un formato que el
+ * navegador no tiene por qué entender, y lo único que hace falta es guardarlo.
+ */
+export async function fetchRunDicomExport(
+  planeRunId: string,
+  plane: Plane,
+  kind: "segmentation" | "measurements",
+): Promise<Blob> {
+  const file = kind === "segmentation" ? "segmentation.dcm" : "measurements.sr.dcm";
+  const path = `/api/ai/runs/${encodeURIComponent(planeRunId)}/${plane}/${file}`;
+  const traceId = generateTraceId("frontend-dicom-export");
+  await ensureAuthSession();
+  const init = (): RequestInit => ({ headers: { "X-Trace-Id": traceId, ...authHeaders() } });
+  let response = await fetch(`${API_BASE_URL}${path}`, init());
+  if (response.status === 401) {
+    await refreshDoctorSession();
+    response = await fetch(`${API_BASE_URL}${path}`, init());
+  }
+  if (!response.ok) throw await backendErrorFrom(response, path, traceId);
+  return await response.blob();
+}
+
+/**
  * Clasificación subarticular sobre un punto marcado por el profesional.
  *
  * El modelo no localiza el receso por su cuenta, así que la coordenada la pone el médico

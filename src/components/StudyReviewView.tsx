@@ -6,7 +6,7 @@ import { parseThreeD } from "../adapters/multiplanarRunAdapter";
 import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/threeDProxyAssetParser";
 import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
 import { API_BASE_URL } from "../api";
-import { BackendApiError, fetchThreeDProxyAsset, requestSubarticularClassification } from "../multiplanarApi";
+import { BackendApiError, fetchRunDicomExport, fetchThreeDProxyAsset, requestSubarticularClassification } from "../multiplanarApi";
 import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type SpineLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
 import { DegenerativeFindingsPanel } from "../features/reading/DegenerativeFindingsPanel";
@@ -303,6 +303,17 @@ function normalizeRow(item: any): MeasurementRow {
 
 function safeFileFragment(value?: string) {
   return String(value ?? "study-review").replace(/[^a-zA-Z0-9-_]/g, "-").slice(0, 80);
+}
+
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function downloadTextFile(filename: string, content: string, mimeType: string) {
@@ -757,6 +768,34 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     if (!pair) return null;
     // DICOM 0020|0037: primero el vector de la fila, después el de la columna.
     return orientationLabels(pair[0], pair[1]);
+  }
+
+  const [dicomExportError, setDicomExportError] = useState<string | undefined>(undefined);
+
+  /**
+   * Descarga la segmentación o las mediciones del plano activo en formato DICOM.
+   *
+   * Es la única exportación que otro sistema puede abrir: HTML, CSV y JSON son formatos
+   * propios. El objeto lo construye el módulo de IA en el momento, así que puede no estar
+   * disponible —una entrada que no es DICOM no tiene imagen que referenciar— y eso se
+   * informa en vez de fallar en silencio.
+   */
+  async function exportDicom(kind: "segmentation" | "measurements") {
+    const planeRunId = activeWorkspace.planeRunId;
+    if (!planeRunId) {
+      setDicomExportError("Esta corrida no tiene un identificador de plano para exportar.");
+      return;
+    }
+    setDicomExportError(undefined);
+    try {
+      const blob = await fetchRunDicomExport(planeRunId, activePlano, kind);
+      const suffix = kind === "segmentation" ? "segmentacion" : "mediciones";
+      downloadBlob(`${safeFileFragment(displayRun.caseId)}-${activePlano}-${suffix}.dcm`, blob);
+    } catch (error) {
+      setDicomExportError(error instanceof Error
+        ? `No se pudo exportar: ${error.message}`
+        : "No se pudo exportar el objeto DICOM.");
+    }
   }
 
   function cancelRoi() {
@@ -2076,6 +2115,28 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   <button onClick={() => { void exportCsv(); }} type="button">CSV</button>
                   <button onClick={() => { void exportJson(); }} type="button">JSON</button>
                 </div>
+
+                {/*
+                  DICOM va aparte de los tres de arriba a propósito. HTML, CSV y JSON son
+                  el informe para leer o para procesar acá; estos dos son los objetos que
+                  otro sistema puede abrir sobre la misma imagen. Mezclarlos en una fila
+                  los haría parecer cuatro formatos del mismo informe.
+                */}
+                <p className="rr-section-title">Exportar en DICOM</p>
+                <p className="rr-note">
+                  Se abren en 3D Slicer, OHIF o un PACS, alineados sobre el estudio. Solo
+                  del plano {activePlano === "sagittal" ? "sagital" : "axial"}, que es el que
+                  se está mirando.
+                </p>
+                <div className="rr-report-actions">
+                  <button onClick={() => { void exportDicom("segmentation"); }} type="button">
+                    Segmentación (SEG)
+                  </button>
+                  <button onClick={() => { void exportDicom("measurements"); }} type="button">
+                    Mediciones (SR)
+                  </button>
+                </div>
+                {dicomExportError && <p className="rr-note rr-export-error">{dicomExportError}</p>}
                 <p className="rr-note">
                   Uso académico y de investigación sobre datos de-identificados. Requiere revisión
                   profesional y no constituye un diagnóstico.

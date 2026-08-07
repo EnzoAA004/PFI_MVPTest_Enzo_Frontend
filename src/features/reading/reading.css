@@ -999,6 +999,10 @@
     transform: translateX(-50%);
   }
 
+  /* Un fallo de exportacion se dice, no se calla: el usuario apreto un boton y
+     espera un archivo. */
+  .rr-export-error { color: var(--danger, #b3261e); }
+
   /* Barra de escala -------------------------------------------------------
    *
    * Va abajo a la izquierda, encima de las barras de control y por debajo de las
