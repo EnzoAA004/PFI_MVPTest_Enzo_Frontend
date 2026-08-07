@@ -35,12 +35,11 @@ export const DEPLOYMENT_LABELS: Record<DeploymentStatus, string> = {
 /**
  * Qué significa cada estado, para el aviso que acompaña al grupo.
  *
- * Es el único lugar donde se advierte sobre la calidad de la tarea, así que tiene que
- * alcanzar solo: las probabilidades se muestran en los tres estados, y este texto es lo
- * que le dice al médico bajo qué condición está leyendo el número que sigue.
+ * Habla de aciertos y no de métricas: "F1 0,125" no le dice nada a quien lee un estudio;
+ * "acierta en una minoría de los casos" sí.
  *
- * Por eso el de `not_product_supported` habla de aciertos y no de métricas. "F1 0,125" no
- * le dice nada a quien lee un estudio; "acierta en una minoría de los casos" sí.
+ * El de `not_product_supported` explica además por qué no hay números al lado de las
+ * etiquetas — que si no se lee como si faltara un dato, y no como una decisión.
  */
 export const DEPLOYMENT_NOTES: Record<DeploymentStatus, string> = {
   supported_internal:
@@ -48,32 +47,34 @@ export const DEPLOYMENT_NOTES: Record<DeploymentStatus, string> = {
   experimental:
     "El modelo acierta bastante por debajo de las tareas validadas. Se muestra para revisión, no para informar.",
   not_product_supported:
-    "El modelo acierta en una minoría de los casos para estas variables. Las probabilidades "
-    + "que siguen describen la confianza de cada predicción, no la calidad del modelo. Se "
-    + "conservan para trazabilidad de investigación.",
+    "El modelo acierta en una minoría de los casos para estas variables. No se muestran "
+    + "probabilidades porque describirían la confianza de cada predicción, no la calidad del "
+    + "modelo. Se conservan solo para trazabilidad de investigación.",
 };
 
 /**
- * **Todos los hallazgos muestran sus probabilidades, incluidas las tareas de investigación.**
+ * Si el hallazgo muestra sus probabilidades.
  *
- * Se evaluó esconder el número en las `not_product_supported` —un 88 % sobre
- * espondilolistesis, con F1 0,125, se dibuja idéntico a un 88 % sobre abombamiento, que
- * acierta 6 de cada 7 veces— y se descartó por dos razones.
+ * **Las tareas `not_product_supported` muestran la etiqueta sin número.** Una barra de
+ * probabilidad no comunica la calidad del modelo: dice cuán confiada está *esa* predicción.
+ * Un 88 % sobre espondilolistesis —F1 0,125— se dibuja idéntico a un 88 % sobre
+ * abombamiento, que acierta 6 de cada 7 veces, y al lado de una imagen del paciente los dos
+ * se leen igual de convincentes.
  *
- * La primera es que esconderlo también es editorializar: se le saca un dato real a un
- * profesional asumiendo que lo va a leer mal.
+ * Es la misma razón por la que en modo demo no se muestra ningún hallazgo: cuando el número
+ * no se puede sostener, mostrarlo con la estética de uno que sí se sostiene es peor que no
+ * mostrarlo.
  *
- * La segunda es que el contexto ya está, y ponerlo dos veces era resolver el mismo
- * problema por duplicado. Estos hallazgos no aparecen sueltos: viven dentro de un grupo
- * que arranca colapsado, rotulado "Investigación" y con su nota de alcance. El médico tuvo
- * que abrirlo para llegar al número.
- *
- * También se descartó acompañar cada probabilidad con la métrica de su tarea. "F1 0,125"
- * no le dice nada a quien lee un estudio, y repetirlo por hallazgo convierte un panel de
+ * Se consideró mostrarlo acompañado de la métrica de la tarea y se descartó: "F1 0,125" no
+ * le dice nada a quien lee un estudio, y repetirlo por hallazgo convierte un panel de
  * lectura en un informe de entrenamiento.
  *
- * La advertencia va una vez, en el grupo: ver {@link DEPLOYMENT_NOTES}.
+ * Acordado con Enzo (P10.7, §3: "ocultar por defecto o colocar en una sección de
+ * investigación").
  */
+export function showsProbabilities(status: DeploymentStatus): boolean {
+  return status !== "not_product_supported";
+}
 
 /**
  * Si el grupo viene colapsado.

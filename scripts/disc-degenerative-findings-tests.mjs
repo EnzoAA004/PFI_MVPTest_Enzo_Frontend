@@ -33,8 +33,8 @@ const parser = load("src/features/reading/discDegenerativeFindings.ts", [
   "sortDiscFindings", "groupDiscFindingsByLevel", "labelsFor", "SCHEMA_VERSION",
 ]);
 const display = load("src/features/reading/discFindingDisplay.ts", [
-  "DISC_FINDING_LABELS", "DEPLOYMENT_LABELS", "DEPLOYMENT_NOTES", "startsCollapsed",
-  "DEPLOYMENT_ORDER", "DISC_FINDINGS_NOTICE",
+  "DISC_FINDING_LABELS", "DEPLOYMENT_LABELS", "DEPLOYMENT_NOTES", "showsProbabilities",
+  "startsCollapsed", "DEPLOYMENT_ORDER", "DISC_FINDINGS_NOTICE",
 ]);
 
 let passed = 0;
@@ -256,14 +256,20 @@ check("las ocho tareas tienen traducción", () => {
   }
 });
 
-check("la advertencia del grupo alcanza sola, porque el número sí se muestra", () => {
-  // Se decidió mostrar las probabilidades en los tres estados: esconderlas también es
-  // editorializar, y el grupo colapsado ya dijo qué clase de resultado es. Entonces la
-  // nota tiene que cargar sola con la advertencia y no hablar de métricas, que no le
-  // dicen nada a quien lee un estudio.
+check("las tareas de investigación no muestran barra de probabilidad", () => {
+  // Un 88% con F1 0,125 se dibuja idéntico a un 88% con F1 0,846, y al lado de una imagen
+  // del paciente los dos se leen igual de convincentes.
+  assert.equal(display.showsProbabilities("not_product_supported"), false);
+  assert.equal(display.showsProbabilities("experimental"), true);
+  assert.equal(display.showsProbabilities("supported_internal"), true);
+});
+
+check("la nota explica por qué no hay números, y no habla de métricas", () => {
+  // Sin la explicación, la ausencia se lee como un dato que falta en vez de una decisión.
+  // Y "F1 0,125" no le dice nada a quien lee un estudio.
   const nota = display.DEPLOYMENT_NOTES.not_product_supported;
   assert.ok(nota.includes("minoría de los casos"));
-  assert.ok(nota.includes("no la calidad del modelo"));
+  assert.ok(nota.includes("No se muestran probabilidades"));
   assert.ok(!nota.includes("F1"));
 });
 
