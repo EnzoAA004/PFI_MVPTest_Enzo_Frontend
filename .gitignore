@@ -8,3 +8,6 @@ tsconfig.tsbuildinfo
 
 # IDE
 .idea/
+
+# Salida de herramientas de cobertura
+coverage/

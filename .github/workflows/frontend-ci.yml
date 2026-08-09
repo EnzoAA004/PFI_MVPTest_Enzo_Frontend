@@ -34,6 +34,14 @@ jobs:
       - name: Test
         run: npm run test
 
+      # No es cobertura de lineas y el propio reporte lo aclara: las suites evaluan el codigo
+      # dentro de un node:vm, que V8 no atribuye a los archivos de src/. Medido con c8,
+      # clinicalDisplay.ts da 0% aunque tenga tests. Esto mide que modulos tienen alguna
+      # prueba, que es la pregunta de riesgo, sin mentir sobre la profundidad.
+      - name: Coverage summary
+        if: always()
+        run: npm run coverage
+
       - name: Build
         run: npm run build
 
