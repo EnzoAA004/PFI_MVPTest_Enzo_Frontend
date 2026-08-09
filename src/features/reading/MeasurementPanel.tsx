@@ -65,12 +65,29 @@ export function MeasurementPanel({
         const edited = reviewer !== null && ai !== null && reviewer !== ai;
         const verdict = shown === null ? null : checkRange(row.labelKey, shown, row.unit);
         return (
+          // Solo las filas medibles se seleccionan, y las que se seleccionan tienen que
+          // comportarse como boton: foco por tabulacion y activacion con Enter o Espacio.
+          // El resaltado por mouse es un extra que el teclado no necesita replicar.
           <div
+            aria-pressed={row.measurable ? selectedId === row.id : undefined}
             className={`rr-measure${row.measurable ? " is-measurable" : ""}${selectedId === row.id ? " is-selected" : ""}${edited ? " rr-measure-edited" : ""}`}
             key={row.id}
             onClick={row.measurable ? () => onSelect(selectedId === row.id ? null : row.id) : undefined}
+            onKeyDown={
+              row.measurable
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      // Espacio scrollea la pagina si no se lo frena.
+                      event.preventDefault();
+                      onSelect(selectedId === row.id ? null : row.id);
+                    }
+                  }
+                : undefined
+            }
             onMouseEnter={() => onHighlight(row.id)}
             onMouseLeave={() => onHighlight(null)}
+            role={row.measurable ? "button" : undefined}
+            tabIndex={row.measurable ? 0 : undefined}
           >
             <div className="rr-measure-main">
               <span className="rr-measure-label" title={displayMeasurementLabel(row.label)}>

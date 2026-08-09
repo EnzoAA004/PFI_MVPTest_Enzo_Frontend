@@ -148,6 +148,12 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
         ))}
       </nav>
 
+      {/*
+        El tabIndex es deliberado y no sobra: la tabla scrollea en horizontal, y una
+        region scrolleable que no recibe foco no se puede recorrer sin mouse (WCAG 2.1.1).
+        La regla lo marca porque el div no es interactivo, pero sacarlo rompe el acceso.
+      */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
       <div className="wl-table-wrap" role="region" aria-label="Estudios" tabIndex={0}>
         <table className="wl-table">
           <thead>

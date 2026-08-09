@@ -147,6 +147,64 @@ export async function runMultiplanarAnalysis(payload: MultiplanarRunPayload): Pr
   return parseMultiplanarRunResponse(raw);
 }
 
+/**
+ * Los resultados de una corrida en formato DICOM: la segmentación como SEG, las mediciones
+ * como SR.
+ *
+ * Es lo que permite abrirlos en 3D Slicer, OHIF o un PACS de hospital sin este software en
+ * el medio. Las otras exportaciones —HTML, CSV, JSON— solo las entiende este producto.
+ *
+ * Devuelve el binario tal cual. No se parsea nada acá: un DICOM es un formato que el
+ * navegador no tiene por qué entender, y lo único que hace falta es guardarlo.
+ */
+export async function fetchRunDicomExport(
+  planeRunId: string,
+  plane: Plane,
+  kind: "segmentation" | "measurements",
+): Promise<Blob> {
+  const file = kind === "segmentation" ? "segmentation.dcm" : "measurements.sr.dcm";
+  const path = `/api/ai/runs/${encodeURIComponent(planeRunId)}/${plane}/${file}`;
+  const traceId = generateTraceId("frontend-dicom-export");
+  await ensureAuthSession();
+  const init = (): RequestInit => ({ headers: { "X-Trace-Id": traceId, ...authHeaders() } });
+  let response = await fetch(`${API_BASE_URL}${path}`, init());
+  if (response.status === 401) {
+    await refreshDoctorSession();
+    response = await fetch(`${API_BASE_URL}${path}`, init());
+  }
+  if (!response.ok) throw await backendErrorFrom(response, path, traceId);
+  return await response.blob();
+}
+
+/**
+ * Clasificación subarticular sobre un punto marcado por el profesional.
+ *
+ * El modelo no localiza el receso por su cuenta, así que la coordenada la pone el médico
+ * y el hallazgo que vuelve es de alcance de investigación. Va por el Backend, nunca
+ * directo a FastAPI: la arquitectura es Frontend -> Backend -> AI Module.
+ *
+ * La coordenada viaja en **píxeles del DICOM**, no en la base del visor. La conversión la
+ * hace `viewerPointToImagePixels`; mandar la coordenada sin convertir devuelve un
+ * resultado de otra parte de la anatomía, con la misma pinta de ser correcto.
+ *
+ * No se parsea acá: el llamador lo pasa por `parseDegenerativeFindings`, que es el
+ * parseo estricto del contrato y descarta un hallazgo mal formado en vez de mostrarlo a
+ * medias.
+ */
+export async function requestSubarticularClassification(payload: {
+  inputId: string;
+  instanceNumber: number;
+  x: number;
+  y: number;
+  side: "left" | "right";
+  level: string;
+}): Promise<unknown> {
+  return multiplanarRequest<unknown>("/api/ai/degenerative-findings/subarticular", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 /*
  * getRunReview/submitRunReview vivían acá con estados accepted/observed/rejected/
  * edited, en paralelo al pendiente/observado/aceptado/descartado de updateReview.

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract && npm run test:p8d2-review && npm run test:p8c2-assets && npm run test:p8d3-corrections && npm run test:p8d4-status && npm run test:p8e2-history && npm run test:p8e3-labelkey && npm run test:p9c1-canonical && npm run test:p9c2-readiness && npm run test:p9c3-components && npm run test:p9c4-closure && npm run test:p9c5-workspace && npm run test:p9c5b-reopening && npm run test:p10c1-security && npm run test:p10c1-hotfix-endpoints && npm run test:p10-5-d0 && npm run test:annotations && npm run test:routes && npm run test:seg-naming && npm run test:levels && npm run test:measure-tools && npm run test:reference-line && npm run test:windowing && npm run test:structured-report",
+    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract && npm run test:p8d2-review && npm run test:p8c2-assets && npm run test:p8d3-corrections && npm run test:p8d4-status && npm run test:p8e2-history && npm run test:p8e3-labelkey && npm run test:p9c1-canonical && npm run test:p9c2-readiness && npm run test:p9c3-components && npm run test:p9c4-closure && npm run test:p9c5-workspace && npm run test:p9c5b-reopening && npm run test:p10c1-security && npm run test:p10c1-hotfix-endpoints && npm run test:p10-5-d0 && npm run test:annotations && npm run test:routes && npm run test:seg-naming && npm run test:levels && npm run test:measure-tools && npm run test:reference-line && npm run test:windowing && npm run test:structured-report && npm run test:degenerative && npm run test:subarticular-roi && npm run test:orientation && npm run test:scale-bar && npm run test:disc-findings",
     "build": "vite build",
     "lint": "eslint src --ext .ts,.tsx",
     "typecheck": "tsc -b",
@@ -43,7 +43,12 @@
     "test:measure-tools": "node scripts/measurement-tools-tests.mjs",
     "test:reference-line": "node scripts/reference-line-tests.mjs",
     "test:windowing": "node scripts/windowing-tests.mjs",
-    "test:structured-report": "node scripts/structured-report-tests.mjs"
+    "test:structured-report": "node scripts/structured-report-tests.mjs",
+    "test:degenerative": "node scripts/degenerative-findings-tests.mjs",
+    "test:subarticular-roi": "node scripts/subarticular-roi-tests.mjs",
+    "test:orientation": "node scripts/orientation-markers-tests.mjs",
+    "test:scale-bar": "node scripts/scale-bar-tests.mjs",
+    "test:disc-findings": "node scripts/disc-degenerative-findings-tests.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

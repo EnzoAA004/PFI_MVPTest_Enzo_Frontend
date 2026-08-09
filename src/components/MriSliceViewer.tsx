@@ -5,6 +5,8 @@ import { paintSegmentation, type Segmentation } from "../features/reading/segmen
 import { applyWindow, defaultWindow, fetchSlicePixels, percentileWindow, slicePixelsUrl, type SlicePixelsMeta } from "../features/reading/pixels";
 import { MeasurementLayer, type MeasurementFigure } from "../features/reading/MeasurementLayer";
 import type { MeasurementKind } from "../features/reading/measurements";
+import { spokenOrientation, type OrientationLabels } from "../features/reading/orientationMarkers";
+import { scaleBarFor } from "../features/reading/scaleBar";
 import type { MriViewerMask, MriViewerModel } from "../viewModels/mriViewerViewModel";
 
 /**
@@ -73,6 +75,33 @@ type Props = {
   onLandmarkAddComplete?: () => void;
   readonly?: boolean;
   addMode?: boolean;
+  /**
+   * Modo de marcado del receso subarticular: un clic sobre el corte axial.
+   *
+   * Va aparte de `measureTool` y no como una `MeasurementKind` más porque no es una
+   * medición: no produce un valor, no tiene unidad, no se recalcula al mover un tirador
+   * y no se persiste con las mediciones del revisor. Lo único que comparte es que se
+   * marca con un clic.
+   */
+  subarticularMode?: boolean;
+  /** El punto marcado, con el tamaño del corte para poder pasarlo a píxeles del DICOM. */
+  onSubarticularPoint?: (point: Point, frame: Size) => void;
+  /**
+   * Letras de orientación del paciente para el corte visible, o `null` si la serie no
+   * declara su orientación. Se derivan afuera porque dependen del corte, no del visor.
+   */
+  orientation?: OrientationLabels | null;
+  /**
+   * Ventana y nivel actuales, ya formateados, cada vez que cambian.
+   *
+   * El valor se calculaba desde siempre pero vivia en `.viewer-caption`, que la sala de
+   * lectura oculta por CSS: el medico no tenia como saber con que ventana estaba
+   * mirando. Se reporta hacia afuera en vez de dibujarlo aca porque su lugar es la
+   * esquina de parametros de display, que la arma el viewport.
+   */
+  onDisplayParamsChange?: (label: string) => void;
+  /** Espaciado del pixel en mm, para la barra de escala. Sin esto no se dibuja. */
+  pixelSpacingMm?: [number, number] | null;
   overlayEnabled?: boolean;
   overlayOpacity?: number;
   onOverlayAvailableChange?: (available: boolean) => void;
@@ -300,6 +329,11 @@ export function MriSliceViewer({
   onLandmarkAddComplete,
   readonly = true,
   addMode = false,
+  subarticularMode = false,
+  onSubarticularPoint,
+  orientation = null,
+  onDisplayParamsChange,
+  pixelSpacingMm = null,
   overlayEnabled = true,
   overlayOpacity = initialOverlayOpacity,
   onOverlayAvailableChange,
@@ -671,6 +705,12 @@ export function MriSliceViewer({
 
   function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
     if (!imageLoaded || event.button !== 0) return;
+    // Antes que las mediciones: mientras se marca el receso, el clic no mide ni panea.
+    if (subarticularMode) {
+      const point = pointFromEvent(event);
+      if (point) onSubarticularPoint?.(point, imageSize);
+      return;
+    }
     if (measureTool === "roi") {
       const point = pointFromEvent(event);
       if (!point) return;
@@ -836,6 +876,25 @@ export function MriSliceViewer({
     onLandmarkAddComplete?.();
   }
 
+  // La eleccion del escalon vive en scaleBar.ts, donde se puede probar.
+  const scaleBar = useMemo(() => scaleBarFor({
+    pixelSpacingMm,
+    imageWidth: imageSize.width,
+    sourceWidth: slicePixels?.width,
+    zoom,
+  }), [imageSize.width, pixelSpacingMm, slicePixels?.width, zoom]);
+
+  /*
+   * La ventana actual, hacia afuera. Es un dato de lectura, no de depuracion: sin verlo,
+   * dos cortes que se ven distinto pueden estar iguales y solo cambio el ventaneo.
+   */
+  const displayParams = pixelsReady && windowLevel
+    ? `W ${Math.round(windowLevel.width)} / L ${Math.round(windowLevel.center)}`
+    : `W/L aprox. ${Math.round(contrast)} / ${Math.round(brightness)}`;
+  useEffect(() => {
+    onDisplayParamsChange?.(displayParams);
+  }, [displayParams, onDisplayParamsChange]);
+
   return (
     <div className={`mri-viewer real-asset-viewer ${model.plane}`}>
       <div className="viewer-caption">
@@ -983,10 +1042,22 @@ export function MriSliceViewer({
         )}
       </details>
 
-      <p className="viewer-limit-note">W/L es un filtro aproximado de brillo/contraste sobre un PNG de 8 bits. El ventaneo DICOM y la navegacion multicorte requieren AI-009.</p>
+      {/*
+        La nota decía que W/L era un filtro de brillo sobre un PNG de 8 bits y que el
+        ventaneo real "requiere AI-009". Quedó obsoleta cuando pixels.ts empezó a
+        ventanear sobre las intensidades originales de 16 bits: hoy solo es un filtro
+        cuando la corrida no publicó los cortes crudos, y el propio visor ya lo distingue
+        ("W/L aprox." contra "W 500 / L 250"). Se dice lo que sigue siendo cierto.
+      */}
+      {!pixelsReady && (
+        <p className="viewer-limit-note">
+          Esta corrida no publicó las intensidades originales: el W/L es un filtro de
+          brillo y contraste sobre la imagen ya ventaneada, no ventaneo DICOM.
+        </p>
+      )}
 
       <div
-        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"} ${addMode ? "landmark-add-mode" : ""}`}
+        className={`real-slice-frame ${mode === "window" ? "window-mode" : "pan-mode"} ${addMode ? "landmark-add-mode" : ""} ${subarticularMode ? "subarticular-add-mode" : ""}`}
         onPointerCancel={handlePointerUp}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -998,6 +1069,31 @@ export function MriSliceViewer({
         role={slice ? "group" : undefined}
         aria-label={slice ? `${seriesName}: corte ${slice.current + 1} de ${slice.total}. Rueda o flechas para recorrer el stack.` : undefined}
       >
+        {/*
+          Las letras de orientación del paciente, como en cualquier PACS.
+          Van sobre los bordes y no en las esquinas, que ya están ocupadas por caso,
+          serie, modelo y escala. Si la serie no declara su orientación no se dibuja
+          ninguna: una letra inventada se lee igual de convincente que una correcta.
+        */}
+        {/*
+          Barra de escala. La regla de un PACS: un numero de milimetros solo se puede
+          juzgar contra algo. Se recalcula con el zoom, asi que sigue siendo verdad
+          despues de acercar. Sin espaciado fisico no se dibuja: una barra sin escala
+          real seria una regla mintiendo.
+        */}
+        {scaleBar && (
+          <div className="rr-scalebar" aria-hidden="true" style={{ inlineSize: `${scaleBar.px}px` }}>
+            <span>{scaleBar.mm} mm</span>
+          </div>
+        )}
+        {orientation && (
+          <div className="rr-orientation" aria-label={spokenOrientation(orientation)}>
+            <span className="rr-orientation-l" aria-hidden="true">{orientation.left}</span>
+            <span className="rr-orientation-r" aria-hidden="true">{orientation.right}</span>
+            <span className="rr-orientation-t" aria-hidden="true">{orientation.top}</span>
+            <span className="rr-orientation-b" aria-hidden="true">{orientation.bottom}</span>
+          </div>
+        )}
         {slice && !slice.hasImage ? (
           /*
            * Corte navegable sin imagen: hoy solo el corte analizado por la IA tiene

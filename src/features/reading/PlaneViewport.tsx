@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { OrientationLabels } from "./orientationMarkers";
 import { MriSliceViewer, type MeasurementOverlay, type RawSlicePixels, type SliceNavigation } from "../../components/MriSliceViewer";
 import { instanceColor, instanceLabel, type Segmentation } from "./segmentation";
 import { displayStructureLabel } from "../../clinicalDisplay";
@@ -41,6 +42,13 @@ export type PlaneViewportProps = {
   onSelectLandmark: (id: string) => void;
   readonly: boolean;
   addMode: boolean;
+  /** Marcado del receso subarticular: solo lo activa el viewport axial. */
+  subarticularMode?: boolean;
+  onSubarticularPoint?: (point: { x: number; y: number }, frame: { width: number; height: number }) => void;
+  /** Letras de orientación del corte visible, o null si la serie no la declara. */
+  orientation?: OrientationLabels | null;
+  /** Espaciado del pixel en mm, [entre filas, entre columnas], para la barra de escala. */
+  pixelSpacingMm?: [number, number] | null;
   onMoveLandmark: (landmarkId: string, point: { x: number; y: number }) => void;
   onAddLandmark: (point: { x: number; y: number }) => void;
   onLandmarkAddComplete: () => void;
@@ -92,6 +100,7 @@ export type PlaneViewportProps = {
 export function PlaneViewport({
   plane, caseLabel, seriesName, model, modelLabel, inferenceLabel, spacingLabel,
   slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
+  subarticularMode, onSubarticularPoint, orientation, pixelSpacingMm,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
   measureTool, measureDraft, onMeasurePoint, onMeasureFreehand, annotations, aiMeasurements, aiMeasurableCount,
   derivedMeasurements, derivedMeasurableCount, referenceLine, referenceLineReason, onMoveMeasurePoint, annotatedIndices, onMoveMaskPoint,
@@ -109,6 +118,9 @@ export function PlaneViewport({
    * vez no se pueden mirar, y la de atrás solo gasta descargas de cortes.
    */
   const [cineOn, setCineOn] = useState(false);
+  // Ventana y nivel, reportados por el visor. Se muestran en la esquina de parametros,
+  // que es donde los pone un PACS y donde el medico los busca.
+  const [displayParams, setDisplayParams] = useState("");
   const cineDirection = useRef(1);
   const total = slice?.total ?? 0;
   const step = slice?.onStep;
@@ -173,7 +185,10 @@ export function PlaneViewport({
           <strong>{seriesName}</strong>
           {sliceLabel}
         </div>
-        <div className="rr-corner rr-corner-bl">{modelLabel}{"\n"}{inferenceLabel}</div>
+        {/* Parámetros de display: modelo, modo de inferencia y la ventana actual. */}
+        <div className="rr-corner rr-corner-bl">
+          {modelLabel}{"\n"}{inferenceLabel}{displayParams ? `\n${displayParams}` : ""}
+        </div>
         <div className="rr-corner rr-corner-br">
           {spacingLabel}
           {"\n"}<span className="rr-disclaimer">No apto para diagnóstico clínico</span>
@@ -184,6 +199,11 @@ export function PlaneViewport({
           onSelectLandmark={onSelectLandmark}
           readonly={readonly}
           addMode={addMode}
+          subarticularMode={subarticularMode}
+          onSubarticularPoint={onSubarticularPoint}
+          orientation={orientation}
+          pixelSpacingMm={pixelSpacingMm}
+          onDisplayParamsChange={setDisplayParams}
           onMoveLandmark={onMoveLandmark}
           onAddLandmark={onAddLandmark}
           onLandmarkAddComplete={onLandmarkAddComplete}

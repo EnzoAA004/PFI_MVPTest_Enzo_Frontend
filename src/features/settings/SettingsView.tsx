@@ -32,7 +32,9 @@ export function SettingsView({ user, onUserUpdated, onLogout }: Props) {
         </div>
       </section>
 
-      <nav className="settings-tabs" role="tablist" aria-label="Secciones de ajustes">
+      {/* div y no nav: role="tablist" ya describe el patron, y un landmark de navegacion
+          con rol de tablist encima le da al lector de pantalla dos semanticas en pugna. */}
+      <div className="settings-tabs" role="tablist" aria-label="Secciones de ajustes">
         <button
           aria-selected={tab === "preferencias"}
           className={tab === "preferencias" ? "is-active" : ""}
@@ -51,7 +53,7 @@ export function SettingsView({ user, onUserUpdated, onLogout }: Props) {
         >
           Ayuda y alcance
         </button>
-      </nav>
+      </div>
 
       {tab === "preferencias"
         ? <ProfessionalSettingsView user={user} onUserUpdated={onUserUpdated} onLogout={onLogout} />

@@ -1,10 +1,10 @@
 name: Frontend CI
 
+# Sin filtro de rama: una rama de feature como p10-6-hallazgos-degenerativos tiene que
+# ver el CI antes del merge, no despues.
 on:
   push:
-    branches: ["main"]
   pull_request:
-    branches: ["main"]
 
 jobs:
   build:
@@ -22,6 +22,17 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Las ~470 aserciones de scripts/*-tests.mjs. Los e2e de Playwright quedan fuera:
+      # necesitan la app levantada y el backend detras.
+      - name: Test
+        run: npm run test
 
       - name: Build
         run: npm run build
