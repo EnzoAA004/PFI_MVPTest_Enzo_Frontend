@@ -83,3 +83,12 @@
     gap: 0;
   }
 }
+
+.app-layout.is-immersive {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-layout.is-immersive .main-panel {
+  min-width: 0;
+  width: 100%;
+}
