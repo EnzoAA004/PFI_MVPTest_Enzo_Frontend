@@ -159,6 +159,7 @@ check("un numero de corte invalido se informa", () => {
 
 const viewSource = fs.readFileSync("src/components/StudyReviewView.tsx", "utf8");
 const apiSource = fs.readFileSync("src/multiplanarApi.ts", "utf8");
+const panelSource = fs.readFileSync("src/features/reading/DegenerativeFindingsPanel.tsx", "utf8");
 
 check("la clasificación se pide al Backend y nunca al módulo de IA directo", () => {
   assert.ok(apiSource.includes('"/api/ai/degenerative-findings/subarticular"'));
@@ -204,6 +205,18 @@ check("en modo demo no se ofrece pedir una clasificación", () => {
 
 check("el marcado solo se activa sobre el plano axial", () => {
   assert.ok(viewSource.includes('subarticularMode={subarticularMode && planeName === "axial"}'));
+});
+
+check("el estado vacío habla exclusivamente de clasificación subarticular", () => {
+  assert.ok(panelSource.includes("Aún no se realizó una clasificación subarticular en esta sesión."));
+  assert.ok(!panelSource.includes("Esta corrida no informa hallazgos degenerativos"));
+});
+
+check("el bloque conserva CTA y presenta el resultado como selección manual de investigación", () => {
+  assert.ok(panelSource.includes("Clasificación subarticular"));
+  assert.ok(panelSource.includes("Marcar receso subarticular"));
+  assert.ok(panelSource.includes("Nueva selección"));
+  assert.ok(panelSource.includes("Selección manual · Resultado de investigación"));
 });
 
 console.log(`subarticular-roi: ${passed} passed`);

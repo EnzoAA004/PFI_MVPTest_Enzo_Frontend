@@ -31,6 +31,7 @@ const display = load("src/features/reading/discFindingDisplay.ts", [
   "startsCollapsed",
   "DEPLOYMENT_ORDER",
   "DISC_FINDINGS_NOTICE",
+  "displayDiscFindingValue",
 ]);
 
 let passed = 0;
@@ -236,7 +237,15 @@ check("las ocho tareas tienen etiqueta de presentación", () => {
 check("deploymentStatus distingue validación, experimental y no soportado", () => {
   assert.equal(display.DEPLOYMENT_LABELS.supported_internal, "Validación interna");
   assert.equal(display.DEPLOYMENT_LABELS.experimental, "Experimental");
-  assert.equal(display.DEPLOYMENT_LABELS.not_product_supported, "No soportado para producto");
+  assert.equal(display.DEPLOYMENT_LABELS.not_product_supported, "Investigación");
+  assert.match(display.DEPLOYMENT_NOTES.not_product_supported, /No es una capacidad soportada para producto/);
+});
+
+check("present y absent cambian solo en display", () => {
+  assert.equal(display.displayDiscFindingValue("present"), "Presente");
+  assert.equal(display.displayDiscFindingValue("absent"), "Ausente");
+  assert.equal(display.displayDiscFindingValue("V"), "V");
+  assert.equal(parser.parseDiscFinding(finding()).label, "present");
 });
 
 check("not_product_supported queda plegado y separado", () => {
@@ -257,6 +266,51 @@ check("el panel P10.7 no contiene probabilities, confidence ni logits", () => {
   const panel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
   assert.doesNotMatch(panel, /probabilit|confidence|logit/i);
   assert.match(panel, /finding\.label/);
+});
+
+check("Pfirrmann permanece en el resumen expandible por nivel", () => {
+  const panel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
+  assert.match(panel, /pfirrmann_grade/);
+  assert.match(panel, />Pfirrmann</);
+  assert.match(panel, /<details className="rr-disc-level"/);
+});
+
+check("investigación se agrupa dinámicamente por deploymentStatus", () => {
+  const panel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
+  assert.match(panel, /finding\.deploymentStatus === "not_product_supported"/);
+  assert.match(panel, /Resultados de investigación/);
+  assert.doesNotMatch(panel, /findingType === "(?:modic_change|disc_herniation|spondylolisthesis)"/);
+});
+
+check("las explicaciones largas viven una sola vez fuera de los cinco niveles", () => {
+  const panel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
+  const governance = readFileSync("src/features/reading/GovernanceNotice.tsx", "utf8");
+  assert.doesNotMatch(panel, /DEPLOYMENT_NOTES/);
+  assert.equal((governance.match(/DEPLOYMENT_NOTES\[status\]/g) ?? []).length, 1);
+  assert.match(governance, /<details className="rr-ai-governance-details">/);
+});
+
+check("un status futuro mixto conserva indicador junto al finding", () => {
+  const panel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
+  assert.match(panel, /homogeneousStatuses\.get\(finding\.findingType\) === "mixed"/);
+  assert.match(panel, /DEPLOYMENT_LABELS\[finding\.deploymentStatus\]/);
+});
+
+check("el parser conserva íntegros ids, labels y deploymentStatus", () => {
+  const input = [
+    finding({ findingId: "supported", classification: { kind: "binary", label: "present" } }),
+    finding({ findingId: "experimental", findingType: "pfirrmann_grade", classification: { kind: "categorical", label: "V" }, evidence: { deploymentStatus: "experimental", evaluationDataset: "SPIDER_internal_test", externalValidationAvailable: false } }),
+    finding({ findingId: "research", findingType: "disc_herniation", evidence: { deploymentStatus: "not_product_supported", evaluationDataset: "SPIDER_internal_test", externalValidationAvailable: false } }),
+  ];
+  const parsed = parser.parseDiscDegenerativeFindings(disc(input));
+  assert.deepEqual(
+    parsed.map(({ findingId, label, deploymentStatus }) => ({ findingId, label, deploymentStatus })),
+    [
+      { findingId: "supported", label: "present", deploymentStatus: "supported_internal" },
+      { findingId: "experimental", label: "V", deploymentStatus: "experimental" },
+      { findingId: "research", label: "present", deploymentStatus: "not_product_supported" },
+    ],
+  );
 });
 
 console.log(`disc-degenerative-findings: ${passed} passed`);
