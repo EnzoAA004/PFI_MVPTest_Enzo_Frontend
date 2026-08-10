@@ -9,6 +9,9 @@ import { API_BASE_URL } from "../api";
 import { BackendApiError, fetchRunDicomExport, fetchThreeDProxyAsset, requestSubarticularClassification } from "../multiplanarApi";
 import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type SpineLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
+import { LevelNavigator } from "../features/reading/LevelNavigator";
+import { groupMeasurements } from "../features/reading/measurementGrouping";
+import { ReviewInspector, ReviewInspectorPanel, type ReviewInspectorTab } from "../features/reading/ReviewInspector";
 import { DegenerativeFindingsPanel } from "../features/reading/DegenerativeFindingsPanel";
 import { parseDegenerativeFindings, viewerPointToImagePixels, type DegenerativeFinding, type FindingSide } from "../features/reading/degenerativeFindings";
 import { DiscDegenerativeFindingsPanel } from "../features/reading/DiscDegenerativeFindingsPanel";
@@ -18,7 +21,7 @@ import {
   levelForSlice, missingFieldReason, parseSliceLevels, sideFromSliceOrientation, type SubarticularRoiDraft,
 } from "../features/reading/subarticularRoi";
 import { orientationLabels } from "../features/reading/orientationMarkers";
-import { MeasurementPanel, type PanelRow } from "../features/reading/MeasurementPanel";
+import { MeasurementGroupList, type PanelRow } from "../features/reading/MeasurementPanel";
 import { buildStructuredReport, entryText, type ReportEntry } from "../features/reading/structuredReport";
 import { PlaneViewport } from "../features/reading/PlaneViewport";
 import { instanceColor, instanceLabel, parseSegmentation, type Segmentation } from "../features/reading/segmentation";
@@ -58,6 +61,7 @@ const fallbackMasks: StudyMask[] = [
 
 type MeasurementRow = {
   id: string;
+  labelKey?: string;
   label: string;
   level: string;
   /** "study" cuando la medición no describe un nivel. Por defecto, "level". */
@@ -286,8 +290,10 @@ function firstPresent(...values: unknown[]) {
 function normalizeRow(item: any): MeasurementRow {
   const value = item.aiValue ?? item.value ?? "";
   const label = resolveMeasurementLabel(item);
+  const labelKey = typeof item.labelKey === "string" && item.labelKey.trim() ? item.labelKey.trim() : undefined;
   return {
     id: String(item.id ?? item.labelKey ?? item.label ?? "measurement"),
+    labelKey,
     label,
     level: String(item.level ?? "Nivel no informado"),
     levelScope: item.levelScope === "study" ? "study" : "level",
@@ -420,9 +426,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? run.reviewStatus ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
   const [saveMessage, setSaveMessage] = useState("");
-  // Right panel of the reading room: clinical findings first, review second, and
-  // everything technical kept out of the clinical surface entirely.
-  const [panelTab, setPanelTab] = useState<"findings" | "review" | "report" | "technical">("findings");
+  const [panelTab, setPanelTab] = useState<ReviewInspectorTab>("measurements");
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   /*
    * Geometría corregida por el revisor, por id de medición. Se guarda aparte de la
@@ -1184,6 +1188,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     return {
       id: item.id,
       label: item.label,
+      labelKey: item.labelKey ?? existing?.labelKey,
       level: item.level,
       value: reviewerValue ?? existing?.value ?? item.reviewerValue ?? item.aiValue ?? "",
       aiValue: item.aiValue ?? existing?.aiValue,
@@ -1440,7 +1445,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   );
   const levelUnassigned = allFindingsUnassigned(levelGroups);
   const activeGroup = levelGroups.find((group: LevelGroup) => group.key === selectedLevel);
-  const visibleRows = activeGroup ? resultRows.filter((row) => activeGroup.findings.some((finding) => finding.id === row.id)) : resultRows;
+  const visibleRows = activeGroup ? resultRows.filter((row) => activeGroup.findings.some((finding) => finding.id === row.id)) : [];
   /*
    * Nivel activo para anclar anotaciones de alcance "level". Es el nivel que el
    * revisor tiene seleccionado en el panel; si está mirando "sin nivel asignado"
@@ -1518,36 +1523,44 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    * Van en una sola lista porque son lo mismo visto desde dos orígenes, y separarlas
    * obligaría al médico a mirar en dos lados para saber qué se midió en L4-L5.
    */
-  const panelRows: PanelRow[] = [
-    ...visibleRows.map((row) => ({
+  const aiPanelRows: PanelRow[] = resultRows.map((row) => ({
       id: row.id,
-      labelKey: row.label,
+      labelKey: row.labelKey ?? row.label,
       label: row.label,
+      level: row.level,
+      levelScope: row.levelScope,
       unit: row.unit,
       aiValue: row.aiValue,
       reviewerValue: row.reviewerValue === "" ? null : row.reviewerValue,
       measurable: Boolean((measureGeometry[row.id] ?? row.points)?.length),
       source: "ai" as const,
       detail: [row.experimental ? "derivada" : "", row.detail ?? ""].filter(Boolean).join(" · ") || undefined,
-    })),
-    ...annotations
-      /*
-       * Una medición propia sin nivel se muestra siempre. Filtrarla por el nivel
-       * activo la hacía desaparecer apenas se elegía uno —que es lo normal al leer— y
-       * desde afuera se veía igual que si no se hubiera guardado.
-       */
-      .filter((item) => item.kind === "measurement" && (!activeLevel || !item.level || item.level === activeLevel))
-      .map((item) => ({
+    }));
+  const reviewerPanelRows: PanelRow[] = annotations
+    .filter((item) => item.kind === "measurement" && (!item.plane || item.plane === activePlano))
+    .map((item) => ({
         id: item.id,
         labelKey: item.measurementKind ?? "distance",
         label: item.text || TOOL_LABELS[(item.measurementKind ?? "distance") as MeasurementKind].name,
+        level: item.level,
+        levelScope: item.scope === "study" ? "study" : "level",
         unit: item.unit ?? "",
         aiValue: undefined,
         reviewerValue: item.value ?? null,
         measurable: (item.points?.length ?? 0) >= 1,
         source: "reviewer" as const,
-      })),
-  ];
+      }));
+  const visibleIds = new Set(visibleRows.map((row) => row.id));
+  const panelRows: PanelRow[] = activeGroup
+    ? [
+      ...aiPanelRows.filter((row) => visibleIds.has(row.id)),
+      // Una medición propia sin nivel permanece visible al seleccionar un nivel.
+      ...reviewerPanelRows.filter((row) => !activeLevel || !row.level || row.level === activeLevel),
+    ]
+    : [];
+  const allPanelRows: PanelRow[] = [...aiPanelRows, ...reviewerPanelRows];
+  const measurementGroups = groupMeasurements(panelRows);
+  const measurementSummaryGroups = groupMeasurements(allPanelRows);
 
   /** Cuántas mediciones tiene dibujables el nivel activo, para el panel de capas. */
   const aiMeasurableCount = resultRows.filter((row) => !row.experimental && (measureGeometry[row.id] ?? row.points)?.length).length;
@@ -1880,35 +1893,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           )}
         </main>
 
-        <aside className="rr-panel" aria-label="Panel de revisión">
-          <div className="rr-tabs" role="tablist">
-            <button className={panelTab === "findings" ? "is-active" : ""} onClick={() => setPanelTab("findings")} role="tab" aria-selected={panelTab === "findings"} type="button">Hallazgos</button>
-            <button className={panelTab === "review" ? "is-active" : ""} onClick={() => setPanelTab("review")} role="tab" aria-selected={panelTab === "review"} type="button">Revisión</button>
-            <button className={panelTab === "report" ? "is-active" : ""} onClick={() => setPanelTab("report")} role="tab" aria-selected={panelTab === "report"} type="button">Informe</button>
-            <button className={panelTab === "technical" ? "is-active" : ""} onClick={() => setPanelTab("technical")} role="tab" aria-selected={panelTab === "technical"} type="button">Técnico</button>
-          </div>
-
-          <div className="rr-panel-body">
-            {panelTab === "findings" && (
-              <>
+        <ReviewInspector activeTab={panelTab} onTabChange={setPanelTab}>
+          <ReviewInspectorPanel activeTab={panelTab} tab="measurements">
                 <p className="rr-section-title">Niveles</p>
-                <div className="rr-levels">
-                  {levelGroups.map((group: LevelGroup) => {
-                    const key = group.key;
-                    const active = selectedLevel === key;
-                    return (
-                      <button
-                        key={key}
-                        className={`rr-level rr-level-${group.kind}${active ? " is-active" : ""}${group.findings.length ? "" : " is-empty"}`}
-                        onClick={() => setSelectedLevel(active ? null : key)}
-                        type="button"
-                      >
-                        <span className="rr-level-name">{group.label}</span>
-                        <span className="rr-level-count">{group.findings.length ? `${group.findings.length}` : "—"}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <LevelNavigator groups={levelGroups} onSelect={setSelectedLevel} selectedKey={selectedLevel} />
                 {levelUnassigned && (
                   <p className="rr-note">
                     Ninguna medición de esta corrida pudo atribuirse a un nivel vertebral. Se listan
@@ -1925,7 +1913,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   línea, y tocarla la elige. Sin eso, con tres cotas sobre el mismo
                   disco no hay forma de saber cuál corresponde a cuál número.
                 */}
-                <MeasurementPanel
+                {!activeGroup && <p className="rr-note">Seleccioná un nivel o expandí una categoría del plano activo.</p>}
+                <MeasurementGroupList
+                  collapsible={!activeGroup}
                   emptyNote={hasPlaneWorkspaces && !persistedMeasurements.length
                     ? `La serie ${activePlano === "axial" ? "axial" : "sagital"} de este estudio no aporta mediciones. Cambiá de plano o medí a mano.`
                     : undefined}
@@ -1938,15 +1928,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   onHighlight={setHighlightedMeasurementId}
                   onSelect={setSelectedMeasurementId}
                   readonly={reviewLocked}
-                  rows={panelRows}
+                  groups={activeGroup ? measurementGroups : measurementSummaryGroups}
                   selectedId={selectedMeasurementId}
                 />
+          </ReviewInspectorPanel>
 
-                {/*
-                  Los hallazgos degenerativos van despues de las mediciones y no antes:
-                  una clasificacion candidata no puede encabezar la lectura por encima
-                  de las magnitudes que el revisor puede verificar sobre la imagen.
-                */}
+          <ReviewInspectorPanel activeTab={panelTab} tab="ai">
                 <section className="rr-ai-findings" aria-label="Resultados asistidos por IA">
                   <GovernanceNotice discLocalizationAvailable={discDegenerativeSnapshot.findings.length > 0} />
 
@@ -1979,7 +1966,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     selectedFindingId={selectedFindingId}
                   />
                 </section>
+          </ReviewInspectorPanel>
 
+          <ReviewInspectorPanel activeTab={panelTab} tab="more">
+            <div className="rr-more-sections">
+              <details className="rr-more-section" open>
+                <summary>Anotaciones</summary>
+                <div className="rr-more-section-body">
                 <p className="rr-section-title">Anotaciones</p>
                 {/*
                   El alcance se elige al escribir, no después: una observación del
@@ -2055,48 +2048,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 {annotationsError
                   ? <p className="rr-note rr-note-warn">{annotationsError}</p>
                   : <p className="rr-note">Se guardan junto con la revisión.</p>}
-              </>
-            )}
-
-            {panelTab === "review" && (
-              <>
-                {/*
-                  Las mediciones se corrigen en Hallazgos, sobre la fila que además
-                  resalta su cota en la imagen. Acá había una segunda lista con las
-                  cuarenta y tres de la corrida y un campo por cada una, sin nivel y
-                  sin imagen: dos lugares para lo mismo, y el que no mostraba la
-                  anatomía era justamente el que dejaba escribir.
-                */}
-                <label className="rr-field">
-                  <span>Notas de revisión</span>
-                  <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Hallazgos, observaciones o motivo del estado…" />
-                </label>
-
-                <label className="rr-field">
-                  <span>Estado</span>
-                  <select aria-label="Estado de revisión" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
-                    <option value="pendiente">Pendiente</option>
-                    <option value="observado">Observado</option>
-                    <option value="aceptado">Finalizado</option>
-                    <option value="descartado">Descartado</option>
-                  </select>
-                </label>
-
-                <div className="rr-actions">
-                  <button className="rr-ghost rr-secondary" disabled={saving} onClick={() => void save("pendiente")} type="button">Guardar borrador</button>
-                  <button className="rr-primary" disabled={confirmDisabled} onClick={() => void save(reviewStatus)} title={reviewStatus === "pendiente" ? "Usá Guardar borrador para conservar una revisión pendiente." : undefined} type="button">Confirmar</button>
                 </div>
-                {saveMessage && <p className="rr-ok" role="status">{saveMessage}</p>}
+              </details>
 
-                <AgentSummary agentDecision={run.aiOutput?.agentDecision ?? studyReview?.aiOutput?.agentDecision ?? run.agentDecision} />
-
-                <p className="rr-section-title">Auditoría</p>
-                <AuditTrail events={auditTrail.slice(0, 4)} />
-              </>
-            )}
-
-            {panelTab === "report" && (
-              <>
+              <details className="rr-more-section">
+                <summary>Informe / exportación</summary>
+                <div className="rr-more-section-body">
                 <p className="rr-section-title">Informe por nivel</p>
                 <p className="rr-note">
                   Cubre los dos planos del estudio. {structuredReport.flaggedTotal > 0
@@ -2171,11 +2128,19 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   Uso académico y de investigación sobre datos de-identificados. Requiere revisión
                   profesional y no constituye un diagnóstico.
                 </p>
-              </>
-            )}
+                </div>
+              </details>
 
-            {panelTab === "technical" && (
-              <>
+              <details className="rr-more-section">
+                <summary>Auditoría</summary>
+                <div className="rr-more-section-body">
+                  <AuditTrail events={auditTrail.slice(0, 4)} />
+                </div>
+              </details>
+
+              <details className="rr-more-section">
+                <summary>Técnico</summary>
+                <div className="rr-more-section-body">
                 <p className="rr-section-title">Inferencia</p>
                 <dl className="rr-tech">
                   <dt>Modo efectivo</dt><dd>{inferenceModeLabel(inferenceMode)}</dd>
@@ -2211,10 +2176,38 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <p className="rr-note">
                   Los landmarks del revisor son borradores locales y aún no se persisten.
                 </p>
-              </>
-            )}
-          </div>
-        </aside>
+                </div>
+              </details>
+            </div>
+          </ReviewInspectorPanel>
+
+          <ReviewInspectorPanel activeTab={panelTab} tab="review">
+            <label className="rr-field">
+              <span>Notas de revisión</span>
+              <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Hallazgos, observaciones o motivo del estado…" />
+            </label>
+
+            <label className="rr-field">
+              <span>Estado</span>
+              <select aria-label="Estado de revisión" value={reviewStatus} onChange={(event) => setReviewStatus(event.target.value as ReviewStatus)}>
+                <option value="pendiente">Pendiente</option>
+                <option value="observado">Observado</option>
+                <option value="aceptado">Finalizado</option>
+                <option value="descartado">Descartado</option>
+              </select>
+            </label>
+
+            <AgentSummary agentDecision={run.aiOutput?.agentDecision ?? studyReview?.aiOutput?.agentDecision ?? run.agentDecision} />
+
+            <div className="rr-review-footer">
+              <div className="rr-actions">
+                <button className="rr-ghost rr-secondary" disabled={saving} onClick={() => void save("pendiente")} type="button">Guardar borrador</button>
+                <button className="rr-primary" disabled={confirmDisabled} onClick={() => void save(reviewStatus)} title={reviewStatus === "pendiente" ? "Usá Guardar borrador para conservar una revisión pendiente." : undefined} type="button">Confirmar</button>
+              </div>
+              {saveMessage && <p className="rr-ok" role="status">{saveMessage}</p>}
+            </div>
+          </ReviewInspectorPanel>
+        </ReviewInspector>
       </div>
 
       {/* div y no footer: role="toolbar" ya describe la barra, y un contentinfo con rol
