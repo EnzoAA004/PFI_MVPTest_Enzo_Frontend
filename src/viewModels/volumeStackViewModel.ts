@@ -2,12 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { VolumeSlice, VolumeStack } from "../contracts/volumeStack";
 
 /**
- * P10.5-D.0 — slice-navigation state for the stack viewer.
- *
- * The pure functions below hold all the index math (clamp, step, initial slice)
- * so they can be unit-tested without React; `useVolumeStack` is a thin hook that
- * wires them to component state. Full scroll/keyboard/thumbnail navigation is
- * P10.5-D.1 and builds on top of this.
+ * Slice-navigation state for the stack viewer. Pure index helpers stay outside
+ * the React hook so clamping and selection remain independently testable.
  */
 export function clampSliceIndex(index: number, sliceCount: number): number {
   const max = Math.max(0, sliceCount - 1);

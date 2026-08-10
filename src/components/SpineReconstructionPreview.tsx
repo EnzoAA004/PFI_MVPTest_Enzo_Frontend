@@ -8,7 +8,7 @@ import { GenericAtlasPreview, type LegacyThreeDContract } from "./GenericAtlasPr
  * state — available, blocked or errored) the generic atlas never renders,
  * so the clinical review flow can never show a non-patient-specific mesh as
  * if it were a result. `threeD` (legacy shape) is kept only for existing
- * callers that predate P9-C.5 and never pass `proxy`.
+ * callers that still provide only the legacy `threeD` payload.
  */
 type Props = {
   threeD?: LegacyThreeDContract | null;

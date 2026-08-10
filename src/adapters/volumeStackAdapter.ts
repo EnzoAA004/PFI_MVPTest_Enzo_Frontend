@@ -6,10 +6,8 @@ import { resolvePlaneAssetUrls } from "../inferenceReadiness";
 import { aiAssetUrl } from "../multiplanarApi";
 
 /**
- * P10.5-D.0 — builds the viewer-shell VolumeStack from the P10.5-A canonical run.
- * Pure: asset-URL resolution is injected so navigation/slice logic can be tested
- * without React or network. Only the AI-selected slice gets a real image/overlay;
- * the rest are navigable placeholders until P10.5-B/C expose the slice catalogue.
+ * Builds the viewer stack from a canonical run. Asset resolution is injected so
+ * slices without published assets remain explicit placeholders.
  */
 export type PlaneSliceAssets = { image?: string; overlay?: string };
 export type PlaneAssetResolver = (planeRun: CanonicalPlaneRun, plane: Plane) => PlaneSliceAssets;

@@ -91,7 +91,7 @@ export function ProfessionalSettingsView({ user, onUserUpdated, onLogout }: Prof
               </select>
             </label>
           </div>
-          <ToggleSwitch checked={preferences.notifications} label="Notificaciones" description="Preferencia local. No hay backend de notificaciones en este ticket." onChange={() => setPreferences((current) => ({ ...current, notifications: !current.notifications }))} />
+          <ToggleSwitch checked={preferences.notifications} label="Notificaciones" description="Preferencia local. El envío de notificaciones todavía no está disponible." onChange={() => setPreferences((current) => ({ ...current, notifications: !current.notifications }))} />
           <p className="settings-persistence-note">Preferencias guardadas en este navegador; persistencia backend pendiente.</p>
         </article>
 

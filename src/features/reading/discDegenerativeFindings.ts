@@ -1,10 +1,9 @@
 /**
  * Hallazgos degenerativos discales — contrato `pfi.disc-degenerative-findings.v1` (P10.7).
  *
- * Va aparte del de P10.6 (`pfi.degenerative-findings.v1`) a propósito, como pide el
- * handoff: uno clasifica estenosis —central, foraminal, subarticular— con una escala de
- * severidad, y el otro clasifica ocho variables del disco con escalas incompatibles entre
- * sí. Mezclarlos obligaría a inventar una severidad común que no existe.
+ * Va aparte del contrato de estenosis (`pfi.degenerative-findings.v1`): clasifica ocho
+ * variables del disco con escalas incompatibles entre sí. Mezclarlos obligaría a inventar
+ * una severidad común que no existe.
  *
  * ## Lo que más se protege
  *
@@ -214,7 +213,7 @@ export function sortDiscFindings(findings: DiscFinding[]): DiscFinding[] {
   });
 }
 
-/** Los hallazgos de un nivel, para poder listarlos agrupados como pide el handoff. */
+/** Agrupa los hallazgos por nivel para su presentación y revisión conjunta. */
 export function groupDiscFindingsByLevel(findings: DiscFinding[]): { level: DiscLevel; findings: DiscFinding[] }[] {
   const byLevel = new Map<DiscLevel, DiscFinding[]>();
   for (const finding of sortDiscFindings(findings)) {
