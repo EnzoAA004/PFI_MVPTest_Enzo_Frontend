@@ -212,11 +212,15 @@ check("el estado vacío habla exclusivamente de clasificación subarticular", ()
   assert.ok(!panelSource.includes("Esta corrida no informa hallazgos degenerativos"));
 });
 
-check("el bloque conserva CTA y presenta el resultado como selección manual de investigación", () => {
+check("el bloque conserva CTA y presenta researchOnly mediante disclosure", () => {
   assert.ok(panelSource.includes("Clasificación subarticular"));
   assert.ok(panelSource.includes("Marcar receso subarticular"));
   assert.ok(panelSource.includes("Nueva selección"));
-  assert.ok(panelSource.includes("Selección manual · Resultado de investigación"));
+  assert.ok(panelSource.includes("Selección manual"));
+  assert.ok(panelSource.includes("ⓘ Alcance de la clasificación"));
+  assert.ok(panelSource.includes("finding.researchOnly"));
+  assert.ok(panelSource.includes("análisis de investigación"));
+  assert.ok(!panelSource.includes("Manual · Investigación"));
 });
 
 console.log(`subarticular-roi: ${passed} passed`);

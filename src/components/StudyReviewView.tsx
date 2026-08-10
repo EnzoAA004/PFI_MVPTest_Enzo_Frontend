@@ -16,6 +16,7 @@ import { DegenerativeFindingsPanel } from "../features/reading/DegenerativeFindi
 import { parseDegenerativeFindings, viewerPointToImagePixels, type DegenerativeFinding, type FindingSide } from "../features/reading/degenerativeFindings";
 import { DiscDegenerativeFindingsPanel } from "../features/reading/DiscDegenerativeFindingsPanel";
 import { GovernanceNotice } from "../features/reading/GovernanceNotice";
+import { WorkspaceGovernanceNotice } from "../features/reading/WorkspaceGovernanceNotice";
 import { DiscDegenerativeContractError, parsePersistedDiscDegenerativeFindings, type DiscFinding } from "../features/reading/discDegenerativeFindings";
 import {
   levelForSlice, missingFieldReason, parseSliceLevels, sideFromSliceOrientation, type SubarticularRoiDraft,
@@ -521,7 +522,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
   const discDegenerativeSnapshot = useMemo<{ findings: DiscFinding[]; unavailable?: string; contractError?: string }>(() => {
     if (demoMode || !run.metricsSnapshot?.discDegenerativeFindings) {
-      return { findings: [], unavailable: "Esta corrida no tiene hallazgos P10.7 persistidos." };
+      return { findings: [], unavailable: "Esta corrida no tiene hallazgos discales persistidos." };
     }
     try {
       return { findings: parsePersistedDiscDegenerativeFindings(run.metricsSnapshot) };
@@ -530,7 +531,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         findings: [],
         contractError: error instanceof DiscDegenerativeContractError
           ? error.message
-          : "El snapshot persistido no coincide con el contrato P10.7.",
+          : "El snapshot persistido no coincide con el formato de hallazgos discales.",
       };
     }
   }, [demoMode, run.metricsSnapshot]);
@@ -1709,6 +1710,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             {" · "}{subjectLabel}
           </span>
         </div>
+        <WorkspaceGovernanceNotice />
         <div className="rr-topbar-right">
           {/*
             1×2 solo se ofrece cuando el estudio trae axial: sin axial la mitad

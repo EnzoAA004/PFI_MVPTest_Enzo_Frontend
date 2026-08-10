@@ -191,7 +191,6 @@ export function PlaneViewport({
         </div>
         <div className="rr-corner rr-corner-br">
           {spacingLabel}
-          {"\n"}<span className="rr-disclaimer">No apto para diagnóstico clínico</span>
         </div>
         <MriSliceViewer
           model={model}

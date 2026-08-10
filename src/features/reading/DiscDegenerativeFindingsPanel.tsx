@@ -8,7 +8,6 @@ import {
 } from "./discDegenerativeFindings";
 import {
   DEPLOYMENT_LABELS,
-  DEPLOYMENT_ORDER,
   DISC_FINDING_LABELS,
   displayDiscFindingValue,
 } from "./discFindingDisplay";
@@ -37,8 +36,8 @@ function compactDiscSummary(findings: DiscFinding[]): string {
   const discFindings = findings.filter((finding) => finding.findingType !== "pfirrmann_grade");
   if (!discFindings.length) return "Sin datos";
   const positives = discFindings.filter((finding) => finding.label !== "absent" && finding.label !== "none").length;
-  if (!positives) return "Sin positivos";
-  return positives === 1 ? "1 positivo" : `${positives} positivos`;
+  if (!positives) return "Sin hallazgos";
+  return positives === 1 ? "1 hallazgo" : `${positives} hallazgos`;
 }
 
 function FindingRows({
@@ -71,47 +70,29 @@ export function DiscDegenerativeFindingsPanel({ findings, contractError, unavail
   const groups = new Map(groupDiscFindingsByLevel(findings).map((group) => [group.level, group.findings]));
   const homogeneousStatuses = statusByFindingType(findings);
   const researchFindings = findings.filter((finding) => finding.deploymentStatus === "not_product_supported");
-  const homogeneousClinicalTypes = DISC_FINDING_TYPES.filter((type) => {
-    const status = homogeneousStatuses.get(type);
-    return status && status !== "mixed" && status !== "not_product_supported";
-  });
-
   return (
-    <section className="rr-disc-findings" aria-label="Hallazgos discales P10.7">
+    <section className="rr-disc-findings" aria-label="Hallazgos discales asistidos por IA">
       <div className="rr-disc-section-head">
-        <p className="rr-section-title">Hallazgos discales P10.7</p>
+        <p className="rr-section-title">Hallazgos discales</p>
       </div>
 
       {contractError && (
         <p className="rr-disc-contract-error" role="alert">
-          No se muestran resultados P10.7: {contractError}
+          No se muestran los hallazgos discales: {contractError}
         </p>
       )}
       {!contractError && !findings.length && (
         <p className="rr-findings-empty">
-          {unavailableReason ?? "Esta corrida no tiene hallazgos P10.7 persistidos."}
+          {unavailableReason ?? "Esta corrida no tiene hallazgos discales persistidos."}
         </p>
       )}
 
       {!contractError && findings.length > 0 && (
         <>
-          <div className="rr-disc-status-groups" aria-label="Estados de validación por tipo de hallazgo">
-            {DEPLOYMENT_ORDER.filter((status) => status !== "not_product_supported").map((status) => {
-              const types = homogeneousClinicalTypes.filter((type) => homogeneousStatuses.get(type) === status);
-              if (!types.length) return null;
-              return (
-                <div className="rr-disc-status-group" key={status}>
-                  <span className={`rr-disc-deployment is-${status}`}>{DEPLOYMENT_LABELS[status]}</span>
-                  <span>{types.map((type) => DISC_FINDING_LABELS[type]).join(" · ")}</span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="rr-disc-overview" role="group" aria-label="Resumen P10.7 por nivel">
+          <div className="rr-disc-overview" role="group" aria-label="Resumen de hallazgos discales por nivel">
             <div className="rr-disc-overview-head" aria-hidden="true">
               <span>Nivel</span>
-              <span>Disco</span>
+              <span>Hallazgos</span>
               <span>Pfirrmann</span>
             </div>
             {DISC_LEVELS.map((level) => {
@@ -139,11 +120,11 @@ export function DiscDegenerativeFindingsPanel({ findings, contractError, unavail
           {researchFindings.length > 0 && (
             <details className="rr-disc-research">
               <summary>
-                <span>Resultados de investigación</span>
-                <span className="rr-disc-research-count">{researchFindings.length}</span>
+                <span>Más resultados IA</span>
               </summary>
               <p className="rr-disc-research-note">
-                No son una capacidad soportada para producto. Se conservan para análisis y trazabilidad.
+                Estas capacidades se conservan para análisis de investigación y todavía no
+                forman parte del conjunto principal de funciones soportadas.
               </p>
               {DISC_LEVELS.map((level) => {
                 const levelFindings = researchFindings.filter((finding) => finding.level === level);
@@ -159,7 +140,7 @@ export function DiscDegenerativeFindingsPanel({ findings, contractError, unavail
           )}
 
           <p className="rr-findings-foot">
-            La revisión se registra sobre la corrida completa. El contrato actual no permite editar cada finding P10.7 por separado.
+            La revisión se registra sobre la corrida completa; los hallazgos se revisan como conjunto.
           </p>
         </>
       )}

@@ -118,13 +118,38 @@ check("cambiar tab oculta sin desmontar contenido", () => {
   assert.equal(inspectorSource.includes("activeTab === tab &&"), false);
 });
 
-check("Hallazgos IA contiene P10.7 y subarticular", () => {
+check("Hallazgos IA contiene hallazgos discales y subarticular", () => {
   const start = reviewSource.indexOf('tab="ai"');
   const end = reviewSource.indexOf("</ReviewInspectorPanel>", start);
   const aiPanel = reviewSource.slice(start, end);
   assert.ok(aiPanel.includes("DiscDegenerativeFindingsPanel"));
   assert.ok(aiPanel.includes("DegenerativeFindingsPanel"));
   assert.ok(aiPanel.includes("submitRoi"));
+});
+
+check("governance clínico usa disclosure y no invade el viewport", () => {
+  const workspaceNotice = readFileSync("src/features/reading/WorkspaceGovernanceNotice.tsx", "utf8");
+  const viewport = readFileSync("src/features/reading/PlaneViewport.tsx", "utf8");
+  const discPanel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
+  assert.match(workspaceNotice, /IA asistida · Revisión profesional requerida/);
+  assert.match(workspaceNotice, /<details/);
+  assert.doesNotMatch(viewport, /No apto para diagnóstico clínico/);
+  assert.doesNotMatch(discPanel, /Hallazgos discales P10\.7/);
+  assert.doesNotMatch(discPanel, /\bMVP\b/);
+});
+
+check("subarticular conserva flujo y desplaza researchOnly al alcance contextual", () => {
+  const panel = readFileSync("src/features/reading/DegenerativeFindingsPanel.tsx", "utf8");
+  assert.match(panel, /Selección manual/);
+  assert.match(panel, /ⓘ Alcance de la clasificación/);
+  assert.match(panel, /finding\.researchOnly/);
+  assert.doesNotMatch(panel, /Manual · Investigación/);
+  for (const callback of ["roi.onToggle", "roi.onChangeSide", "roi.onChangeLevel", "roi.onSubmit", "roi.onCancel"]) {
+    assert.ok(panel.includes(callback), callback);
+  }
+  for (const field of ["draft.x", "draft.y", "draft.side", "draft.level", "draft.instanceNumber"]) {
+    assert.ok(panel.includes(field), field);
+  }
 });
 
 check("selectedLevel, drafts y slice siguen poseídos por StudyReviewView", () => {
