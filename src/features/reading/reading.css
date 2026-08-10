@@ -740,7 +740,9 @@
     background: var(--border);
   }
 
-  @media (min-width: 1600px) {
+  /* Desktop: incluso con el inspector abierto, dos columnas de ~500 px ofrecen
+     una lectura comparativa mejor que dos viewports apilados de poca altura. */
+  @media (min-width: 1280px) {
     .rr-stage[data-layout="dual"] {
       grid-template-rows: none;
       grid-template-columns: 1fr 1fr;

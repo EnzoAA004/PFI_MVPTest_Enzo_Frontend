@@ -21,6 +21,7 @@ const appSource = readFileSync("src/App.tsx", "utf8");
 const shellSource = readFileSync("src/components/AppShell.tsx", "utf8");
 const reviewSource = readFileSync("src/components/StudyReviewView.tsx", "utf8");
 const viewportSource = readFileSync("src/features/reading/PlaneViewport.tsx", "utf8");
+const gridSource = readFileSync("src/features/reading/ViewportGrid.tsx", "utf8");
 const cssSource = readFileSync("src/features/reading/reading.css", "utf8");
 
 let passed = 0;
@@ -115,9 +116,11 @@ check("toolbars permanecen accesibles sin scrollbar invisible", () => {
   assert.doesNotMatch(cssSource, /viewer-controls::-[\s\S]{0,120}display: none/);
 });
 
-check("responsive cubre notebook 1366, workstation 1920 y modo limitado", () => {
+check("desktop 1366 muestra ambos presets duales en columnas", () => {
+  assert.match(gridSource, /preset === "reading" \? "single" : "dual"/);
   assert.match(cssSource, /clamp\(340px, 22vw, 420px\)/);
-  assert.match(cssSource, /@media \(min-width: 1600px\)/);
+  assert.match(cssSource, /@media \(min-width: 1280px\)[\s\S]*?\.rr-stage\[data-layout="dual"\][\s\S]*?grid-template-columns:\s*1fr 1fr/);
+  assert.doesNotMatch(cssSource, /@media \(min-width: 1600px\)[\s\S]*?\.rr-stage\[data-layout="dual"\]/);
   assert.match(cssSource, /@media \(max-width: 1399px\)/);
   assert.match(cssSource, /@media \(max-width: 1023px\)/);
   assert.match(cssSource, /height: 100dvh/);
