@@ -53,7 +53,7 @@ async function backendErrorFrom(response: Response, path: string, traceId: strin
   return new BackendApiError(message, response.status, path, traceId, code);
 }
 
-async function multiplanarRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export async function multiplanarRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const traceId = generateTraceId("frontend-multiplanar");
   const isFormData = init?.body instanceof FormData;
   const requestInit = (): RequestInit => ({
