@@ -15,7 +15,7 @@ const CROSS_TAB_CHANNEL = "pfi-session-sync";
 
 // IndexedDB (where the session lives, see authStorage.ts) doesn't fire the
 // native `storage` event across tabs the way localStorage does, so
-// BroadcastChannel is the cross-tab equivalent the ticket calls for.
+// BroadcastChannel propagates session invalidation across open tabs.
 function crossTabChannel(): BroadcastChannel | undefined {
   if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") return undefined;
   try {

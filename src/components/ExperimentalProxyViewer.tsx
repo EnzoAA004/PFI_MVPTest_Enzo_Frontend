@@ -12,9 +12,8 @@ type Props = {
   viewModel: ThreeDProxyViewModel;
   onRetry?: () => void;
   /**
-   * Optional controlled selection, for 2D<->3D coordination (P9-C.5 gap
-   * closure): when provided by the caller, structure selection is driven
-   * externally (e.g. from a 2D landmark pick) instead of local-only state.
+   * Optional controlled selection for 2D/3D coordination. When supplied,
+   * structure selection is driven by the parent instead of local-only state.
    */
   selectedStructure?: string | null;
   onSelectStructure?: (label: string | null) => void;

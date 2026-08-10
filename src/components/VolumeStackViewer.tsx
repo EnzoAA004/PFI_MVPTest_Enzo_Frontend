@@ -3,11 +3,8 @@ import { useVolumeStack } from "../viewModels/volumeStackViewModel";
 import { StatusBadge } from "./StatusBadge";
 
 /**
- * P10.5-D.0 — viewer shell for a .mha stack. Renders the current slice (real
- * image only for the AI-selected slice; an explicit placeholder for the rest,
- * per the Handoff rule against fabricated overlays) with slice index/total and
- * minimal navigation. Scroll/keyboard/thumbnails/zoom are P10.5-D.1; live
- * per-slice previews arrive with P10.5-C.
+ * Viewer shell for a volume stack. It renders only previews supplied by the
+ * backend and uses an explicit placeholder instead of fabricating overlays.
  */
 function planeLabel(plane: VolumeStack["plane"]): string {
   return plane === "sagittal" ? "Sagital" : "Axial";
@@ -36,8 +33,8 @@ export function VolumeStackViewer({ stack }: { stack: VolumeStack }) {
           <img src={slice.imageUrl} alt={`Corte ${nav.currentIndex + 1} de ${nav.total} (${planeLabel(stack.plane)})`} />
         ) : (
           <div className="volume-stack-placeholder">
-            Sin preview para este corte todavía (se genera en P10.5-B/C). Solo el corte analizado
-            por IA ({stack.selectedSliceIndex + 1}/{nav.total}) tiene imagen.
+            Sin preview para este corte todavía. Solo el corte analizado por IA
+            ({stack.selectedSliceIndex + 1}/{nav.total}) tiene imagen.
           </div>
         )}
       </div>

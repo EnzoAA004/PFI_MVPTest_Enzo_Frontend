@@ -1,20 +1,9 @@
-import { API_BASE_URL, ApiError } from "../api";
-import { authHeaders, refreshDoctorSession } from "../authClient";
-import { isAuthorizedBackendUrl } from "../security/originPolicy";
-import { toSafeFrontendError } from "../security/safeError";
-import { generateTraceId } from "../security/traceId";
 import type { ViewKey } from "../appTypes";
+import { fetchTechnicalReportPayload } from "../technicalReportApi";
 import { ChevronDown, LogOut, UserCircle, UserCog } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-/**
- * Global header: identity and session only.
- *
- * The global search box and the "Nuevo análisis" button were removed — both were
- * duplicated by the worklist, and the search input had no value/onChange at all,
- * so the most prominent control in the app filtered nothing. Starting an analysis
- * lives in the sidebar and in the worklist, where the studies are.
- */
+/** Global navigation, identity, session and technical-report entry point. */
 interface HeaderProps {
   activeView: ViewKey;
   onChangeView: (view: ViewKey) => void;
@@ -165,7 +154,6 @@ export function Header({ activeView, onChangeView, currentRunId, userName, onLog
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const showTechnicalReport = activeView === "review" && Boolean(currentRunId);
-  const technicalReportUrl = currentRunId ? `${API_BASE_URL}/api/ai/agent/report/${currentRunId}` : "";
 
   useEffect(() => {
     if (!profileMenuOpen) return undefined;
@@ -183,35 +171,15 @@ export function Header({ activeView, onChangeView, currentRunId, userName, onLog
     };
   }, [profileMenuOpen]);
 
-  async function fetchTechnicalReportPayload() {
-    if (!isAuthorizedBackendUrl(technicalReportUrl)) {
-      throw new ApiError("Origen del reporte técnico no autorizado.", { path: technicalReportUrl });
-    }
-    const traceId = generateTraceId("frontend-report");
-    const requestInit = (): RequestInit => ({
-      headers: { "Content-Type": "application/json", "X-Trace-Id": traceId, ...authHeaders() },
-    });
-    let response = await fetch(technicalReportUrl, requestInit());
-    if (response.status === 401) {
-      await refreshDoctorSession();
-      response = await fetch(technicalReportUrl, requestInit());
-    }
-    if (!response.ok) {
-      const safe = toSafeFrontendError(response.status, { traceId });
-      throw new ApiError(safe.message, { status: response.status, path: technicalReportUrl, traceId });
-    }
-    return response.json();
-  }
-
   async function openTechnicalReport() {
-    if (!technicalReportUrl) return;
+    if (!currentRunId) return;
     const previewWindow = window.open("", "_blank");
     if (previewWindow) {
       previewWindow.opener = null;
       writePreviewWindow(previewWindow, "Cargando reporte técnico", "Consultando el backend con la sesión autenticada. Esta pestaña se actualizará automáticamente.");
     }
     try {
-      const payload = await fetchTechnicalReportPayload();
+      const payload = await fetchTechnicalReportPayload(currentRunId);
       const html = renderTechnicalReportHtml(payload);
       const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       const blobUrl = URL.createObjectURL(blob);

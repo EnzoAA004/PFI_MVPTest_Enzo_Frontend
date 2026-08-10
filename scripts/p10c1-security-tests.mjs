@@ -132,8 +132,8 @@ test("16 traceId.generateTraceId produce IDs acotados y sanitizeIncomingTraceId 
   assert.match(traceIdSrc, /TRACE_ID_PATTERN\.test\(trimmed\)/);
 });
 
-test("17 los modulos HTTP que antes carecian de traceId ahora envian X-Trace-Id (authClient, studyApi, subjectHistoryApi, pipelineContractApi, reviewPersistenceApi, Header)", () => {
-  for (const file of ["src/authClient.ts", "src/studyApi.ts", "src/subjectHistoryApi.ts", "src/pipelineContractApi.ts", "src/reviewPersistenceApi.ts", "src/components/Header.tsx"]) {
+test("17 los modulos HTTP adjuntan un traceId generado por el modulo centralizado", () => {
+  for (const file of ["src/authClient.ts", "src/studyApi.ts", "src/subjectHistoryApi.ts", "src/pipelineContractApi.ts", "src/reviewPersistenceApi.ts", "src/technicalReportApi.ts"]) {
     const content = src(file);
     assert.match(content, /"X-Trace-Id":\s*traceId/, `${file} debe adjuntar X-Trace-Id`);
     assert.match(content, /generateTraceId\(/, `${file} debe generar el traceId con el modulo centralizado`);
@@ -204,8 +204,9 @@ test("22 api.ts valida API_BASE_URL al arrancar (sin credenciales embebidas, HTT
 
 test("23 el reporte tecnico HTML local escapa todo campo dinamico (escapeHtml) y valida el origen del backend antes de descargar el payload", () => {
   const header = src("src/components/Header.tsx");
+  const client = src("src/technicalReportApi.ts");
   assert.match(header, /function escapeHtml\(value: unknown\)/);
-  assert.match(header, /if \(!isAuthorizedBackendUrl\(technicalReportUrl\)\) \{/);
+  assert.match(client, /if \(!isAuthorizedBackendUrl\(url\)\) \{/);
   const rendererBody = header.slice(header.indexOf("function renderTechnicalReportHtml"), header.indexOf("export function Header"));
   const dynamicFields = ["payload.runId", "payload.caseId", "payload.patientId", "payload.studyDate", "payload.plane", "payload.modelKey"];
   for (const field of dynamicFields) {

@@ -7,7 +7,7 @@ import { parseThreeDProxyMeshAsset, ThreeDProxyAssetError } from "../adapters/th
 import { canonicalThreeDToProxyViewModel, type ThreeDProxyAssetFetchState } from "../viewModels/threeDProxyViewModel";
 import { API_BASE_URL } from "../api";
 import { BackendApiError, fetchRunDicomExport, fetchThreeDProxyAsset, requestSubarticularClassification } from "../multiplanarApi";
-import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewPriority, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type SpineLevel } from "../clinicalDisplay";
+import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel, displayMeasurementLabelShort, displayMeasurementLevel, displayModality, displayReviewStatus, displayStructureLabel, displayTechnicalReadiness, displayUnit, type SpineLevel } from "../clinicalDisplay";
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
 import { DegenerativeFindingsPanel } from "../features/reading/DegenerativeFindingsPanel";
 import { parseDegenerativeFindings, viewerPointToImagePixels, type DegenerativeFinding, type FindingSide } from "../features/reading/degenerativeFindings";
@@ -36,6 +36,7 @@ import {
   type MeasurementKind,
 } from "../features/reading/measurements";
 import { SpineReconstructionPreview } from "./SpineReconstructionPreview";
+import { StudyMetadataDialog } from "./StudyMetadataDialog";
 
 const fallbackSeries: StudySeries[] = [
   { id: "series-sag-t2", name: "Sagital T2", plane: "sagittal", sequence: "T2", sliceCount: 96, selectedSlice: 58, status: "ai_output_pending" },
@@ -489,8 +490,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     review: run.review ?? selectedDetail?.review,
   };
 
-  // P9-C.5 Parte B: threeD reabierto desde el snapshot durable del backend
-  // (canonicalRun/metricsSnapshot), nunca desde el AI Module en vivo. Mismo
+  // El proxy 3D se reabre desde el snapshot durable del backend
+  // (canonicalRun/metricsSnapshot), nunca desde el AI Module en vivo. Usa el mismo
   // parser que el flujo de analisis en curso (multiplanarRunAdapter.ts) porque
   // el backend persiste threeD con la forma exacta que ya produce el AI Module.
   const persistedThreeD = useMemo(
@@ -2241,58 +2242,18 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       </div>
 
       {metadataDialogOpen && (
-        <div className="rr-dialog-backdrop" role="presentation">
-          <section className="rr-dialog" role="dialog" aria-modal="true" aria-labelledby="metadata-dialog-title">
-            <h2 id="metadata-dialog-title">Editar datos del estudio</h2>
-            <div className="rr-dialog-grid">
-              <label className="rr-field rr-span-all">
-                <span>Referencia de paciente de-identificada</span>
-                <input
-                  value={subjectRefLocked ? currentSubjectRef : metadataDraft.subjectRef}
-                  readOnly={subjectRefLocked}
-                  onBlur={() => setMetadataError(subjectRefLocked ? "" : validateSubjectRef(metadataDraft.subjectRef) ?? "")}
-                  onChange={(event) => {
-                    if (subjectRefLocked) return;
-                    setMetadataDraft((current) => ({ ...current, subjectRef: event.target.value }));
-                    setMetadataError("");
-                  }}
-                  placeholder="SPIDER-101"
-                  aria-invalid={Boolean(metadataError)}
-                />
-              </label>
-              {subjectRefLocked && <p className="rr-note rr-span-all">La referencia de-identificada ya fue asignada y no puede reemplazarse. Esto evita vincular estudios de personas distintas.</p>}
-              <label className="rr-field">
-                <span>Fecha del estudio</span>
-                <input type="date" value={metadataDraft.studyDate} onChange={(event) => setMetadataDraft((current) => ({ ...current, studyDate: event.target.value }))} />
-              </label>
-              <label className="rr-field">
-                <span>Modalidad</span>
-                <select value={metadataDraft.modality} onChange={(event) => setMetadataDraft((current) => ({ ...current, modality: event.target.value }))}>
-                  <option value="">No informada</option>
-                  <option value="MRI">Resonancia magnética</option>
-                </select>
-              </label>
-              <label className="rr-field">
-                <span>Prioridad</span>
-                <select value={metadataDraft.reviewPriority} onChange={(event) => setMetadataDraft((current) => ({ ...current, reviewPriority: event.target.value as StudyMetadataDraft["reviewPriority"] }))}>
-                  <option value="low">{displayReviewPriority("low")}</option>
-                  <option value="medium">{displayReviewPriority("medium")}</option>
-                  <option value="high">{displayReviewPriority("high")}</option>
-                </select>
-              </label>
-              <label className="rr-field rr-span-all">
-                <span>Descripción</span>
-                <input maxLength={200} value={metadataDraft.description} onChange={(event) => setMetadataDraft((current) => ({ ...current, description: event.target.value }))} placeholder="RM lumbar sagital T2" />
-              </label>
-            </div>
-            <p className="rr-note">No ingreses nombre, DNI, correo, teléfono, domicilio ni historia clínica real.</p>
-            {metadataError && <p className="rr-error" role="alert">{metadataError}</p>}
-            <div className="rr-actions">
-              <button className="rr-ghost rr-secondary" onClick={() => setMetadataDialogOpen(false)} disabled={metadataSaving} type="button">Cancelar</button>
-              <button className="rr-primary" onClick={() => void saveStudyMetadata()} disabled={metadataSaving} type="button">{metadataSaving ? "Guardando…" : "Guardar"}</button>
-            </div>
-          </section>
-        </div>
+        <StudyMetadataDialog
+          currentSubjectRef={currentSubjectRef}
+          draft={metadataDraft}
+          error={metadataError}
+          saving={metadataSaving}
+          subjectRefLocked={subjectRefLocked}
+          onCancel={() => setMetadataDialogOpen(false)}
+          onDraftChange={setMetadataDraft}
+          onErrorClear={() => setMetadataError("")}
+          onSave={() => { void saveStudyMetadata(); }}
+          onSubjectRefBlur={() => setMetadataError(subjectRefLocked ? "" : validateSubjectRef(metadataDraft.subjectRef) ?? "")}
+        />
       )}
     </div>
   );

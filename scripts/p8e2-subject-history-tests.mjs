@@ -137,14 +137,15 @@ function validHistoryPayload(overrides = {}) {
 
 test("P8-E2.1 A subjectRef null queda editable en metadata", () => {
   const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
+  const dialog = readFileSync(join(root, "src/components/StudyMetadataDialog.tsx"), "utf8");
   assert.match(source, /const subjectRefLocked = Boolean\(currentSubjectRef\)/);
-  assert.match(source, /readOnly=\{subjectRefLocked\}/);
+  assert.match(dialog, /readOnly=\{subjectRefLocked\}/);
 });
 
 test("P8-E2.1 B subjectRef existente queda readOnly con aviso de inmutabilidad", () => {
-  const source = readFileSync(join(root, "src/components/StudyReviewView.tsx"), "utf8");
-  assert.match(source, /La referencia de-identificada ya fue asignada y no puede reemplazarse/);
-  assert.match(source, /Esto evita vincular estudios de personas distintas/);
+  const dialog = readFileSync(join(root, "src/components/StudyMetadataDialog.tsx"), "utf8");
+  assert.match(dialog, /La referencia de-identificada ya fue asignada y no puede reemplazarse/);
+  assert.match(dialog, /Esto evita vincular estudios de personas distintas/);
 });
 
 test("P8-E2.1 C no se envia PUT para reemplazar solo subjectRef existente", () => {

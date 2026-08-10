@@ -7,7 +7,7 @@ import type { DeploymentStatus, DiscFindingType } from "./discDegenerativeFindin
  * mostramos al médico. La segunda tiene decisiones clínicas adentro.
  */
 
-/** Traducciones del handoff de P10.7 §11, sin el sufijo de estado. */
+/** Etiquetas clínicas de presentación, sin mezclar el estado de despliegue. */
 export const DISC_FINDING_LABELS: Record<DiscFindingType, string> = {
   disc_bulging: "Abombamiento discal",
   disc_narrowing: "Estrechamiento discal",
@@ -22,9 +22,8 @@ export const DISC_FINDING_LABELS: Record<DiscFindingType, string> = {
 /**
  * El sufijo va aparte del nombre y no pegado.
  *
- * El handoff sugiere "Grado de Pfirrmann — experimental" como una sola cadena. Se separa
- * para que el estado pueda pintarse distinto del nombre: leído en la misma tipografía, se
- * lee como parte del nombre de la variable y deja de advertir nada.
+ * El estado se presenta separado del nombre para que se lea como advertencia y no
+ * como parte de la variable clínica.
  */
 export const DEPLOYMENT_LABELS: Record<DeploymentStatus, string> = {
   supported_internal: "Validado internamente",
@@ -69,8 +68,7 @@ export const DEPLOYMENT_NOTES: Record<DeploymentStatus, string> = {
  * le dice nada a quien lee un estudio, y repetirlo por hallazgo convierte un panel de
  * lectura en un informe de entrenamiento.
  *
- * Acordado con Enzo (P10.7, §3: "ocultar por defecto o colocar en una sección de
- * investigación").
+ * Esta distinción evita presentar confianza puntual como calidad global del modelo.
  */
 export function showsProbabilities(status: DeploymentStatus): boolean {
   return status !== "not_product_supported";
@@ -79,10 +77,8 @@ export function showsProbabilities(status: DeploymentStatus): boolean {
 /**
  * Si el grupo viene colapsado.
  *
- * El handoff pide "ocultar por defecto o colocar en una sección de investigación". Se elige
- * colapsar y no ocultar: esconderlo del todo haría que el revisor no sepa que el modelo
- * también informó eso, y la trazabilidad de investigación es justamente lo que justifica
- * conservarlo.
+ * Los hallazgos de investigación quedan colapsados por defecto: ocultarlos por completo
+ * perdería trazabilidad y mezclarlos con los soportados exageraría su confiabilidad.
  *
  * Y es lo que sostiene la decisión de arriba: el número se muestra porque el rótulo del
  * grupo ya dijo qué clase de resultado es.
@@ -99,9 +95,7 @@ export const DEPLOYMENT_ORDER: DeploymentStatus[] = [
 ];
 
 /**
- * El texto que acompaña a todo el panel, tal como lo pide el handoff §11.
- *
- * Va arriba y siempre, no al pie: es la condición bajo la cual se lee todo lo de abajo.
+ * Aviso que gobierna la interpretación del panel; permanece visible antes de los hallazgos.
  */
 export const DISC_FINDINGS_NOTICE =
   "Resultado generado por un modelo de investigación y sujeto a revisión profesional. "
