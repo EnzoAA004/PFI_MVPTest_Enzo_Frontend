@@ -70,4 +70,9 @@ export type StudyIngestionResponse = {
   warnings: string[];
   sagittal?: StudyPlaneInput;
   axial?: StudyPlaneInput;
+  /** Series independientes por ponderación para el flujo P10.7. */
+  sagittalT1?: StudyPlaneInput;
+  sagittalT2?: StudyPlaneInput;
+  humanReviewRequired: boolean;
+  notClinicalDiagnosis: boolean;
 };

@@ -487,6 +487,23 @@
   .wl-drawer-error { font-size: var(--fs-micro); color: var(--danger); margin: 0; }
   .wl-drawer-message { font-size: var(--fs-micro); color: var(--text-muted); margin: 0; }
 
+  .wl-product-progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-subtle);
+  }
+  .wl-product-progress.is-error { border-color: var(--danger); }
+  .wl-product-progress.is-degraded { border-color: var(--warning); }
+  .wl-product-progress ul { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+  .wl-product-progress li { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--sp-3); }
+  .wl-product-progress li span { font-weight: 700; }
+  .wl-product-progress li em { font-size: var(--fs-micro); color: var(--text-muted); }
+  .wl-product-progress li small { grid-column: 1 / -1; color: var(--text-muted); overflow-wrap: anywhere; }
+
   .wl-drawer-foot {
     display: flex;
     justify-content: flex-end;

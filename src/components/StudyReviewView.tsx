@@ -11,6 +11,8 @@ import { displayInferenceMode, displayMeasurementLabel, resolveMeasurementLabel,
 import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "../features/reading/readingFindings";
 import { DegenerativeFindingsPanel } from "../features/reading/DegenerativeFindingsPanel";
 import { parseDegenerativeFindings, viewerPointToImagePixels, type DegenerativeFinding, type FindingSide } from "../features/reading/degenerativeFindings";
+import { DiscDegenerativeFindingsPanel } from "../features/reading/DiscDegenerativeFindingsPanel";
+import { DiscDegenerativeContractError, parsePersistedDiscDegenerativeFindings, type DiscFinding } from "../features/reading/discDegenerativeFindings";
 import {
   levelForSlice, missingFieldReason, parseSliceLevels, sideFromSliceOrientation, type SubarticularRoiDraft,
 } from "../features/reading/subarticularRoi";
@@ -511,6 +513,22 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     () => (demoMode ? [] : parseDegenerativeFindings(run.canonicalRun?.degenerativeFindings ?? run.metricsSnapshot?.degenerativeFindings)),
     [demoMode, run.canonicalRun, run.metricsSnapshot],
   );
+
+  const discDegenerativeSnapshot = useMemo<{ findings: DiscFinding[]; unavailable?: string; contractError?: string }>(() => {
+    if (demoMode || !run.metricsSnapshot?.discDegenerativeFindings) {
+      return { findings: [], unavailable: "Esta corrida no tiene hallazgos P10.7 persistidos." };
+    }
+    try {
+      return { findings: parsePersistedDiscDegenerativeFindings(run.metricsSnapshot) };
+    } catch (error) {
+      return {
+        findings: [],
+        contractError: error instanceof DiscDegenerativeContractError
+          ? error.message
+          : "El snapshot persistido no coincide con el contrato P10.7.",
+      };
+    }
+  }, [demoMode, run.metricsSnapshot]);
 
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null);
 
@@ -1928,6 +1946,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   una clasificacion candidata no puede encabezar la lectura por encima
                   de las magnitudes que el revisor puede verificar sobre la imagen.
                 */}
+                <DiscDegenerativeFindingsPanel
+                  contractError={discDegenerativeSnapshot.contractError}
+                  findings={discDegenerativeSnapshot.findings}
+                  unavailableReason={discDegenerativeSnapshot.unavailable}
+                />
+
                 <DegenerativeFindingsPanel
                   findings={visibleDegenerativeFindings}
                   onSelectFinding={selectDegenerativeFinding}

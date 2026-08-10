@@ -11,6 +11,12 @@ import {
   validateSubjectRef,
   type StudyMetadataDraft,
 } from "../../studyMetadata";
+import {
+  initialProductAnalysisState,
+  runP109ProductFlow,
+  type ProductAnalysisState,
+  type ProductFlowPhase,
+} from "./productAnalysisFlow";
 
 /**
  * Carga de un estudio nuevo, como panel sobre la lista de trabajo.
@@ -104,6 +110,24 @@ function apiErrorMessage(error: unknown, action: string) {
   return error instanceof Error ? `No se pudo ${action}: ${error.message}` : `No se pudo ${action}.`;
 }
 
+const productPhaseLabel: Record<ProductFlowPhase, string> = {
+  preparing_series: "Preparando series",
+  segmenting_t1: "Segmentando T1",
+  segmenting_t2: "Segmentando T2",
+  analyzing_findings: "Analizando hallazgos",
+  completed: "Completado",
+  degraded: "Completado con capacidad reducida",
+  error: "Error recuperable",
+};
+
+function productSeriesLabel(status: ProductAnalysisState["series"]["sagittal_t1"]["status"]) {
+  if (status === "unavailable") return "No disponible";
+  if (status === "pending") return "Preparada";
+  if (status === "segmenting") return "Segmentando…";
+  if (status === "completed") return "Segmentación completa";
+  return "Error";
+}
+
 export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const [caseId, setCaseId] = useState("");
   const [metadata, setMetadata] = useState<StudyMetadataDraft>(() => emptyStudyMetadataDraft());
@@ -114,6 +138,8 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const [byPlaneOpen, setByPlaneOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [message, setMessage] = useState("");
+  const [productState, setProductState] = useState<ProductAnalysisState | null>(null);
+  const [persistedRun, setPersistedRun] = useState<{ caseId: string; runId: string; study?: StudyIngestionResponse } | null>(null);
 
   /*
    * Escape cierra el drawer. Es el equivalente por teclado del clic en el fondo, y lo
@@ -154,6 +180,8 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
       setStudyUpload({ fileName: file.name, status: "error", error: "El estudio completo se carga como .zip. Para un archivo suelto usá la carga por plano." });
       return;
     }
+    setPersistedRun(null);
+    setProductState(null);
     setStudyUpload({ fileName: file.name, status: "uploading" });
     try {
       const study = await uploadStudyArchive(file, normalizedCaseId);
@@ -193,6 +221,29 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   function onFileChange(plane: Plane, event: ChangeEvent<HTMLInputElement>) {
     void upload(plane, event.target.files?.[0]);
     event.target.value = "";
+  }
+
+  async function runProductExtensions(context: { caseId: string; runId: string; study?: StudyIngestionResponse }) {
+    setProductState(initialProductAnalysisState(context.study));
+    return runP109ProductFlow({
+      caseId: context.caseId,
+      multiplanarRunId: context.runId,
+      study: context.study,
+      onState: (state) => {
+        setProductState(state);
+        setMessage(state.message);
+      },
+    });
+  }
+
+  async function retryProductExtensions() {
+    if (!persistedRun || running) return;
+    setRunning(true);
+    try {
+      await runProductExtensions(persistedRun);
+    } finally {
+      setRunning(false);
+    }
   }
 
   async function run() {
@@ -242,7 +293,9 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
       const result = await runMultiplanarAnalysis(payload);
       const readiness = evaluateRealInferenceReadiness(result);
       if (readiness.ready) {
-        onAnalysisReady(normalizedCaseId);
+        const context = { caseId: normalizedCaseId, runId: result.runId, study: studyUpload.study };
+        setPersistedRun(context);
+        await runProductExtensions(context);
         return;
       }
       // La corrida existe pero no dejó un sagital evaluable: se queda acá con el
@@ -280,7 +333,15 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
         <div className="wl-drawer-body">
           <label className="wl-field">
             <span>ID de caso de-identificado</span>
-            <input onChange={(event) => setCaseId(event.target.value)} placeholder="CASE-XXXX" value={caseId} />
+            <input
+              onChange={(event) => {
+                setCaseId(event.target.value);
+                setPersistedRun(null);
+                setProductState(null);
+              }}
+              placeholder="CASE-XXXX"
+              value={caseId}
+            />
             {caseIdIssue
               ? <em className="wl-field-error">{caseIdIssue}</em>
               : <em>Letras, números, punto, guion, guion bajo o dos puntos.</em>}
@@ -353,11 +414,13 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
                   {studyUpload.study.seriesFound.map((series, index) => {
                     // Se empareja por posición: el identificador de la serie no sale
                     // del backend, porque llevaría de vuelta al estudio de origen.
-                    const usedFor = studyUpload.study?.sagittal?.seriesIndex === index
-                      ? "sagital"
-                      : studyUpload.study?.axial?.seriesIndex === index
-                        ? "axial"
-                        : null;
+                    const roles = [
+                      studyUpload.study?.sagittal?.seriesIndex === index ? "multiplanar sagital" : null,
+                      studyUpload.study?.axial?.seriesIndex === index ? "multiplanar axial" : null,
+                      studyUpload.study?.sagittalT1?.seriesIndex === index ? "P10.7 T1" : null,
+                      studyUpload.study?.sagittalT2?.seriesIndex === index ? "P10.7 T2" : null,
+                    ].filter((role): role is string => Boolean(role));
+                    const usedFor = roles.length ? roles.join(" · ") : null;
                     return (
                       <li className={usedFor ? "is-selected" : ""} key={`${series.plane}-${series.description}-${index}`}>
                         <span>{seriesLabel(series)}</span>
@@ -401,14 +464,49 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
             ))}
           </div>
 
+          {productState && (
+            <section className={`wl-product-progress is-${productState.phase}`} aria-live="polite">
+              <strong>{productPhaseLabel[productState.phase]}</strong>
+              <ul>
+                {(["sagittal_t1", "sagittal_t2"] as const).map((role) => {
+                  const item = productState.series[role];
+                  return (
+                    <li key={role}>
+                      <span>{role === "sagittal_t1" ? "Sagittal T1" : "Sagittal T2"}</span>
+                      <em>{productSeriesLabel(item.status)}</em>
+                      {item.segmentationRunId && <small>run {item.segmentationRunId}</small>}
+                      {item.status === "completed" && <small>{item.discLocalizations.length} localizaciones discales</small>}
+                      {item.error && <small className="wl-field-error">{item.error}</small>}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+
           {message && <p className="wl-drawer-message">{message}</p>}
         </div>
 
         <footer className="wl-drawer-foot">
-          <button className="wl-drawer-cancel" onClick={onClose} type="button">Cancelar</button>
-          <button className="wl-drawer-run" disabled={!sagittalReady || running} onClick={() => void run()} type="button">
-            {running ? "Procesando…" : "Analizar"}
-          </button>
+          <button className="wl-drawer-cancel" disabled={running} onClick={onClose} type="button">Cancelar</button>
+          {persistedRun && productState?.phase === "error" && (
+            <button className="wl-drawer-cancel" disabled={running} onClick={() => onAnalysisReady(persistedRun.caseId)} type="button">
+              Abrir sin P10.7
+            </button>
+          )}
+          {persistedRun && productState?.phase === "error" ? (
+            <button className="wl-drawer-run" disabled={running || !productState.retryable} onClick={() => void retryProductExtensions()} type="button">
+              {running ? "Reintentando…" : productState.retryable ? "Reintentar P10.7" : "P10.7 no disponible"}
+            </button>
+          ) : persistedRun && productState && ["completed", "degraded"].includes(productState.phase) ? (
+            <button className="wl-drawer-run" disabled={running} onClick={() => onAnalysisReady(persistedRun.caseId)} type="button">
+              Abrir sala de lectura
+            </button>
+          ) : (
+            <button className="wl-drawer-run" disabled={!sagittalReady || running} onClick={() => void run()} type="button">
+              {running ? "Procesando…" : "Analizar"}
+            </button>
+          )}
         </footer>
       </aside>
     </div>

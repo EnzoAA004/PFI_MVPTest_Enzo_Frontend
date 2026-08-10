@@ -1685,6 +1685,41 @@
   .rr-finding-review.is-pending { font-weight: 800; color: var(--warning, #b8860b); }
   .rr-finding-scope { font-style: italic; }
 
+  /* ---- Hallazgos discales P10.7 ---- */
+  .rr-disc-findings,
+  .rr-disc-level,
+  .rr-disc-deployment-group,
+  .rr-disc-finding-rows { display: flex; flex-direction: column; gap: 8px; }
+  .rr-disc-findings { margin-top: 14px; }
+  .rr-disc-level { padding-top: 8px; border-top: 1px solid var(--line); }
+  .rr-disc-level h4 { margin: 0; font-size: 13px; }
+  .rr-disc-deployment-group { padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
+  .rr-disc-deployment-group > header,
+  .rr-disc-deployment-group > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .rr-disc-deployment-group small { flex: 1 1 100%; color: var(--muted); line-height: 1.4; }
+  .rr-disc-deployment {
+    display: inline-flex;
+    width: fit-content;
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .rr-disc-deployment.is-supported_internal { background: #e8f0ea; color: #2c5f3f; }
+  .rr-disc-deployment.is-experimental { background: #fbf0dc; color: #8a5a08; }
+  .rr-disc-deployment.is-not_product_supported { background: #f1ecec; color: #713c3c; }
+  .rr-disc-finding { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+  .rr-disc-finding strong { text-align: right; }
+  .rr-disc-contract-error {
+    margin: 0;
+    padding-left: 8px;
+    border-left: 2px solid var(--danger, #b3261e);
+    color: var(--danger, #b3261e);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
   /* ---- Marcado del receso subarticular ---- */
   .rr-roi {
     display: flex;
