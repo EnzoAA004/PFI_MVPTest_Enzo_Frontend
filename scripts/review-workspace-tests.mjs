@@ -135,17 +135,21 @@ test("O axial=null no bloquea la vista", () => assert.equal(readiness.resolveRev
 // medico la elige. La intencion —que no compita con la imagen— se cumple por
 // construccion y ya no hay un wrapper que verificar.
 test("Q humanReviewRequired y notClinicalDiagnosis permanecen visibles", () => {
-  // El alcance general vive una sola vez en Hallazgos IA y el recordatorio junto a
-  // la imagen permanece en el viewport.
+  // El alcance general vive en un recordatorio global compacto; el detalle cientifico
+  // permanece en Hallazgos IA y no se superpone sobre la imagen.
   const source = fs.readFileSync("src/components/StudyReviewView.tsx", "utf8");
   const viewport = fs.readFileSync("src/features/reading/PlaneViewport.tsx", "utf8");
+  const workspaceGovernance = fs.readFileSync("src/features/reading/WorkspaceGovernanceNotice.tsx", "utf8");
   const governance = fs.readFileSync("src/features/reading/GovernanceNotice.tsx", "utf8");
   const display = fs.readFileSync("src/features/reading/discFindingDisplay.ts", "utf8");
+  assert.match(source, /<WorkspaceGovernanceNotice/);
   assert.match(source, /<GovernanceNotice/);
-  assert.match(governance, /Requieren revisi.n profesional/);
+  assert.match(workspaceGovernance, /IA asistida · Revisi.n profesional requerida/);
+  assert.match(workspaceGovernance, /no[\s\S]*constituyen un diagn.stico aut.nomo/);
+  assert.match(governance, /requieren revisi.n profesional/);
   assert.match(governance, /DISC_FINDINGS_NOTICE/);
   assert.match(display, /No constituye un diagn.stico cl.nico aut.nomo/);
-  assert.match(viewport, /No apto para diagn.stico cl.nico/);
+  assert.doesNotMatch(viewport, /No apto para diagn.stico cl.nico/);
 });
 
 test("12.11 A sagital real + axial null => sagittal_only", () => assert.equal(readiness.resolveReviewWorkspaceMode(run({ sagittal: sagittalPlane(), axial: null })), "sagittal_only"));

@@ -169,19 +169,28 @@ export function DegenerativeFindingsPanel({
         <div>
           <p className="rr-section-title" id="rr-subarticular-title">Clasificación subarticular</p>
           <p className="rr-subarticular-description">
-            Evaluación asistida sobre una región seleccionada manualmente en Axial T2.
+            Seleccioná manualmente el receso sobre una imagen Axial T2 para realizar la clasificación.
           </p>
         </div>
-        <span className="rr-subarticular-scope">Manual · Investigación</span>
+        <span className="rr-subarticular-scope">Selección manual</span>
       </div>
 
-      {externalCount > 0 && (
-        <p className="rr-findings-warning">
-          {externalCount === 1 ? "La coordenada anatómica fue provista" : "Las coordenadas anatómicas fueron provistas"} externamente:
-          no existe un localizador automático validado, así que el resultado depende de
-          dónde se marcó el punto.
-        </p>
-      )}
+      <details className="rr-subarticular-details">
+        <summary>ⓘ Alcance de la clasificación</summary>
+        <div>
+          <p>
+            Esta capacidad se conserva para análisis de investigación y todavía no forma
+            parte del conjunto principal de funciones soportadas.
+          </p>
+          {externalCount > 0 && (
+            <p className="rr-findings-warning">
+              {externalCount === 1 ? "La coordenada anatómica fue provista" : "Las coordenadas anatómicas fueron provistas"} externamente:
+              no existe un localizador automático validado, así que el resultado depende de
+              dónde se marcó el punto.
+            </p>
+          )}
+        </div>
+      </details>
 
       {roi && <SubarticularRoiSection hasResults={ordered.length > 0} roi={roi} />}
 
@@ -233,7 +242,7 @@ export function DegenerativeFindingsPanel({
               </span>
               {finding.slicePosition !== null && <span>Corte {finding.slicePosition}</span>}
               {finding.researchOnly && (
-                <span className="rr-finding-scope">Selección manual · Resultado de investigación</span>
+                <span className="rr-finding-scope">Selección manual</span>
               )}
             </footer>
           </>

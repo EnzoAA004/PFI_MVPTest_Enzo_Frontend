@@ -262,7 +262,7 @@ check("el aviso exige revisión y niega diagnóstico autónomo", () => {
   assert.match(display.DISC_FINDINGS_NOTICE, /No constituye un diagnóstico clínico autónomo/);
 });
 
-check("el panel P10.7 no contiene probabilities, confidence ni logits", () => {
+check("el panel discal no contiene probabilities, confidence ni logits", () => {
   const panel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
   assert.doesNotMatch(panel, /probabilit|confidence|logit/i);
   assert.match(panel, /finding\.label/);
@@ -275,11 +275,29 @@ check("Pfirrmann permanece en el resumen expandible por nivel", () => {
   assert.match(panel, /<details className="rr-disc-level"/);
 });
 
-check("investigación se agrupa dinámicamente por deploymentStatus", () => {
+check("los resultados adicionales se agrupan dinámicamente por deploymentStatus", () => {
   const panel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
   assert.match(panel, /finding\.deploymentStatus === "not_product_supported"/);
-  assert.match(panel, /Resultados de investigación/);
+  assert.match(panel, /Más resultados IA/);
+  assert.match(panel, /todavía no[\s\S]*funciones soportadas/);
+  assert.doesNotMatch(panel, /rr-disc-research-count/);
   assert.doesNotMatch(panel, /findingType === "(?:modic_change|disc_herniation|spondylolisthesis)"/);
+});
+
+check("la UI clínica prioriza nombres funcionales y hallazgos naturales", () => {
+  const panel = readFileSync("src/features/reading/DiscDegenerativeFindingsPanel.tsx", "utf8");
+  assert.match(panel, />Hallazgos discales</);
+  assert.match(panel, />Hallazgos</);
+  assert.match(panel, /Sin hallazgos/);
+  assert.doesNotMatch(panel, /Hallazgos discales P10\.7|Resumen P10\.7/);
+});
+
+check("los estados científicos siguen accesibles bajo demanda", () => {
+  const governance = readFileSync("src/features/reading/GovernanceNotice.tsx", "utf8");
+  assert.match(governance, /ⓘ Alcance del modelo/);
+  assert.match(governance, /DEPLOYMENT_ORDER\.map/);
+  assert.match(governance, /DEPLOYMENT_LABELS\[status\]/);
+  assert.match(governance, /DEPLOYMENT_NOTES\[status\]/);
 });
 
 check("las explicaciones largas viven una sola vez fuera de los cinco niveles", () => {

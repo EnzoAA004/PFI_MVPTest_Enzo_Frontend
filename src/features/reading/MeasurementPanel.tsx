@@ -1,4 +1,5 @@
 import { displayMeasurementLabel, displayMeasurementLabelShort, displayUnit } from "../../clinicalDisplay";
+import type { MeasurementGroup } from "./measurementGrouping";
 import { checkRange, rangeBadge } from "./referenceRanges";
 
 /**
@@ -23,6 +24,8 @@ export type PanelRow = {
   /** Identificador canónico, el que decide contra qué rango se compara. */
   labelKey: string;
   label: string;
+  level?: string | null;
+  levelScope?: string | null;
   unit: string;
   aiValue?: number | string;
   reviewerValue?: number | string | null;
@@ -31,6 +34,8 @@ export type PanelRow = {
   source: "ai" | "reviewer";
   detail?: string;
 };
+
+type SharedProps = Omit<Props, "rows" | "emptyNote">;
 
 type Props = {
   rows: PanelRow[];
@@ -148,6 +153,39 @@ export function MeasurementPanel({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+type GroupListProps = SharedProps & {
+  groups: MeasurementGroup<PanelRow>[];
+  collapsible?: boolean;
+  emptyNote?: string;
+};
+
+/** Presentación anatómica; las filas y sus callbacks siguen siendo los originales. */
+export function MeasurementGroupList({ groups, collapsible = false, emptyNote, ...panelProps }: GroupListProps) {
+  if (!groups.length) return <p className="rr-note">{emptyNote ?? "Sin mediciones para mostrar."}</p>;
+
+  return (
+    <div className="rr-measure-groups">
+      {groups.map((group) => collapsible ? (
+        <details className="rr-measure-group" key={group.category}>
+          <summary>
+            <span>{group.label}</span>
+            <span className="rr-measure-group-count">{group.rows.length}</span>
+          </summary>
+          <MeasurementPanel {...panelProps} rows={group.rows} />
+        </details>
+      ) : (
+        <section aria-labelledby={`measurement-group-${group.category}`} className="rr-measure-group is-expanded" key={group.category}>
+          <h4 id={`measurement-group-${group.category}`}>
+            <span>{group.label}</span>
+            <span className="rr-measure-group-count">{group.rows.length}</span>
+          </h4>
+          <MeasurementPanel {...panelProps} rows={group.rows} />
+        </section>
+      ))}
     </div>
   );
 }

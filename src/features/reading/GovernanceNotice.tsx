@@ -17,14 +17,10 @@ type Props = {
 export function GovernanceNotice({ discLocalizationAvailable }: Props) {
   return (
     <section className="rr-ai-governance" aria-labelledby="rr-ai-governance-title">
-      <div className="rr-ai-governance-head">
-        <h3 id="rr-ai-governance-title">Resultados asistidos por IA</h3>
-        <span aria-hidden="true" className="rr-ai-governance-mark">IA</span>
-      </div>
-      <p>Requieren revisión profesional. El grado de validación depende del tipo de hallazgo.</p>
+      <p id="rr-ai-governance-title">Los resultados requieren revisión profesional.</p>
 
       <details className="rr-ai-governance-details">
-        <summary>Información sobre validación y alcance</summary>
+        <summary>ⓘ Alcance del modelo</summary>
         <div className="rr-ai-governance-content">
           <p>{DISC_FINDINGS_NOTICE}</p>
           <dl>

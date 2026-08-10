@@ -27,6 +27,8 @@
 
   /* Top bar ------------------------------------------------------------- */
   .rr-topbar {
+    position: relative;
+    z-index: 10;
     display: flex;
     align-items: center;
     gap: var(--sp-3);
@@ -74,6 +76,50 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .rr-workspace-governance {
+    position: relative;
+    z-index: 8;
+    flex: none;
+  }
+
+  .rr-workspace-governance > summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: var(--fs-micro);
+    list-style: none;
+    white-space: nowrap;
+  }
+
+  .rr-workspace-governance > summary::-webkit-details-marker { display: none; }
+  .rr-workspace-governance > summary:hover { border-color: var(--border-strong); color: var(--text); }
+  .rr-workspace-governance > summary:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  .rr-workspace-governance > p {
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    width: min(360px, calc(100vw - 24px));
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgb(0 0 0 / .28);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    line-height: 1.45;
   }
 
   .rr-topbar-right {
@@ -929,8 +975,8 @@
   /*
    * Corner annotations, burned over the image like a DICOM viewer: case at the
    * top-left, series and slice at the top-right, display parameters at the
-   * bottom-left, and the scale plus the non-diagnostic notice at the
-   * bottom-right. pointer-events:none so they never intercept a drag.
+   * bottom-left, and the image scale at the bottom-right. pointer-events:none so
+   * they never intercept a drag.
    */
   .rr-corner {
     position: absolute;
@@ -956,11 +1002,6 @@
   /* Offset by the two control strips so the annotations stay over the image. */
   .rr-corner-bl { bottom: calc(2 * var(--rr-strip-h) + var(--sp-2)); left: var(--sp-3); }
   .rr-corner-br { bottom: calc(2 * var(--rr-strip-h) + var(--sp-2)); right: var(--sp-3); text-align: right; }
-
-  .rr-corner-br .rr-disclaimer {
-    color: var(--warning);
-    opacity: .85;
-  }
 
   /* Orientación del paciente ---------------------------------------------
    *
@@ -1177,8 +1218,9 @@
     color: var(--text-muted);
     font-size: var(--fs-micro);
     font-weight: var(--fw-medium);
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
+    letter-spacing: 0.01em;
+    padding: 0 3px;
+    white-space: nowrap;
     cursor: pointer;
   }
 
@@ -1187,6 +1229,14 @@
   .rr-tabs button.is-active {
     color: var(--text);
     border-bottom-color: var(--primary);
+  }
+
+  .rr-tabs button:focus-visible,
+  .rr-level:focus-visible,
+  .rr-measure-group summary:focus-visible,
+  .rr-more-section summary:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
   }
 
   .rr-panel-body {
@@ -1269,12 +1319,85 @@
 
   .rr-level.is-empty .rr-level-count { opacity: .45; }
 
+  .rr-level-navigator {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+
+  .rr-level-section h4,
+  .rr-measure-group h4 {
+    margin: 0 0 5px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: var(--fw-medium);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .rr-level-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .rr-level-list .rr-level {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-chip);
+    height: 30px;
+    min-width: 0;
+  }
+
+  .rr-level-list .rr-level:last-child { border-bottom: 1px solid var(--border); }
+  .rr-level-list .rr-level.is-active { border-color: var(--border-info); }
+
   /* Measurement readout -------------------------------------------------- */
   .rr-measures {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+  }
+
+  .rr-measure-groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .rr-measure-group {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-chip);
+    overflow: hidden;
+  }
+
+  .rr-measure-group summary,
+  .rr-measure-group h4 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    margin: 0;
+    padding: 8px var(--sp-2);
+  }
+
+  .rr-measure-group summary {
+    color: var(--text);
+    cursor: pointer;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+  }
+
+  .rr-measure-group[open] summary,
+  .rr-measure-group.is-expanded h4 { border-bottom: 1px solid var(--border); }
+
+  .rr-measure-group .rr-measures { padding: 4px; }
+
+  .rr-measure-group-count {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-regular);
   }
 
   .rr-measure {
@@ -1415,6 +1538,39 @@
   }
 
   .rr-range-within { color: var(--text-muted); }
+
+  .rr-more-sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+  }
+
+  .rr-more-section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-chip);
+    overflow: hidden;
+  }
+
+  .rr-more-section > summary {
+    cursor: pointer;
+    padding: 9px var(--sp-2);
+    color: var(--text);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+  }
+
+  .rr-more-section[open] > summary { border-bottom: 1px solid var(--border); }
+  .rr-more-section-body { padding: var(--sp-3); }
+
+  .rr-review-footer {
+    position: sticky;
+    bottom: calc(-1 * var(--sp-3));
+    margin: var(--sp-3) calc(-1 * var(--sp-3)) calc(-1 * var(--sp-3));
+    padding: var(--sp-3);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 1;
+  }
 
   /* Review form ---------------------------------------------------------- */
   .rr-field {
@@ -1608,32 +1764,19 @@
     flex-direction: column;
     gap: 7px;
     padding: 10px 12px;
-    border: 1px solid var(--border-info);
+    border-left: 2px solid var(--border-info);
+    border-top: 0;
+    border-right: 0;
+    border-bottom: 0;
     border-radius: 8px;
-    background: var(--info-bg);
+    background: color-mix(in srgb, var(--info-bg) 55%, transparent);
   }
-  .rr-ai-governance-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .rr-ai-governance h3 { margin: 0; font-size: 13px; }
   .rr-ai-governance > p,
   .rr-ai-governance-content > p {
     margin: 0;
     color: var(--muted);
     font-size: 12px;
     line-height: 1.45;
-  }
-  .rr-ai-governance-mark {
-    border: 1px solid var(--border-info);
-    border-radius: 999px;
-    padding: 1px 6px;
-    color: var(--text-primary-strong);
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: .06em;
   }
   .rr-ai-governance-details > summary {
     width: fit-content;
@@ -1691,11 +1834,36 @@
     display: inline-flex;
     border-radius: 999px;
     padding: 2px 7px;
-    background: #f1ecec;
-    color: #713c3c;
+    border: 1px solid var(--line);
+    background: var(--surface-subtle);
+    color: var(--muted);
     font-size: 10px;
     font-weight: 800;
     text-transform: uppercase;
+  }
+  .rr-subarticular-details > summary {
+    width: fit-content;
+    color: var(--text-primary-strong);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .rr-subarticular-details > summary:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--primary);
+    outline-offset: 3px;
+  }
+  .rr-subarticular-details > div {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 8px;
+  }
+  .rr-subarticular-details p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.45;
   }
   .rr-subarticular-empty { display: flex; flex-direction: column; gap: 8px; }
 
@@ -1786,19 +1954,10 @@
   .rr-finding-review.is-pending { font-weight: 800; color: var(--warning, #b8860b); }
   .rr-finding-scope { font-style: italic; }
 
-  /* ---- Hallazgos discales P10.7 ---- */
+  /* ---- Hallazgos discales ---- */
   .rr-disc-findings,
   .rr-disc-finding-rows { display: flex; flex-direction: column; gap: 8px; }
   .rr-disc-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .rr-disc-status-groups { display: flex; flex-direction: column; gap: 6px; }
-  .rr-disc-status-group {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1.35;
-  }
   .rr-disc-deployment {
     display: inline-flex;
     width: fit-content;
@@ -1873,26 +2032,16 @@
   .rr-disc-research > summary {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
     padding: 9px 10px;
     cursor: pointer;
-    color: #713c3c;
+    color: var(--text);
     font-size: 12px;
     font-weight: 800;
   }
   .rr-disc-research > summary:focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: -2px;
-  }
-  .rr-disc-research-count {
-    display: inline-grid;
-    min-width: 20px;
-    min-height: 20px;
-    place-items: center;
-    border-radius: 999px;
-    background: #f1ecec;
-    font-size: 10px;
   }
   .rr-disc-research-note { margin: 0; padding: 0 10px 8px; color: var(--muted); font-size: 11px; line-height: 1.4; }
   .rr-disc-research-level { padding: 8px 10px; border-top: 1px solid var(--line); }
