@@ -14,7 +14,7 @@ export const DISC_FINDING_LABELS: Record<DiscFindingType, string> = {
 export const DEPLOYMENT_LABELS: Record<DeploymentStatus, string> = {
   supported_internal: "Validación interna",
   experimental: "Experimental",
-  not_product_supported: "No soportado para producto",
+  not_product_supported: "Investigación",
 };
 
 export const DEPLOYMENT_NOTES: Record<DeploymentStatus, string> = {
@@ -23,8 +23,18 @@ export const DEPLOYMENT_NOTES: Record<DeploymentStatus, string> = {
   experimental:
     "Resultado experimental visible únicamente para revisión profesional.",
   not_product_supported:
-    "La tarea no tiene soporte de producto. Se conserva separada para trazabilidad de investigación.",
+    "Resultado de investigación. No es una capacidad soportada para producto y se conserva separada únicamente para análisis y trazabilidad.",
 };
+
+const DISC_FINDING_VALUE_LABELS: Record<string, string> = {
+  present: "Presente",
+  absent: "Ausente",
+};
+
+/** Traduce sólo la presentación; el valor contractual permanece intacto. */
+export function displayDiscFindingValue(value: string): string {
+  return DISC_FINDING_VALUE_LABELS[value] ?? value;
+}
 
 export function startsCollapsed(status: DeploymentStatus): boolean {
   return status === "not_product_supported";
@@ -37,5 +47,4 @@ export const DEPLOYMENT_ORDER: DeploymentStatus[] = [
 ];
 
 export const DISC_FINDINGS_NOTICE =
-  "Resultado generado por IA y sujeto a revisión profesional. "
-  + "No constituye un diagnóstico clínico autónomo.";
+  "Resultado generado por IA y sujeto a revisión profesional. No constituye un diagnóstico clínico autónomo.";

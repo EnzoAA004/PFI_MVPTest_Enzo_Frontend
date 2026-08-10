@@ -12,6 +12,7 @@ import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "..
 import { DegenerativeFindingsPanel } from "../features/reading/DegenerativeFindingsPanel";
 import { parseDegenerativeFindings, viewerPointToImagePixels, type DegenerativeFinding, type FindingSide } from "../features/reading/degenerativeFindings";
 import { DiscDegenerativeFindingsPanel } from "../features/reading/DiscDegenerativeFindingsPanel";
+import { GovernanceNotice } from "../features/reading/GovernanceNotice";
 import { DiscDegenerativeContractError, parsePersistedDiscDegenerativeFindings, type DiscFinding } from "../features/reading/discDegenerativeFindings";
 import {
   levelForSlice, missingFieldReason, parseSliceLevels, sideFromSliceOrientation, type SubarticularRoiDraft,
@@ -1946,34 +1947,38 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   una clasificacion candidata no puede encabezar la lectura por encima
                   de las magnitudes que el revisor puede verificar sobre la imagen.
                 */}
-                <DiscDegenerativeFindingsPanel
-                  contractError={discDegenerativeSnapshot.contractError}
-                  findings={discDegenerativeSnapshot.findings}
-                  unavailableReason={discDegenerativeSnapshot.unavailable}
-                />
+                <section className="rr-ai-findings" aria-label="Resultados asistidos por IA">
+                  <GovernanceNotice discLocalizationAvailable={discDegenerativeSnapshot.findings.length > 0} />
 
-                <DegenerativeFindingsPanel
-                  findings={visibleDegenerativeFindings}
-                  onSelectFinding={selectDegenerativeFinding}
-                  requestBlockedReason={degenerativeRequestBlockedReason}
-                  roi={demoMode ? undefined : {
-                    active: subarticularMode,
-                    available: axialAvailable && visiblePlanes.includes("axial"),
-                    onToggle: () => {
-                      if (subarticularMode) cancelRoi();
-                      else { setSubarticularMode(true); setRoiDraft(null); setRoiError(undefined); }
-                    },
-                    draft: roiDraft,
-                    missingReason: roiDraft ? missingFieldReason(roiDraft) : "Todavía no se marcó ningún punto.",
-                    onChangeSide: (side: FindingSide) => setRoiDraft((draft) => (draft ? { ...draft, side } : draft)),
-                    onChangeLevel: (level: string) => setRoiDraft((draft) => (draft ? { ...draft, level } : draft)),
-                    onCancel: cancelRoi,
-                    onSubmit: () => { void submitRoi(); },
-                    pending: roiPending,
-                    error: roiError,
-                  }}
-                  selectedFindingId={selectedFindingId}
-                />
+                  <DiscDegenerativeFindingsPanel
+                    contractError={discDegenerativeSnapshot.contractError}
+                    findings={discDegenerativeSnapshot.findings}
+                    unavailableReason={discDegenerativeSnapshot.unavailable}
+                  />
+
+                  <DegenerativeFindingsPanel
+                    findings={visibleDegenerativeFindings}
+                    onSelectFinding={selectDegenerativeFinding}
+                    requestBlockedReason={degenerativeRequestBlockedReason}
+                    roi={demoMode ? undefined : {
+                      active: subarticularMode,
+                      available: axialAvailable && visiblePlanes.includes("axial"),
+                      onToggle: () => {
+                        if (subarticularMode) cancelRoi();
+                        else { setSubarticularMode(true); setRoiDraft(null); setRoiError(undefined); }
+                      },
+                      draft: roiDraft,
+                      missingReason: roiDraft ? missingFieldReason(roiDraft) : "Todavía no se marcó ningún punto.",
+                      onChangeSide: (side: FindingSide) => setRoiDraft((draft) => (draft ? { ...draft, side } : draft)),
+                      onChangeLevel: (level: string) => setRoiDraft((draft) => (draft ? { ...draft, level } : draft)),
+                      onCancel: cancelRoi,
+                      onSubmit: () => { void submitRoi(); },
+                      pending: roiPending,
+                      error: roiError,
+                    }}
+                    selectedFindingId={selectedFindingId}
+                  />
+                </section>
 
                 <p className="rr-section-title">Anotaciones</p>
                 {/*
@@ -2261,7 +2266,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
         <span className="rr-toolbar-end">
           {hasReviewerDrafts ? <span>{reviewerDraftCount} med · {landmarkDraftCount} lm · {contourDraftCount} contornos en borrador</span> : null}
           <span className="rr-kbd">?</span>
-          <span>Revisión humana requerida</span>
         </span>
       </div>
 

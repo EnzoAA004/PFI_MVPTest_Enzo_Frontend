@@ -76,7 +76,7 @@ function percent(value: number) {
  * por el lado equivocado, o bajo el nivel de al lado, se lee igual de convincente que uno
  * correcto.
  */
-function SubarticularRoiSection({ roi }: { roi: SubarticularRoiPanelState }) {
+function SubarticularRoiSection({ roi, hasResults }: { roi: SubarticularRoiPanelState; hasResults: boolean }) {
   const { draft } = roi;
   return (
     <div className="rr-roi">
@@ -88,7 +88,7 @@ function SubarticularRoiSection({ roi }: { roi: SubarticularRoiPanelState }) {
           title={roi.available ? "Marcar el receso subarticular sobre el corte axial" : "Solo se puede marcar sobre un corte axial"}
           type="button"
         >
-          {roi.active ? "Cancelar marcado" : "Marcar receso subarticular"}
+          {roi.active ? "Cancelar marcado" : hasResults ? "Nueva selección" : "Marcar receso subarticular"}
         </button>
       </div>
 
@@ -164,18 +164,16 @@ export function DegenerativeFindingsPanel({
   const externalCount = ordered.filter((item) => item.externalCoordinate).length;
 
   return (
-    <section className="rr-findings">
-      <p className="rr-section-title">Hallazgos degenerativos candidatos</p>
-
-      {/*
-        El aviso va arriba y siempre, no al pie y solo cuando hay hallazgos. Es la
-        condición bajo la cual se lee todo lo de abajo: sin él, una etiqueta "Severa"
-        junto a una imagen del paciente se lee como una conclusión del sistema.
-      */}
-      <p className="rr-findings-notice">
-        Clasificación asistida para revisión profesional. No constituye diagnóstico ni
-        indica conducta.
-      </p>
+    <section className="rr-findings rr-subarticular" aria-labelledby="rr-subarticular-title">
+      <div className="rr-subarticular-head">
+        <div>
+          <p className="rr-section-title" id="rr-subarticular-title">Clasificación subarticular</p>
+          <p className="rr-subarticular-description">
+            Evaluación asistida sobre una región seleccionada manualmente en Axial T2.
+          </p>
+        </div>
+        <span className="rr-subarticular-scope">Manual · Investigación</span>
+      </div>
 
       {externalCount > 0 && (
         <p className="rr-findings-warning">
@@ -185,16 +183,13 @@ export function DegenerativeFindingsPanel({
         </p>
       )}
 
-      {roi && <SubarticularRoiSection roi={roi} />}
+      {roi && <SubarticularRoiSection hasResults={ordered.length > 0} roi={roi} />}
 
-      {!ordered.length && (
-        <p className="rr-findings-empty">
-          {requestBlockedReason
-            ? requestBlockedReason
-            : roi?.available
-              ? "Esta corrida no informa hallazgos degenerativos. Marcá el receso subarticular sobre el corte axial para pedir una clasificación."
-              : "Esta corrida no informa hallazgos degenerativos. Para pedir una clasificación hay que estar sobre un corte axial."}
-        </p>
+      {!ordered.length && !roi?.active && (
+        <div className="rr-subarticular-empty">
+          <p className="rr-findings-empty">Aún no se realizó una clasificación subarticular en esta sesión.</p>
+          {requestBlockedReason && <p className="rr-roi-missing">{requestBlockedReason}</p>}
+        </div>
       )}
 
       {ordered.map((finding) => {
@@ -237,7 +232,9 @@ export function DegenerativeFindingsPanel({
                 {REVIEW_TEXT[finding.reviewStatus]}
               </span>
               {finding.slicePosition !== null && <span>Corte {finding.slicePosition}</span>}
-              {finding.researchOnly && <span className="rr-finding-scope">Solo investigación</span>}
+              {finding.researchOnly && (
+                <span className="rr-finding-scope">Selección manual · Resultado de investigación</span>
+              )}
             </footer>
           </>
         );

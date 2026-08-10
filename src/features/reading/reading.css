@@ -1595,8 +1595,109 @@
     font-size: var(--fs-micro);
   }
 
-  /* ---- Hallazgos degenerativos candidatos ---- */
+  /* ---- Resultados asistidos por IA ---- */
+  .rr-ai-findings {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 14px;
+  }
+
+  .rr-ai-governance {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-info);
+    border-radius: 8px;
+    background: var(--info-bg);
+  }
+  .rr-ai-governance-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .rr-ai-governance h3 { margin: 0; font-size: 13px; }
+  .rr-ai-governance > p,
+  .rr-ai-governance-content > p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .rr-ai-governance-mark {
+    border: 1px solid var(--border-info);
+    border-radius: 999px;
+    padding: 1px 6px;
+    color: var(--text-primary-strong);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .06em;
+  }
+  .rr-ai-governance-details > summary {
+    width: fit-content;
+    color: var(--text-primary-strong);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .rr-ai-governance-details > summary:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid var(--primary);
+    outline-offset: 3px;
+  }
+  .rr-ai-governance-content {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding-top: 9px;
+  }
+  .rr-ai-governance-content dl {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+  }
+  .rr-ai-governance-content dl > div {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+  }
+  .rr-ai-governance-content dt,
+  .rr-ai-governance-content dd { margin: 0; }
+  .rr-ai-governance-content dd { color: var(--muted); font-size: 11px; line-height: 1.4; }
+
+  /* ---- Clasificación subarticular ---- */
   .rr-findings { display: flex; flex-direction: column; gap: 8px; }
+  .rr-subarticular {
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .rr-subarticular-head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+  }
+  .rr-subarticular-description {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .rr-subarticular-scope {
+    display: inline-flex;
+    border-radius: 999px;
+    padding: 2px 7px;
+    background: #f1ecec;
+    color: #713c3c;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+  .rr-subarticular-empty { display: flex; flex-direction: column; gap: 8px; }
 
   /* El aviso de alcance y el de coordenada externa no son decorativos: son la
      condicion bajo la cual se lee la clasificacion. Van arriba, no al pie. */
@@ -1687,16 +1788,17 @@
 
   /* ---- Hallazgos discales P10.7 ---- */
   .rr-disc-findings,
-  .rr-disc-level,
-  .rr-disc-deployment-group,
   .rr-disc-finding-rows { display: flex; flex-direction: column; gap: 8px; }
-  .rr-disc-findings { margin-top: 14px; }
-  .rr-disc-level { padding-top: 8px; border-top: 1px solid var(--line); }
-  .rr-disc-level h4 { margin: 0; font-size: 13px; }
-  .rr-disc-deployment-group { padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
-  .rr-disc-deployment-group > header,
-  .rr-disc-deployment-group > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-  .rr-disc-deployment-group small { flex: 1 1 100%; color: var(--muted); line-height: 1.4; }
+  .rr-disc-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .rr-disc-status-groups { display: flex; flex-direction: column; gap: 6px; }
+  .rr-disc-status-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.35;
+  }
   .rr-disc-deployment {
     display: inline-flex;
     width: fit-content;
@@ -1709,8 +1811,92 @@
   .rr-disc-deployment.is-supported_internal { background: #e8f0ea; color: #2c5f3f; }
   .rr-disc-deployment.is-experimental { background: #fbf0dc; color: #8a5a08; }
   .rr-disc-deployment.is-not_product_supported { background: #f1ecec; color: #713c3c; }
-  .rr-disc-finding { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+  .rr-disc-overview {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .rr-disc-overview-head,
+  .rr-disc-level-summary {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr) 68px;
+    align-items: center;
+    gap: 8px;
+  }
+  .rr-disc-overview-head {
+    padding: 6px 10px;
+    background: var(--surface-subtle);
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .rr-disc-level { border-top: 1px solid var(--line); }
+  .rr-disc-level:first-of-type { border-top: 0; }
+  .rr-disc-level-summary {
+    position: relative;
+    padding: 8px 26px 8px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    list-style: none;
+  }
+  .rr-disc-level-summary::-webkit-details-marker { display: none; }
+  .rr-disc-level-summary::after {
+    position: absolute;
+    inset-inline-end: 10px;
+    content: "›";
+    color: var(--muted);
+    font-size: 16px;
+    transform: rotate(90deg);
+    transition: transform .15s ease;
+  }
+  .rr-disc-level[open] > .rr-disc-level-summary::after { transform: rotate(-90deg); }
+  .rr-disc-level-summary:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+  .rr-disc-level > .rr-disc-finding-rows,
+  .rr-disc-level > .rr-findings-empty {
+    padding: 8px 10px 10px;
+    border-top: 1px solid var(--line);
+    background: var(--surface-subtle);
+  }
+  .rr-disc-finding { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; font-size: 12px; }
+  .rr-disc-finding-result { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 5px; }
   .rr-disc-finding strong { text-align: right; }
+  .rr-disc-research {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-subtle);
+  }
+  .rr-disc-research > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 10px;
+    cursor: pointer;
+    color: #713c3c;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .rr-disc-research > summary:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+  .rr-disc-research-count {
+    display: inline-grid;
+    min-width: 20px;
+    min-height: 20px;
+    place-items: center;
+    border-radius: 999px;
+    background: #f1ecec;
+    font-size: 10px;
+  }
+  .rr-disc-research-note { margin: 0; padding: 0 10px 8px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+  .rr-disc-research-level { padding: 8px 10px; border-top: 1px solid var(--line); }
+  .rr-disc-research-level h4 { margin: 0 0 7px; font-size: 12px; }
   .rr-disc-contract-error {
     margin: 0;
     padding-left: 8px;
