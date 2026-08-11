@@ -20,6 +20,7 @@ import {
 } from "../features/reading/ReadingWorkspaceShell";
 import { SeriesSelector, type WorkspaceSeriesOption } from "../features/reading/SeriesSelector";
 import { ViewportGrid } from "../features/reading/ViewportGrid";
+import { resolveAnalyzedSliceSource } from "../features/reading/analyzedSliceSource";
 import {
   layoutPresetAvailable,
   viewportBindingsFor,
@@ -147,7 +148,9 @@ function planeRunRecord(run: AiRunResponse, plane: "sagittal" | "axial") {
   return asRecord(planes?.[plane]);
 }
 
-function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspace): StudySeries | null {
+type PersistedStudySeries = StudySeries & { sourceInputId?: string };
+
+function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspace): PersistedStudySeries | null {
   const planeRun = planeRunRecord(run, workspace.plane);
   // El contrato v1 publica la metadata volumétrica bajo `metadata` y v2 bajo
   // `input`; también se consulta el plano canónico persistido, que es de donde
@@ -156,6 +159,7 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
   const metadata = { ...asRecord(canonicalPlane?.input), ...asRecord(canonicalPlane?.metadata), ...asRecord(planeRun?.input), ...asRecord(planeRun?.metadata) };
   const rawSliceCount = metadata.sliceCount;
   const rawSelectedSlice = metadata.selectedSlice ?? metadata.selectedSliceIndex;
+  const sourceInputId = typeof metadata.inputId === "string" && metadata.inputId.trim() ? metadata.inputId.trim() : undefined;
   const sliceCount = typeof rawSliceCount === "number" && rawSliceCount > 0 ? rawSliceCount : 1;
   const selectedSlice = typeof rawSelectedSlice === "number" && rawSelectedSlice >= 0 ? rawSelectedSlice : 0;
   // Cantidad de previsualizaciones por corte que el AI Module realmente escribió.
@@ -184,6 +188,7 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
     plane: workspace.plane,
     sliceCount,
     selectedSlice,
+    sourceInputId,
     slicePreviewCount,
     inPlaneSpacingMm,
     imageUrl: workspace.inputUrl ?? null,
@@ -199,21 +204,6 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
 
 function readinessLabel(value?: string) {
   return displayTechnicalReadiness(value);
-}
-
-/**
- * URL de la previsualización de un corte, derivada de la del corte inferido.
- *
- * Ambas viven en el mismo directorio de assets de la corrida, así que se
- * reemplaza el último segmento y nada más: no se arma una ruta nueva ni se
- * concatena el índice a mano, de modo que el origen y el prefijo `/api/...` que
- * la política de origen exige quedan intactos.
- */
-function slicePreviewUrl(inputUrl: string | null | undefined, index: number) {
-  if (!inputUrl) return undefined;
-  const name = `slice-${String(index).padStart(3, "0")}.png`;
-  const separator = inputUrl.lastIndexOf("/");
-  return separator < 0 ? undefined : `${inputUrl.slice(0, separator + 1)}${name}`;
 }
 
 function clampSlice(index: number, total: number) {
@@ -1044,14 +1034,23 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     const total = series.sliceCount ?? 1;
     const aiIndex = clampSlice(series.selectedSlice ?? 0, total);
     const current = clampSlice(sliceByPlane[bindingId] ?? aiIndex, total);
+    const analyzedSeries = series as StudySeries & { sourceInputId?: string };
+    const previewUrlFor = (index: number) => resolveAnalyzedSliceSource({
+      apiBaseUrl: API_BASE_URL,
+      sourceInputId: analyzedSeries.sourceInputId,
+      index,
+      aiIndex,
+      legacyInputUrl: series.imageUrl,
+      legacyPreviewCount: series.slicePreviewCount,
+    });
     const nav: SliceNavigation | undefined = total > 1
       ? {
         current,
         total,
         aiIndex,
-        hasImage: current === aiIndex || current < (series.slicePreviewCount ?? 0),
-        previewUrl: current === aiIndex ? undefined : slicePreviewUrl(series.imageUrl, current),
-        previewUrlFor: (index: number) => (index < (series.slicePreviewCount ?? 0) ? slicePreviewUrl(series.imageUrl, index) : undefined),
+        hasImage: current === aiIndex || Boolean(previewUrlFor(current)),
+        previewUrl: previewUrlFor(current),
+        previewUrlFor,
         onChange: (index: number) => setSliceByPlane((state) => ({ ...state, [bindingId]: clampSlice(index, total) })),
         onStep: (delta: number) => setSliceByPlane((state) => ({
           ...state,

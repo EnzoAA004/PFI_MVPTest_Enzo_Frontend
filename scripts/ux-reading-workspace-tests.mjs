@@ -17,6 +17,8 @@ function loadPureSource(source, exportNames) {
 
 const layoutSource = readFileSync("src/features/reading/readingWorkspaceLayout.ts", "utf8");
 const layout = loadPureSource(layoutSource, ["viewportBindingsFor", "layoutPresetAvailable"]);
+const sliceSourceCode = readFileSync("src/features/reading/analyzedSliceSource.ts", "utf8");
+const sliceSource = loadPureSource(sliceSourceCode, ["resolveAnalyzedSliceSource"]);
 const appSource = readFileSync("src/App.tsx", "utf8");
 const shellSource = readFileSync("src/components/AppShell.tsx", "utf8");
 const reviewSource = readFileSync("src/components/StudyReviewView.tsx", "utf8");
@@ -82,6 +84,44 @@ check("cambiar preset no mueve ownership de selectedLevel ni inspector tab", () 
 check("no existe sincronización de sliceIndex entre bindings", () => {
   assert.match(reviewSource, /\[bindingId\]: clampSlice/);
   assert.doesNotMatch(reviewSource, /sagittalSlice\s*===\s*axialSlice|sliceIndex A|setSliceByPlane\([^\n]*sagittal[^\n]*axial/);
+});
+
+check("el corte IA conserva el input.png canónico", () => {
+  assert.equal(sliceSource.resolveAnalyzedSliceSource({
+    apiBaseUrl: "https://backend.example",
+    sourceInputId: "sagittal-input",
+    index: 7,
+    aiIndex: 7,
+  }), undefined);
+});
+
+check("los cortes adyacentes usan el inputId exacto de la serie analizada", () => {
+  assert.equal(sliceSource.resolveAnalyzedSliceSource({
+    apiBaseUrl: "https://backend.example",
+    sourceInputId: "input con espacio",
+    index: 6,
+    aiIndex: 7,
+  }), "https://backend.example/api/ai/series/input%20con%20espacio/slices/6");
+  assert.match(reviewSource, /sourceInputId = typeof metadata\.inputId/);
+  assert.match(reviewSource, /sourceInputId: analyzedSeries\.sourceInputId/);
+});
+
+check("los stacks sagital y axial resuelven fuentes independientes", () => {
+  const sagittal = sliceSource.resolveAnalyzedSliceSource({ apiBaseUrl: "https://backend.example", sourceInputId: "sag", index: 5, aiIndex: 7 });
+  const axial = sliceSource.resolveAnalyzedSliceSource({ apiBaseUrl: "https://backend.example", sourceInputId: "ax", index: 5, aiIndex: 6 });
+  assert.match(sagittal, /\/series\/sag\/slices\/5$/);
+  assert.match(axial, /\/series\/ax\/slices\/5$/);
+  assert.notEqual(sagittal, axial);
+});
+
+check("corridas antiguas sin inputId conservan previews declaradas", () => {
+  assert.equal(sliceSource.resolveAnalyzedSliceSource({
+    apiBaseUrl: "https://backend.example",
+    index: 3,
+    aiIndex: 4,
+    legacyInputUrl: "https://backend.example/api/ai/assets/run/sagittal/input.png",
+    legacyPreviewCount: 5,
+  }), "https://backend.example/api/ai/assets/run/sagittal/slice-003.png");
 });
 
 check("IDs y selección de mediciones permanecen intactos", () => {
