@@ -65,6 +65,28 @@ export function instanceColor(index: number) {
   return INSTANCE_COLORS[(index - 1 + INSTANCE_COLORS.length) % INSTANCE_COLORS.length];
 }
 
+const VERTEBRAL_LEVEL_COLORS: Readonly<Record<string, string>> = {
+  L1: INSTANCE_COLORS[0],
+  L2: INSTANCE_COLORS[1],
+  L3: INSTANCE_COLORS[2],
+  L4: INSTANCE_COLORS[3],
+  L5: INSTANCE_COLORS[4],
+};
+
+/**
+ * Resuelve únicamente el color de presentación de una instancia.
+ *
+ * El nivel canónico ya llega en metadata; no se infiere desde nombres ni IDs. Los
+ * cuerpos y elementos posteriores comparten `vertebra_group`, por lo que pueden
+ * usar una identidad cromática común sin modificar clase, índice ni máscara.
+ */
+export function resolveSegmentationDisplayColor(instance: SegmentationInstance) {
+  if (instance.classKey === "vertebra_group" && instance.level) {
+    return VERTEBRAL_LEVEL_COLORS[instance.level] ?? instanceColor(instance.index);
+  }
+  return instanceColor(instance.index);
+}
+
 /** Lee la segmentación de un plano, o undefined si no viaja o está incompleta. */
 export function parseSegmentation(value: unknown): Segmentation | undefined {
   const raw = value as Partial<Segmentation> | undefined;
@@ -100,7 +122,7 @@ export function paintSegmentation(
   const pixels = image.data;
   const colors = new Map<number, readonly [number, number, number]>();
   for (const instance of segmentation.instances) {
-    colors.set(instance.index, hexToRgb(instanceColor(instance.index)));
+    colors.set(instance.index, hexToRgb(resolveSegmentationDisplayColor(instance)));
   }
 
   let offset = 0;

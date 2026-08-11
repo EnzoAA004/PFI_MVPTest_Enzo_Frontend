@@ -22,8 +22,8 @@ const js = ts.transpileModule(source, {
 }).outputText;
 
 const sandbox = { exports: {}, console };
-vm.runInNewContext(`${js}\nexports.instanceLabel = instanceLabel;`, sandbox);
-const { instanceLabel } = sandbox.exports;
+vm.runInNewContext(`${js}\nexports.instanceLabel = instanceLabel; exports.instanceColor = instanceColor; exports.resolveSegmentationDisplayColor = resolveSegmentationDisplayColor;`, sandbox);
+const { instanceLabel, instanceColor, resolveSegmentationDisplayColor } = sandbox.exports;
 
 // Traductor mínimo, con las mismas entradas que usa la pantalla.
 const translate = (value) => ({
@@ -79,6 +79,33 @@ for (const [name, value, expected] of cases) {
 const body = instanceLabel(instance({ label: "vertebra", classKey: "vertebra_group", level: "L3" }), translate);
 const arch = instanceLabel(instance({ label: "posterior_element", classKey: "vertebra_group", level: "L3" }), translate);
 assert.notEqual(body, arch, "cuerpo y arco de la misma vertebra deben distinguirse");
+passed += 1;
+
+const vertebral = (level, label, index) => instance({ index, id: `${level}-${label}`, label, classKey: "vertebra_group", level });
+const levels = ["L1", "L2", "L3", "L4", "L5"];
+const levelColors = new Set();
+for (const [offset, level] of levels.entries()) {
+  const bodyInstance = vertebral(level, "vertebra", offset * 2 + 1);
+  const posteriorInstance = vertebral(level, "posterior_element", offset * 2 + 2);
+  const bodyBefore = structuredClone(bodyInstance);
+  const posteriorBefore = structuredClone(posteriorInstance);
+  const bodyColor = resolveSegmentationDisplayColor(bodyInstance);
+  const posteriorColor = resolveSegmentationDisplayColor(posteriorInstance);
+  assert.equal(bodyColor, posteriorColor, `cuerpo y arco ${level} comparten color de display`);
+  assert.deepEqual(bodyInstance, bodyBefore, `resolver color no muta cuerpo ${level}`);
+  assert.deepEqual(posteriorInstance, posteriorBefore, `resolver color no muta arco ${level}`);
+  levelColors.add(bodyColor);
+  passed += 1;
+}
+assert.equal(levelColors.size, levels.length, "L1-L5 mantienen identidades cromáticas distintas");
+passed += 1;
+
+const canal = instance({ index: 12, id: "canal", label: "canal", classKey: "canal", level: null });
+assert.equal(
+  resolveSegmentationDisplayColor(canal),
+  instanceColor(canal.index),
+  "una estructura no vertebral conserva el mapping por índice",
+);
 passed += 1;
 
 console.log(`segmentation-naming: ${passed} passed`);

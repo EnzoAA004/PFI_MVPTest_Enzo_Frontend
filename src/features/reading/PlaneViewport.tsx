@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { OrientationLabels } from "./orientationMarkers";
 import { MriSliceViewer, type MeasurementOverlay, type RawSlicePixels, type SliceNavigation } from "../../components/MriSliceViewer";
-import { instanceColor, instanceLabel, type Segmentation } from "./segmentation";
+import { instanceLabel, resolveSegmentationDisplayColor, type Segmentation } from "./segmentation";
 import { displayStructureLabel } from "../../clinicalDisplay";
 import type { StudyArchiveSeries } from "../../appTypes";
 import type { SlicePixelsMeta } from "./pixels";
@@ -246,7 +246,7 @@ export function PlaneViewport({
                     onChange={() => onToggleInstance(instance.index)}
                     type="checkbox"
                   />
-                  <i style={{ background: instanceColor(instance.index) }} />
+                  <i style={{ background: resolveSegmentationDisplayColor(instance) }} />
                   <span>{instanceLabel(instance, displayStructureLabel)}</span>
                 </label>
               </li>
