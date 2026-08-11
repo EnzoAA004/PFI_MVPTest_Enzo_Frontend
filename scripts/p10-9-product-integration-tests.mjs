@@ -114,7 +114,9 @@ class BackendApiError extends Error {
 
 const flow = load("src/features/worklist/productAnalysisFlow.ts", [
   "initialProductAnalysisState",
+  "retryDiscFindingsFromPreparedSources",
   "runP109ProductFlow",
+  "runSingleProductRetry",
 ], {
   BackendApiError,
   runProductSeriesSegmentation: async () => { throw new Error("not injected"); },
@@ -225,8 +227,151 @@ await check("504 de P10.7 permite reintento sin perder la corrida multiplanar", 
   });
   assert.equal(result.phase, "error");
   assert.equal(result.retryable, true);
-  assert.match(result.message, /corrida principal quedó guardada/);
+  assert.equal(result.failureStage, "disc_findings");
+  assert.match(result.message, /segmentación quedó guardada/);
+  assert.match(result.message, /agotó el tiempo de espera/);
   assert.equal(result.series.sagittal_t2.segmentationRunId, "seg-input-t2");
+});
+
+await check("502 de findings informa upstream sin afirmar timeout", async () => {
+  const result = await flow.runP109ProductFlow({
+    caseId: "CASE-1",
+    multiplanarRunId: "multi-1",
+    study: { sagittalT1: planeInput("input-t1", "t1") },
+  }, {
+    runSeriesSegmentation: successfulSegmentation,
+    runDiscFindings: async () => { throw new BackendApiError("upstream", 502); },
+  });
+  assert.equal(result.retryable, true);
+  assert.match(result.message, /no está disponible/);
+  assert.doesNotMatch(result.message, /tiempo de espera/);
+});
+
+await check("retry reutiliza T1/T2 y no vuelve a invocar full-series", async () => {
+  let segmentationCalls = 0;
+  let findingsCalls = 0;
+  const study = { sagittalT1: planeInput("input-t1", "t1"), sagittalT2: planeInput("input-t2", "t2") };
+  const dependencies = {
+    runSeriesSegmentation: async (payload) => { segmentationCalls += 1; return successfulSegmentation(payload); },
+    runDiscFindings: async () => {
+      findingsCalls += 1;
+      if (findingsCalls === 1) throw new BackendApiError("timeout", 504);
+      return { findings: Array(40).fill({}), humanReviewRequired: true, notClinicalDiagnosis: true, autonomousDiagnosis: false };
+    },
+  };
+  const failed = await flow.runP109ProductFlow({ caseId: "CASE-1", multiplanarRunId: "multi-1", study }, dependencies);
+  assert.equal(segmentationCalls, 2);
+  assert.equal(findingsCalls, 1);
+  assert.equal(failed.series.sagittal_t1.segmentationRunId, "seg-input-t1");
+  assert.equal(failed.series.sagittal_t2.segmentationRunId, "seg-input-t2");
+
+  let retriedPayload;
+  const completed = await flow.retryDiscFindingsFromPreparedSources({
+    caseId: "CASE-1",
+    multiplanarRunId: "multi-1",
+    study,
+    state: failed,
+  }, {
+    runSeriesSegmentation: async () => { segmentationCalls += 1; throw new Error("no debe resegmentar"); },
+    runDiscFindings: async (payload) => {
+      findingsCalls += 1;
+      retriedPayload = payload;
+      return { findings: Array(40).fill({}), humanReviewRequired: true, notClinicalDiagnosis: true, autonomousDiagnosis: false };
+    },
+  });
+  assert.equal(segmentationCalls, 2);
+  assert.equal(findingsCalls, 2);
+  assert.equal(completed.phase, "completed");
+  assert.equal(completed.findingsCount, 40);
+  assert.deepEqual(JSON.parse(JSON.stringify(retriedPayload.sources)), [
+    { role: "sagittal_t1", inputId: "input-t1", segmentationRunId: "seg-input-t1" },
+    { role: "sagittal_t2", inputId: "input-t2", segmentationRunId: "seg-input-t2" },
+  ]);
+});
+
+await check("retry conservador no entra en loop ni resegmenta una fuente inválida", async () => {
+  let calls = 0;
+  const invalid = flow.initialProductAnalysisState({ sagittalT1: planeInput("input-t1", "t1") });
+  invalid.phase = "error";
+  invalid.failureStage = "disc_findings";
+  invalid.retryable = true;
+  const result = await flow.retryDiscFindingsFromPreparedSources({
+    caseId: "CASE-1",
+    multiplanarRunId: "multi-1",
+    study: { sagittalT1: planeInput("input-t1", "t1") },
+    state: invalid,
+  }, {
+    runSeriesSegmentation: async () => { calls += 1; throw new Error("no debe ejecutarse"); },
+    runDiscFindings: async () => { calls += 1; throw new Error("no debe ejecutarse"); },
+  });
+  assert.equal(calls, 0);
+  assert.equal(result.phase, "error");
+  assert.equal(result.retryable, false);
+});
+
+await check("retry rechaza segmentaciones de otra corrida compatible no demostrada", async () => {
+  let calls = 0;
+  const study = { sagittalT1: planeInput("input-t1", "t1") };
+  const failed = await flow.runP109ProductFlow({ caseId: "CASE-1", multiplanarRunId: "multi-1", study }, {
+    runSeriesSegmentation: successfulSegmentation,
+    runDiscFindings: async () => { throw new BackendApiError("upstream", 502); },
+  });
+  const result = await flow.retryDiscFindingsFromPreparedSources({
+    caseId: "CASE-1",
+    multiplanarRunId: "multi-other",
+    study,
+    state: failed,
+  }, {
+    runSeriesSegmentation: async () => { calls += 1; throw new Error("no debe ejecutarse"); },
+    runDiscFindings: async () => { calls += 1; throw new Error("no debe ejecutarse"); },
+  });
+  assert.equal(calls, 0);
+  assert.equal(result.retryable, false);
+});
+
+await check("retry no recuperable hace una sola clasificación y no resegmenta", async () => {
+  let segmentationCalls = 0;
+  let findingsCalls = 0;
+  const study = { sagittalT1: planeInput("input-t1", "t1") };
+  const failed = await flow.runP109ProductFlow({ caseId: "CASE-1", multiplanarRunId: "multi-1", study }, {
+    runSeriesSegmentation: async (payload) => { segmentationCalls += 1; return successfulSegmentation(payload); },
+    runDiscFindings: async () => { findingsCalls += 1; throw new BackendApiError("upstream", 502); },
+  });
+  const result = await flow.retryDiscFindingsFromPreparedSources({
+    caseId: "CASE-1",
+    multiplanarRunId: "multi-1",
+    study,
+    state: failed,
+  }, {
+    runSeriesSegmentation: async () => { segmentationCalls += 1; throw new Error("no debe resegmentar"); },
+    runDiscFindings: async () => { findingsCalls += 1; throw new BackendApiError("solicitud inválida", 400); },
+  });
+  assert.equal(segmentationCalls, 1);
+  assert.equal(findingsCalls, 2);
+  assert.equal(result.phase, "error");
+  assert.equal(result.retryable, false);
+});
+
+await check("doble activación de retry comparte el lock y dispara una sola llamada", async () => {
+  const lock = { current: false };
+  let calls = 0;
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const first = flow.runSingleProductRetry(lock, async () => { calls += 1; await pending; return "ok"; });
+  const second = flow.runSingleProductRetry(lock, async () => { calls += 1; return "duplicado"; });
+  assert.equal(await second, undefined);
+  assert.equal(calls, 1);
+  release();
+  assert.equal(await first, "ok");
+  assert.equal(lock.current, false);
+});
+
+await check("drawer clínico usa copy funcional y retry preparado", () => {
+  const source = readFileSync("src/features/worklist/NewAnalysisDrawer.tsx", "utf8");
+  assert.doesNotMatch(source, /P10\.7/);
+  assert.match(source, /Reintentar hallazgos discales/);
+  assert.match(source, /retryDiscFindingsFromPreparedSources/);
+  assert.match(source, /Clasificación discal/);
 });
 
 await check("la sala lee P10.7 desde metricsSnapshot y no desde estado React transitorio", () => {

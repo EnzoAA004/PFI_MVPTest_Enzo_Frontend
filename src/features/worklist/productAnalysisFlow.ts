@@ -34,6 +34,8 @@ export type ProductAnalysisState = {
   message: string;
   findingsCount?: number;
   retryable: boolean;
+  failureStage?: "series_segmentation" | "disc_findings";
+  preparedFor?: { caseId: string; multiplanarRunId: string };
 };
 
 export type ProductAnalysisDependencies = {
@@ -75,11 +77,124 @@ function retryableError(error: unknown): boolean {
   return error instanceof BackendApiError && (error.status === 502 || error.status === 504);
 }
 
-function technicalFailureMessage(error: unknown): string {
-  if (retryableError(error)) {
-    return "El servicio de IA no respondió o agotó el tiempo de espera. La corrida principal quedó guardada y podés reintentar P10.7.";
+function technicalFailureMessage(error: unknown, stage: "series_segmentation" | "disc_findings"): string {
+  if (stage === "disc_findings" && error instanceof BackendApiError && error.status === 504) {
+    return "El análisis de hallazgos discales agotó el tiempo de espera. La segmentación quedó guardada y podés reintentar únicamente esta clasificación.";
   }
-  return `No se pudo completar P10.7: ${safeMessage(error)}`;
+  if (stage === "disc_findings" && error instanceof BackendApiError && error.status === 502) {
+    return "El servicio de análisis discal no está disponible en este momento. La segmentación quedó guardada y podés reintentar únicamente esta clasificación.";
+  }
+  if (retryableError(error)) {
+    return "El servicio de IA no está disponible en este momento. La corrida principal permanece guardada y podés reintentar.";
+  }
+  return stage === "disc_findings"
+    ? `No se pudieron completar los hallazgos discales: ${safeMessage(error)}`
+    : `No se pudo completar la segmentación: ${safeMessage(error)}`;
+}
+
+function reusableDiscSources(
+  caseId: string,
+  multiplanarRunId: string,
+  study: Pick<StudyIngestionResponse, "sagittalT1" | "sagittalT2"> | undefined,
+  state: ProductAnalysisState,
+): DiscSegmentationSource[] {
+  if (state.preparedFor?.caseId !== caseId || state.preparedFor.multiplanarRunId !== multiplanarRunId) return [];
+  const sourceFor = (role: ProductSourceRole, input?: StudyPlaneInput) => {
+    const prepared = state.series[role];
+    if (
+      !input?.inputId
+      || input.caseId !== caseId
+      || prepared.role !== role
+      || prepared.inputId !== input.inputId
+      || prepared.status !== "completed"
+      || !prepared.segmentationRunId?.trim()
+      || prepared.discLocalizations.length === 0
+    ) return undefined;
+    return { role, inputId: input.inputId, segmentationRunId: prepared.segmentationRunId };
+  };
+  return [
+    sourceFor("sagittal_t1", study?.sagittalT1),
+    sourceFor("sagittal_t2", study?.sagittalT2),
+  ].filter((source): source is DiscSegmentationSource => Boolean(source));
+}
+
+export type ProductRetryLock = { current: boolean };
+
+/** Evita que dos activaciones del CTA disparen dos clasificaciones simultáneas. */
+export async function runSingleProductRetry<T>(
+  lock: ProductRetryLock,
+  retry: () => Promise<T>,
+): Promise<T | undefined> {
+  if (lock.current) return undefined;
+  lock.current = true;
+  try {
+    return await retry();
+  } finally {
+    lock.current = false;
+  }
+}
+
+/** Reintenta únicamente la clasificación a partir de segmentaciones completas. */
+export async function retryDiscFindingsFromPreparedSources(
+  params: {
+    caseId: string;
+    multiplanarRunId: string;
+    study?: Pick<StudyIngestionResponse, "sagittalT1" | "sagittalT2">;
+    state: ProductAnalysisState;
+    onState?: (state: ProductAnalysisState) => void;
+  },
+  dependencies: ProductAnalysisDependencies = defaultDependencies,
+): Promise<ProductAnalysisState> {
+  const sources = reusableDiscSources(params.caseId, params.multiplanarRunId, params.study, params.state);
+  if (!sources.length) {
+    const unavailable = {
+      ...params.state,
+      phase: "error" as const,
+      retryable: false,
+      failureStage: "disc_findings" as const,
+      message: "Las fuentes segmentadas ya no están disponibles para reintentar los hallazgos discales.",
+    };
+    params.onState?.(unavailable);
+    return unavailable;
+  }
+
+  const analyzing = {
+    ...params.state,
+    phase: "analyzing_findings" as const,
+    retryable: false,
+    failureStage: undefined,
+    message: "Analizando hallazgos discales con las segmentaciones ya preparadas.",
+  };
+  params.onState?.(analyzing);
+  try {
+    const result = await dependencies.runDiscFindings({
+      multiplanarRunId: params.multiplanarRunId,
+      caseId: params.caseId,
+      sources,
+    });
+    const complete = Boolean(params.study?.sagittalT1?.inputId && params.study?.sagittalT2?.inputId && sources.length === 2);
+    const finished = {
+      ...analyzing,
+      phase: complete ? "completed" as const : "degraded" as const,
+      findingsCount: result.findings.length,
+      retryable: false,
+      message: complete
+        ? `Hallazgos discales completados y guardados: ${result.findings.length} resultados listos para revisión.`
+        : `Hallazgos discales completados con ${sources.length} fuente disponible. La modalidad faltante no se sustituyó.`,
+    };
+    params.onState?.(finished);
+    return finished;
+  } catch (error) {
+    const failed = {
+      ...analyzing,
+      phase: "error" as const,
+      retryable: retryableError(error),
+      failureStage: "disc_findings" as const,
+      message: technicalFailureMessage(error, "disc_findings"),
+    };
+    params.onState?.(failed);
+    return failed;
+  }
 }
 
 export async function runP109ProductFlow(
@@ -91,7 +206,10 @@ export async function runP109ProductFlow(
   },
   dependencies: ProductAnalysisDependencies = defaultDependencies,
 ): Promise<ProductAnalysisState> {
-  let state = initialProductAnalysisState(params.study);
+  let state: ProductAnalysisState = {
+    ...initialProductAnalysisState(params.study),
+    preparedFor: { caseId: params.caseId, multiplanarRunId: params.multiplanarRunId },
+  };
   const publish = (next: ProductAnalysisState) => {
     state = next;
     params.onState?.(next);
@@ -106,7 +224,7 @@ export async function runP109ProductFlow(
     const degraded = {
       ...state,
       phase: "degraded" as const,
-      message: "La corrida principal está lista, pero no hay series sagitales T1/T2 explícitas para ejecutar P10.7.",
+      message: "La corrida principal está lista, pero no hay series sagitales T1/T2 explícitas para analizar hallazgos discales.",
     };
     publish(degraded);
     return degraded;
@@ -157,7 +275,7 @@ export async function runP109ProductFlow(
           [candidate.role]: {
             ...state.series[candidate.role],
             status: "error",
-            error: technicalFailureMessage(error),
+            error: technicalFailureMessage(error, "series_segmentation"),
           },
         },
       });
@@ -169,13 +287,14 @@ export async function runP109ProductFlow(
       ...state,
       phase: "error" as const,
       retryable: hasRetryableSegmentationError,
+      failureStage: "series_segmentation" as const,
       message: "No se pudo segmentar ninguna fuente T1/T2. La corrida multiplanar permanece disponible.",
     };
     publish(failed);
     return failed;
   }
 
-  publish({ ...state, phase: "analyzing_findings", message: "Analizando hallazgos discales P10.7." });
+  publish({ ...state, phase: "analyzing_findings", message: "Analizando hallazgos discales." });
   try {
     const result = await dependencies.runDiscFindings({
       multiplanarRunId: params.multiplanarRunId,
@@ -189,8 +308,8 @@ export async function runP109ProductFlow(
       findingsCount: result.findings.length,
       retryable: false,
       message: complete
-        ? `P10.7 completado y persistido: ${result.findings.length} findings listos para revisión.`
-        : `P10.7 completado con ${successfulSources.length} fuente disponible. La modalidad faltante o fallida no se sustituyó.`,
+        ? `Hallazgos discales completados y guardados: ${result.findings.length} resultados listos para revisión.`
+        : `Hallazgos discales completados con ${successfulSources.length} fuente disponible. La modalidad faltante o fallida no se sustituyó.`,
     };
     publish(finished);
     return finished;
@@ -199,7 +318,8 @@ export async function runP109ProductFlow(
       ...state,
       phase: "error" as const,
       retryable: retryableError(error),
-      message: technicalFailureMessage(error),
+      failureStage: "disc_findings" as const,
+      message: technicalFailureMessage(error, "disc_findings"),
     };
     publish(failed);
     return failed;
