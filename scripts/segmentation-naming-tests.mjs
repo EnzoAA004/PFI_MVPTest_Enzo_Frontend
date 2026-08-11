@@ -83,14 +83,27 @@ passed += 1;
 
 const vertebral = (level, label, index) => instance({ index, id: `${level}-${label}`, label, classKey: "vertebra_group", level });
 const levels = ["L1", "L2", "L3", "L4", "L5"];
+const bodies = levels.map((level, offset) => vertebral(level, "vertebra", offset + 8));
+const posterior = levels.map((level, offset) => vertebral(level, "posterior_element", offset + 16));
+const lumbarDiscs = [
+  instance({ index: 3, id: "disc-l1-l2", label: "disc", classKey: "disc_group", level: "L1-L2" }),
+  instance({ index: 4, id: "disc-l2-l3", label: "disc", classKey: "disc_group", level: "L2-L3" }),
+];
+const levelSegmentation = {
+  encoding: "rle-v1",
+  width: 1,
+  height: 1,
+  data: [0, 1],
+  instances: [...lumbarDiscs, ...bodies, ...posterior],
+};
 const levelColors = new Set();
 for (const [offset, level] of levels.entries()) {
-  const bodyInstance = vertebral(level, "vertebra", offset * 2 + 1);
-  const posteriorInstance = vertebral(level, "posterior_element", offset * 2 + 2);
+  const bodyInstance = bodies[offset];
+  const posteriorInstance = posterior[offset];
   const bodyBefore = structuredClone(bodyInstance);
   const posteriorBefore = structuredClone(posteriorInstance);
-  const bodyColor = resolveSegmentationDisplayColor(bodyInstance);
-  const posteriorColor = resolveSegmentationDisplayColor(posteriorInstance);
+  const bodyColor = resolveSegmentationDisplayColor(bodyInstance, levelSegmentation);
+  const posteriorColor = resolveSegmentationDisplayColor(posteriorInstance, levelSegmentation);
   assert.equal(bodyColor, posteriorColor, `cuerpo y arco ${level} comparten color de display`);
   assert.deepEqual(bodyInstance, bodyBefore, `resolver color no muta cuerpo ${level}`);
   assert.deepEqual(posteriorInstance, posteriorBefore, `resolver color no muta arco ${level}`);
@@ -98,6 +111,36 @@ for (const [offset, level] of levels.entries()) {
   passed += 1;
 }
 assert.equal(levelColors.size, levels.length, "L1-L5 mantienen identidades cromáticas distintas");
+passed += 1;
+
+const discL1L2Color = resolveSegmentationDisplayColor(lumbarDiscs[0], levelSegmentation);
+assert.notEqual(discL1L2Color, resolveSegmentationDisplayColor(posterior[0], levelSegmentation), "L1-L2 no da color al arco L1");
+assert.notEqual(discL1L2Color, resolveSegmentationDisplayColor(posterior[1], levelSegmentation), "L1-L2 no da color al arco L2");
+const discL2L3Color = resolveSegmentationDisplayColor(lumbarDiscs[1], levelSegmentation);
+assert.notEqual(discL2L3Color, resolveSegmentationDisplayColor(posterior[1], levelSegmentation), "L2-L3 no da color al arco L2");
+assert.notEqual(discL2L3Color, resolveSegmentationDisplayColor(posterior[2], levelSegmentation), "L2-L3 no da color al arco L3");
+passed += 1;
+
+const bodyWithoutMutation = vertebral("L1", "vertebra", 8);
+const posteriorWithoutLevel = vertebral(null, "posterior_element", 13);
+const discInSameMask = instance({ index: 3, id: "disc-neighbor", label: "disc", classKey: "disc_group", level: "L1-L2" });
+const overlapSegmentation = {
+  encoding: "rle-v1",
+  width: 4,
+  height: 3,
+  data: [8, 2, 13, 2, 8, 2, 13, 2, 3, 4],
+  instances: [discInSameMask, bodyWithoutMutation, posteriorWithoutLevel],
+};
+assert.equal(
+  resolveSegmentationDisplayColor(posteriorWithoutLevel, overlapSegmentation),
+  resolveSegmentationDisplayColor(bodyWithoutMutation, overlapSegmentation),
+  "un arco sin nivel sólo hereda de un cuerpo con solapamiento vertical",
+);
+assert.notEqual(
+  resolveSegmentationDisplayColor(posteriorWithoutLevel, overlapSegmentation),
+  resolveSegmentationDisplayColor(discInSameMask, overlapSegmentation),
+  "un disco presente en la misma máscara nunca es candidato de color",
+);
 passed += 1;
 
 const canal = instance({ index: 12, id: "canal", label: "canal", classKey: "canal", level: null });

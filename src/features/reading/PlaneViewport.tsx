@@ -246,7 +246,7 @@ export function PlaneViewport({
                     onChange={() => onToggleInstance(instance.index)}
                     type="checkbox"
                   />
-                  <i style={{ background: resolveSegmentationDisplayColor(instance) }} />
+                  <i style={{ background: resolveSegmentationDisplayColor(instance, segmentation) }} />
                   <span>{instanceLabel(instance, displayStructureLabel)}</span>
                 </label>
               </li>
