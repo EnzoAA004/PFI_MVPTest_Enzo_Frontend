@@ -10,6 +10,16 @@ export type PatientSummary = {
 
 export type PatientDetail = PatientSummary;
 
+export type PatientStudySummary = {
+  id: string;
+  caseId: string;
+  studyDate: string | null;
+  modality: string | null;
+  description: string | null;
+  reviewPriority: string | null;
+  status: string | null;
+};
+
 export type CreatePatientRequest = {
   patientReference: string;
 };
@@ -44,6 +54,15 @@ function requiredString(record: Record<string, unknown>, key: string, path: stri
   return value;
 }
 
+function optionalString(record: Record<string, unknown>, key: string, path: string): string | null {
+  const value = record[key];
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") {
+    throw new ContractError(`Contrato inválido en ${path}: ${key} debe ser texto o null.`, path);
+  }
+  return value.trim() || null;
+}
+
 export function parsePatient(value: unknown, path = "/api/patients"): PatientDetail {
   const record = asRecord(value, path);
   return {
@@ -58,6 +77,27 @@ export function parsePatientSearch(value: unknown): PatientSummary[] {
   const path = "/api/patients";
   if (!Array.isArray(value)) throw new ContractError(`Contrato inválido en ${path}.`, path);
   return value.map((patient) => parsePatient(patient, path));
+}
+
+export function parsePatientStudies(value: unknown, patientId: string): PatientStudySummary[] {
+  const path = `/api/patients/${patientId}/studies`;
+  if (!Array.isArray(value)) throw new ContractError(`Contrato inválido en ${path}.`, path);
+  return value.map((entry) => {
+    const record = asRecord(entry, path);
+    return {
+      id: requiredString(record, "id", path),
+      caseId: requiredString(record, "caseId", path),
+      studyDate: optionalString(record, "studyDate", path),
+      modality: optionalString(record, "modality", path),
+      description: optionalString(record, "description", path),
+      reviewPriority: optionalString(record, "reviewPriority", path),
+      status: optionalString(record, "status", path),
+    };
+  });
+}
+
+export function isValidPatientId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
 }
 
 export function parseStudyPatientAssignment(
@@ -106,6 +146,12 @@ export async function getPatient(patientId: string): Promise<PatientDetail> {
   const path = `/api/patients/${encodeURIComponent(patientId)}`;
   const value = await multiplanarRequest<unknown>(path);
   return parsePatient(value, path);
+}
+
+export async function getPatientStudies(patientId: string): Promise<PatientStudySummary[]> {
+  const path = `/api/patients/${encodeURIComponent(patientId)}/studies`;
+  const value = await multiplanarRequest<unknown>(path);
+  return parsePatientStudies(value, patientId);
 }
 
 export async function associateStudyPatient(

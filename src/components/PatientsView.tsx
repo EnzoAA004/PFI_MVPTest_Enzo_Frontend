@@ -1,140 +1,133 @@
-import { useMemo, useState } from "react";
-import type { HistoryTarget, StudyRow } from "../appTypes";
-import { displayReviewStatus } from "../clinicalDisplay";
-import { displayStudyDate } from "../studyDisplay";
-import { PriorityBadge, ReviewBadge } from "./StatusBadge";
+import { useEffect, useState } from "react";
+import { searchPatients, type PatientSummary } from "../patientApi";
 
 interface PatientsViewProps {
-  studies: StudyRow[];
-  loading?: boolean;
-  onOpenHistory: (target: HistoryTarget) => void;
+  onOpenPatient: (patientId: string) => void;
 }
 
-type PatientRow = {
-  id: string;
-  label: string;
-  detail: string;
-  target: HistoryTarget;
-  kind: HistoryTarget["kind"];
-  totalStudies: number;
-  firstStudy: string;
-  mostRecent: string;
-  pending: number;
-  highestPriority: StudyRow["priority"];
-  latestReviewStatus: StudyRow["reviewStatus"];
-};
+type PatientListState =
+  | { status: "loading"; patients: PatientSummary[] }
+  | { status: "ready"; patients: PatientSummary[] }
+  | { status: "error"; patients: PatientSummary[] };
 
-const priorityRank: Record<StudyRow["priority"], number> = { alta: 0, media: 1, baja: 2 };
-
-export function buildPatients(studies: StudyRow[]): PatientRow[] {
-  const grouped = new Map<string, StudyRow[]>();
-  studies.forEach((study) => {
-    const subjectRef = study.subjectRef?.trim();
-    const key = subjectRef ? `subject:${subjectRef.toLowerCase()}` : `study:${study.caseId}`;
-    grouped.set(key, [...(grouped.get(key) ?? []), study]);
-  });
-  return Array.from(grouped.entries()).map(([key, patientStudies]) => {
-    const sortedByDate = [...patientStudies].sort((a, b) => Date.parse(a.studyDate ?? "0001-01-01") - Date.parse(b.studyDate ?? "0001-01-01"));
-    const latest = sortedByDate[sortedByDate.length - 1] ?? patientStudies[0];
-    const highestPriority = [...patientStudies].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority])[0]?.priority ?? "baja";
-    const subjectRef = patientStudies.find((study) => study.subjectRef?.trim())?.subjectRef?.trim() ?? latest?.subjectRef?.trim();
-    const isSubject = key.startsWith("subject:") && Boolean(subjectRef);
-    const target: HistoryTarget = isSubject ? { kind: "subject", subjectRef: subjectRef as string } : { kind: "study", caseId: latest?.caseId ?? "" };
-    return {
-      id: key,
-      label: isSubject ? subjectRef as string : "Referencia de paciente no informada",
-      detail: isSubject ? "Referencia de paciente de-identificada" : `Referencia técnica: ${latest?.caseId ?? "sin caso"}`,
-      target,
-      kind: target.kind,
-      totalStudies: patientStudies.length,
-      firstStudy: displayStudyDate(sortedByDate[0]?.studyDate),
-      mostRecent: displayStudyDate(latest?.studyDate),
-      pending: patientStudies.filter((study) => study.reviewStatus === "pendiente" || study.reviewStatus === "observado").length,
-      highestPriority,
-      latestReviewStatus: latest?.reviewStatus ?? "pendiente",
-    };
-  }).sort((a, b) => a.label.localeCompare(b.label));
+function displayCreatedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Fecha no disponible";
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }
 
-function matchesQuery(patient: PatientRow, query: string) {
-  if (!query.trim()) return true;
-  const normalized = query.trim().toLowerCase();
-  return [patient.label, patient.detail, patient.firstStudy, patient.mostRecent, patient.highestPriority, patient.latestReviewStatus, displayReviewStatus(patient.latestReviewStatus)]
-    .some((value) => String(value).toLowerCase().includes(normalized));
-}
-
-export function PatientsView({ studies, loading = false, onOpenHistory }: PatientsViewProps) {
+export function PatientsView({ onOpenPatient }: PatientsViewProps) {
   const [query, setQuery] = useState("");
-  const patients = useMemo(() => buildPatients(studies), [studies]);
-  const visiblePatients = useMemo(() => patients.filter((patient) => matchesQuery(patient, query)), [patients, query]);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const [state, setState] = useState<PatientListState>({ status: "loading", patients: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    const timeout = window.setTimeout(() => {
+      setState((current) => ({ status: "loading", patients: current.patients }));
+      void searchPatients(query, 100)
+        .then((patients) => {
+          if (!cancelled) setState({ status: "ready", patients });
+        })
+        .catch(() => {
+          if (!cancelled) setState({ status: "error", patients: [] });
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [query, retryNonce]);
+
+  const normalizedQuery = query.trim();
+  const initialEmpty = state.status === "ready" && !normalizedQuery && state.patients.length === 0;
+  const searchEmpty = state.status === "ready" && Boolean(normalizedQuery) && state.patients.length === 0;
 
   return (
-    <div className="view-stack">
+    <div className="view-stack patient-directory-view">
       <section className="page-heading compact-heading">
         <div>
           <p>Pacientes</p>
-          <h1>Índice de pacientes</h1>
+          <h1>Pacientes registrados</h1>
+          <span>Entidades longitudinales de-identificadas.</span>
         </div>
-        <div className="screen-summary">
-          <strong>{visiblePatients.length}</strong>
-          <span>referencias o trazabilidades reales</span>
+        <div className="screen-summary" aria-live="polite">
+          <strong>{state.status === "ready" ? state.patients.length : "—"}</strong>
+          <span>{normalizedQuery ? "resultados" : "pacientes visibles"}</span>
         </div>
       </section>
 
-      <section className="panel-card worklist-panel">
+      <section className="panel-card patient-directory-panel">
         <div className="section-title">
           <div>
-            <h2>Pacientes</h2>
-            <p className="muted compact-copy">Derivado de filas reales de estudios disponibles para el frontend. No se infieren métricas longitudinales acá.</p>
+            <h2>Índice de pacientes</h2>
+            <p className="muted compact-copy">La lista proviene del registro real de pacientes; no se deriva de referencias de estudios.</p>
           </div>
         </div>
-        <div className="worklist-filter-shell">
-          <div className="worklist-search-row single-action">
-            <label className="worklist-search-input">
-              <span>Buscar</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Referencia, fecha, estado..." type="search" />
-            </label>
-          </div>
+
+        <div className="patient-directory-search">
+          <label className="worklist-search-input" htmlFor="patient-directory-query">
+            <span>Buscar por referencia</span>
+            <input
+              autoComplete="off"
+              id="patient-directory-query"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="PAC-001"
+              type="search"
+              value={query}
+            />
+          </label>
+          {query && (
+            <button className="ghost-button" onClick={() => setQuery("")} type="button">
+              Limpiar búsqueda
+            </button>
+          )}
         </div>
-        {loading ? (
-          <div className="panel-hidden-placeholder">Consultando filas de estudios desde backend.</div>
-        ) : visiblePatients.length ? (
-          <>
-          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- axe requires keyboard focus for horizontally scrollable tables. */}
-          <div className="table-wrap" tabIndex={0} role="region" aria-label="Tabla de pacientes">
-            <table className="worklist-table patient-index-table">
-              <thead>
-                <tr>
-                  <th>Referencia</th>
-                  <th>Estudios</th>
-                  <th>Primer estudio</th>
-                  <th>Más reciente</th>
-                  <th>Pendientes</th>
-                  <th>Prioridad</th>
-                  <th>Estado</th>
-                  <th aria-label="Acciones"><span className="sr-only">Acciones</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {visiblePatients.map((patient) => (
-                  <tr key={patient.id}>
-                    <td><strong>{patient.label}</strong><small>{patient.detail}</small></td>
-                    <td>{patient.totalStudies}</td>
-                    <td>{patient.firstStudy}</td>
-                    <td>{patient.mostRecent}</td>
-                    <td>{patient.pending}</td>
-                    <td><PriorityBadge priority={patient.highestPriority} /></td>
-                    <td><ReviewBadge status={patient.latestReviewStatus} /></td>
-                    <td><button className="ghost-button" onClick={() => onOpenHistory(patient.target)} type="button">{patient.kind === "subject" ? "Abrir historial" : "Abrir trazabilidad del estudio"}</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          </>
-        ) : (
-          <div className="panel-hidden-placeholder">No hay lista de pacientes disponible desde filas reales de estudios.</div>
-        )}
+
+        <div aria-live="polite" aria-busy={state.status === "loading"}>
+          {state.status === "loading" && (
+            <div className="panel-hidden-placeholder">Consultando pacientes…</div>
+          )}
+          {state.status === "error" && (
+            <div className="clinical-empty-state" role="alert">
+              <h3>No se pudo cargar la lista de pacientes</h3>
+              <p>Revisá la conexión e intentá nuevamente.</p>
+              <button className="ghost-button" onClick={() => setRetryNonce((value) => value + 1)} type="button">Reintentar</button>
+            </div>
+          )}
+          {initialEmpty && (
+            <div className="clinical-empty-state">
+              <h3>No hay pacientes registrados todavía</h3>
+              <p>Los pacientes se crean de forma de-identificada desde Nuevo análisis.</p>
+            </div>
+          )}
+          {searchEmpty && (
+            <div className="clinical-empty-state">
+              <h3>No se encontraron pacientes</h3>
+              <p>Probá con otro prefijo de referencia.</p>
+              <button className="ghost-button" onClick={() => setQuery("")} type="button">Ver todos</button>
+            </div>
+          )}
+          {state.status === "ready" && state.patients.length > 0 && (
+            <ul className="patient-directory-list" aria-label="Pacientes registrados">
+              {state.patients.map((patient) => (
+                <li key={patient.id}>
+                  <div>
+                    <strong>{patient.patientReference}</strong>
+                    <span>Paciente de-identificado · registrado el {displayCreatedAt(patient.createdAt)}</span>
+                  </div>
+                  <button className="ghost-button" onClick={() => onOpenPatient(patient.id)} type="button">
+                    Ver paciente
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
     </div>
   );

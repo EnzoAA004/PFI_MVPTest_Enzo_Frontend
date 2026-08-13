@@ -41,32 +41,8 @@ exports.displayUnit = displayUnit;`, sandbox);
   return sandbox.exports;
 }
 
-function loadPatients() {
-  const source = readFileSync(join(root, "src/components/PatientsView.tsx"), "utf8")
-    .replace(/^import .*$/gm, "")
-    .replace(/export /g, "");
-  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  const sandbox = {
-    exports: {},
-    console,
-    React: {},
-    useMemo: (fn) => fn(),
-    useState: (initial) => [initial, () => undefined],
-    displayReviewStatus: (value) => value === "aceptado" ? "Finalizado" : value,
-    displayStudyDate: (value) => value ?? "Fecha no informada",
-    displaySubjectRef: (value) => value ?? "Referencia de paciente no informada",
-    PriorityBadge: () => ({}),
-    ReviewBadge: () => ({}),
-    require: (id) => id === "react/jsx-runtime" ? { jsx: () => ({}), jsxs: () => ({}), Fragment: "Fragment" } : {},
-  };
-  vm.runInNewContext(`${js}
-exports.buildPatients = buildPatients;`, sandbox);
-  return sandbox.exports;
-}
-
 const guards = loadGuards();
 const display = loadClinicalDisplay();
-const patients = loadPatients();
 
 let count = 0;
 function test(name, fn) {
@@ -154,19 +130,16 @@ test("E diccionario muestra labels sin mutar claves tecnicas", () => {
   assert.equal(display.displayMeasurementLabel("unknown_metric_key"), "unknown metric key");
 });
 
-test("F dos subjectRef null generan dos filas de trazabilidad", () => {
-  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: null }), study({ caseId: "CASE-B", subjectRef: null })]);
-  assert.equal(rows.length, 2);
-  assert.equal(rows.every((row) => row.kind === "study"), true);
-  assert.equal(JSON.stringify(rows.map((row) => row.target.caseId).sort()), JSON.stringify(["CASE-A", "CASE-B"]));
+test("F Pacientes usa entidades reales y no agrupa Studies por subjectRef", () => {
+  const source = readFileSync(join(root, "src/components/PatientsView.tsx"), "utf8");
+  assert.match(source, /searchPatients\(query, 100\)/);
+  assert.doesNotMatch(source, /subjectRef|buildPatients|StudyRow/);
 });
 
-test("G subjectRef real agrupa estudios longitudinalmente", () => {
-  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: "SUBJ-1" }), study({ caseId: "CASE-B", subjectRef: "SUBJ-1" })]);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].kind, "subject");
-  assert.equal(rows[0].target.subjectRef, "SUBJ-1");
-  assert.equal(rows[0].totalStudies, 2);
+test("G el detalle longitudinal consulta Studies por patientId", () => {
+  const source = readFileSync(join(root, "src/components/PatientDetailView.tsx"), "utf8");
+  assert.match(source, /getPatientStudies\(patientId\)/);
+  assert.doesNotMatch(source, /subjectRef|fetchSubjectHistory/);
 });
 
 test("H estilos semanticos de botones existen", () => {
