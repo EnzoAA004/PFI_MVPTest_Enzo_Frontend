@@ -1,5 +1,5 @@
 import type { ViewKey } from "../appTypes";
-import type { ComponentType } from "react";
+import { Fragment, type ComponentType } from "react";
 import { ChevronLeft, ChevronRight, ListChecks, Settings, ShieldCheck, Users } from "lucide-react";
 
 /**
@@ -47,10 +47,13 @@ export function Sidebar({ activeView, activeNavView = activeView, onChangeView, 
           const Icon = item.icon;
           const selected = activeNavView === item.key;
           return (
-            <button className={selected ? "active" : ""} key={item.key} onClick={() => onChangeView(item.key)} type="button" aria-current={selected ? "page" : undefined} title={collapsed ? item.label : undefined}>
-              <span className="side-nav-label"><Icon aria-hidden size={18} />{item.label}</span>
-              {item.badge && <em>{reviewQueueCount}</em>}
-            </button>
+            <Fragment key={item.key}>
+              {item.key === "settings" ? <span className="side-nav-separator" aria-hidden="true" /> : null}
+              <button className={selected ? "active" : ""} onClick={() => onChangeView(item.key)} type="button" aria-current={selected ? "page" : undefined} title={collapsed ? item.label : undefined}>
+                <span className="side-nav-label"><Icon aria-hidden size={18} />{item.label}</span>
+                {item.badge && <em aria-label={`${reviewQueueCount} estudios pendientes`}>{reviewQueueCount}</em>}
+              </button>
+            </Fragment>
           );
         })}
       </nav>

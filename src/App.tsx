@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { buildReviewCorrections, getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
+import { ApiError, buildReviewCorrections, getHealth, getModels, getStudies, isDemoMode, normalizeRun, updateReview } from "./api";
 import { logoutDoctor, updateDoctorSettings } from "./authClient";
 import { hydrateAuthSession, loadAuthSession } from "./authStorage";
 import { frontendLogger } from "./security/frontendLogger";
@@ -194,11 +194,16 @@ function App() {
         studyResponse.items.forEach((study) => validateVisibleDataOrigin(`estudio ${study.caseId}`, study.dataOrigin));
       } else {
         const detail = studyResult.reason instanceof Error ? studyResult.reason.message : "Error desconocido";
+        frontendLogger.error("[worklist] No se pudieron cargar los estudios", { detail });
         setBackendStatus("error");
         setDatabaseDataStatus("error");
         setBackendStudies([]);
         setStudiesBackendAvailable(false);
-        setStudiesError(`Error al consultar estudios. Detalle: ${detail}`);
+        setStudiesError(studyResult.reason instanceof ApiError && studyResult.reason.status === 403
+          ? "No se pudo cargar la lista de estudios. No tenés permiso para consultar este recurso."
+          : studyResult.reason instanceof ApiError && (studyResult.reason.status ?? 0) >= 500
+            ? "No se pudo cargar la lista de estudios. El servicio no está disponible temporalmente."
+            : "No se pudo cargar la lista de estudios.");
       }
 
       setStudyReview(null);

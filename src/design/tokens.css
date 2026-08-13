@@ -13,6 +13,16 @@
     --warning: #F59E0B;
     --danger: #DC2626;
     --info-bg: #EFF4FF;
+    /* Clinical Operations (light): semantic aliases shared by list, patient and settings surfaces. */
+    --operations-canvas: #F4F7FB;
+    --surface-elevated: #FFFFFF;
+    --border-subtle: #E8EDF4;
+    --clinical-accent: #0891B2;
+    --clinical-accent-soft: #ECFEFF;
+    --status-pending: #2563EB;
+    --status-observed: #D97706;
+    --status-completed: #15803D;
+    --status-dismissed: #64748B;
     /* Typography */
     --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
     /* Numeric readout font: measurements, slice indices, W/L, spacing. Any value a
@@ -49,8 +59,12 @@
     --radius-input: 8px;
     --radius-pill: 999px;
     --radius-chip: 6px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
     /* Shadow */
     --shadow-sm: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .10);
+    --shadow-subtle: 0 1px 2px rgba(15, 23, 42, .04), 0 8px 24px rgba(15, 23, 42, .035);
+    --transition-fast: 150ms ease;
     /* Semantic aliases used while consolidating legacy CSS into tokens. */
     --surface-subtle: color-mix(in srgb, var(--surface) 76%, var(--bg-app));
     --surface-soft: color-mix(in srgb, var(--surface) 88%, var(--info-bg));

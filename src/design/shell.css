@@ -7,6 +7,140 @@
  * which on a reading screen is real estate for the image.
  */
 @layer components {
+  .operations-page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--sp-6);
+    min-width: 0;
+    padding: var(--sp-2) 0 var(--sp-1);
+  }
+
+  .operations-page-heading {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .operations-eyebrow {
+    color: var(--clinical-accent);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: .11em;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  .operations-title-line {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+  }
+
+  .operations-title-line h1 {
+    margin: 0;
+    color: var(--text);
+    font-size: var(--fs-h1);
+    font-weight: var(--fw-semibold);
+    letter-spacing: -.025em;
+    line-height: 1.2;
+  }
+
+  .operations-page-heading > p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+  }
+
+  .operations-page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sp-2);
+    min-width: 0;
+  }
+
+  .status-badge {
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-medium);
+    line-height: 1;
+    padding: 5px 8px;
+  }
+
+  .badge-blue { background: var(--info-bg); border-color: var(--border-info); color: var(--text-primary-strong); }
+  .badge-teal { background: var(--clinical-accent-soft); border-color: #A5F3FC; color: var(--teal-strong); }
+  .badge-green { background: var(--surface-success); border-color: var(--border-success); color: var(--text-success-strong); }
+  .badge-amber { background: var(--surface-warm); border-color: var(--border-warning); color: var(--text-warning-strong); }
+  .badge-red { background: var(--surface-danger); border-color: var(--border-danger); color: var(--text-danger-strong); }
+  .badge-purple { background: var(--surface-ai); border-color: color-mix(in srgb, var(--ai) 24%, var(--border)); color: var(--text-ai-strong); }
+  .badge-slate { background: var(--surface-subtle); border-color: var(--border); color: var(--text-muted); }
+
+  .study-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+    white-space: nowrap;
+  }
+
+  .study-status-mark {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--status-dismissed);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-dismissed) 12%, transparent);
+  }
+
+  .study-status-pendiente .study-status-mark { background: var(--status-pending); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-pending) 12%, transparent); }
+  .study-status-observado .study-status-mark { background: var(--status-observed); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-observed) 14%, transparent); }
+  .study-status-aceptado .study-status-mark { background: var(--status-completed); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-completed) 12%, transparent); }
+
+  .sidebar {
+    border-right: 1px solid rgba(255, 255, 255, .06);
+  }
+
+  .side-nav button {
+    position: relative;
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+  }
+
+  .side-nav button.active::before {
+    content: "";
+    position: absolute;
+    inset: 9px auto 9px 0;
+    width: 2px;
+    border-radius: var(--radius-pill);
+    background: var(--teal-soft);
+  }
+
+  .side-nav-separator {
+    display: block;
+    height: 1px;
+    margin: var(--sp-2) var(--sp-2) 0;
+    background: rgba(255, 255, 255, .1);
+  }
+
+  .top-header {
+    min-height: 40px;
+    margin-bottom: var(--sp-2);
+  }
+
+  .profile-chip {
+    min-height: 38px;
+    transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  }
+
+  .profile-chip:hover {
+    background: var(--surface-soft);
+    border-color: var(--border-strong);
+  }
+
   .sidebar-collapse {
     display: flex;
     align-items: center;
@@ -78,8 +212,89 @@
     display: none;
   }
 
+  .app-layout.is-rail .side-nav-separator {
+    margin-inline: 0;
+  }
+
   .app-layout.is-rail .brand {
     justify-content: center;
     gap: 0;
+  }
+
+  @media (max-width: 1180px) {
+    .side-nav-separator { display: none; }
+  }
+
+  @media (max-width: 760px) {
+    .sidebar {
+      grid-template-columns: 1fr;
+      gap: var(--sp-2);
+      padding: var(--sp-3);
+      position: static;
+    }
+
+    .brand {
+      justify-content: flex-start;
+      padding: 0;
+    }
+
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+    }
+
+    .brand-mark svg {
+      width: 23px;
+      height: 23px;
+    }
+
+    .side-nav {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--sp-1);
+      padding: 0;
+      overflow: visible;
+    }
+
+    .side-nav button {
+      justify-content: center;
+      min-height: 40px;
+      min-width: 0;
+      padding: var(--sp-2);
+      white-space: nowrap;
+    }
+
+    .side-nav-label {
+      gap: 6px;
+      font-size: var(--fs-small);
+    }
+
+    .side-nav button em {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      min-width: 16px;
+      padding: 1px 4px;
+      font-size: 9px;
+    }
+
+    .sidebar-footer { display: none; }
+
+    .operations-page-header {
+      align-items: stretch;
+      flex-direction: column;
+      gap: var(--sp-3);
+    }
+
+    .operations-page-actions {
+      align-items: stretch;
+      justify-content: flex-start;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 430px) {
+    .brand { justify-content: center; }
+    .side-nav-label { font-size: 11px; }
   }
 }

@@ -14,10 +14,14 @@ export function StatusBadge({ children, tone = "slate" }: StatusBadgeProps) {
 
 export function PriorityBadge({ priority }: { priority: Priority }) {
   const tone = priority === "alta" ? "red" : priority === "baja" ? "slate" : "amber";
-  return <StatusBadge tone={tone}>{priority}</StatusBadge>;
+  return <StatusBadge tone={tone}>{priority[0].toUpperCase()}{priority.slice(1)}</StatusBadge>;
 }
 
 export function ReviewBadge({ status }: { status: ReviewStatus }) {
-  const tone = status === "aceptado" ? "green" : status === "observado" ? "amber" : status === "descartado" ? "red" : "blue";
-  return <StatusBadge tone={tone}>{displayReviewStatus(status)}</StatusBadge>;
+  return (
+    <span className={`study-status study-status-${status}`}>
+      <span aria-hidden="true" className="study-status-mark" />
+      {displayReviewStatus(status)}
+    </span>
+  );
 }
