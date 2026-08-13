@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract && npm run test:p8d2-review && npm run test:p8c2-assets && npm run test:p8d3-corrections && npm run test:p8d4-status && npm run test:p8e2-history && npm run test:p8e3-labelkey && npm run test:p9c1-canonical && npm run test:p9c2-readiness && npm run test:p9c3-components && npm run test:p9c4-closure && npm run test:p9c5-workspace && npm run test:p9c5b-reopening && npm run test:p10c1-security && npm run test:p10c1-hotfix-endpoints && npm run test:p10-5-d0 && npm run test:annotations && npm run test:routes && npm run test:seg-naming && npm run test:levels && npm run test:measure-tools && npm run test:reference-line && npm run test:windowing && npm run test:structured-report && npm run test:degenerative && npm run test:subarticular-roi && npm run test:orientation && npm run test:scale-bar && npm run test:disc-findings && npm run test:p10-9-product && npm run test:patient-pr3 && npm run test:patient-pr4 && npm run test:ui-pr1 && npm run test:ux-inspector",
+    "test": "npm run test:contract && npm run test:assets && npm run test:review-workspace && npm run test:data-mode && npm run test:p7-behavior && npm run test:p8b-contract && npm run test:p8d2-review && npm run test:p8c2-assets && npm run test:p8d3-corrections && npm run test:p8d4-status && npm run test:p8e2-history && npm run test:p8e3-labelkey && npm run test:p9c1-canonical && npm run test:p9c2-readiness && npm run test:p9c3-components && npm run test:p9c4-closure && npm run test:p9c5-workspace && npm run test:p9c5b-reopening && npm run test:p10c1-security && npm run test:p10c1-hotfix-endpoints && npm run test:p10-5-d0 && npm run test:annotations && npm run test:routes && npm run test:seg-naming && npm run test:levels && npm run test:measure-tools && npm run test:reference-line && npm run test:windowing && npm run test:structured-report && npm run test:degenerative && npm run test:subarticular-roi && npm run test:orientation && npm run test:scale-bar && npm run test:disc-findings && npm run test:p10-9-product && npm run test:patient-pr3 && npm run test:patient-pr4 && npm run test:ui-pr1 && npm run test:ui-pr2 && npm run test:ux-inspector",
     "build": "vite build",
     "coverage": "node scripts/coverage-report.mjs",
     "lint": "eslint src --ext .ts,.tsx",
@@ -39,6 +39,7 @@
     "test:e2e:patient-pr3": "node scripts/playwright-patient-pr3-e2e.mjs",
     "test:e2e:patient-pr4": "node scripts/playwright-patient-pr4-e2e.mjs",
     "test:e2e:ui-pr1": "node scripts/playwright-ui-pr1-e2e.mjs",
+    "test:e2e:ui-pr2": "node scripts/playwright-ui-pr2-e2e.mjs",
     "preview": "vite preview",
     "test:annotations": "node scripts/reading-annotations-tests.mjs",
     "test:routes": "node scripts/routes-tests.mjs",
@@ -57,6 +58,7 @@
     "test:patient-pr3": "node scripts/patient-pr3-tests.mjs",
     "test:patient-pr4": "node scripts/patient-pr4-tests.mjs",
     "test:ui-pr1": "node scripts/ui-pr1-clinical-operations-tests.mjs",
+    "test:ui-pr2": "node scripts/ui-pr2-study-creation-tests.mjs",
     "test:ux-inspector": "node scripts/ux-clinical-inspector-tests.mjs"
   },
   "dependencies": {

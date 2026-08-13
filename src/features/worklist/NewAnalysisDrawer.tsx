@@ -1,4 +1,5 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { LoaderCircle } from "lucide-react";
 import { BackendApiError, runMultiplanarAnalysis, uploadAiInput, uploadStudyArchive } from "../../multiplanarApi";
 import type { Plane } from "../../appTypes";
 import type { InputResponse, StudyIngestionResponse } from "../../contracts/inputApiTypes";
@@ -68,6 +69,22 @@ type AssociationState =
   | { status: "idle" }
   | { status: "associating" }
   | PatientAssociationResult;
+
+type AnalysisStage = "idle" | "processing" | "completing" | "associating" | "opening";
+
+const analysisSteps: { id: Exclude<AnalysisStage, "idle">; label: string }[] = [
+  { id: "processing", label: "Procesando imágenes" },
+  { id: "completing", label: "Completando resultados" },
+  { id: "associating", label: "Asociando al paciente" },
+  { id: "opening", label: "Abriendo estudio" },
+];
+
+const analysisStageCopy: Record<Exclude<AnalysisStage, "idle">, string> = {
+  processing: "El estudio está siendo analizado. El tiempo depende del tamaño y la cantidad de imágenes.",
+  completing: "La corrida principal está lista. Se están guardando los resultados complementarios disponibles.",
+  associating: "Los resultados están listos. Se está vinculando el estudio con el paciente seleccionado.",
+  opening: "Todo quedó guardado correctamente. Abriendo la sala de lectura.",
+};
 
 function seriesLabel(series: { plane: string; weighting: string; description: string; sliceCount: number }) {
   const plane = series.plane === "sagittal" ? "Sagital" : series.plane === "axial" ? "Axial" : series.plane === "coronal" ? "Coronal" : series.plane;
@@ -153,6 +170,10 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const [productState, setProductState] = useState<ProductAnalysisState | null>(null);
   const [persistedRun, setPersistedRun] = useState<{ caseId: string; runId: string; study?: StudyIngestionResponse } | null>(null);
   const [associationState, setAssociationState] = useState<AssociationState>({ status: "idle" });
+  const [analysisStage, setAnalysisStage] = useState<AnalysisStage>("idle");
+  const runInFlightRef = useRef(false);
+  const progressRef = useRef<HTMLElement | null>(null);
+  const interactionLocked = running || associationState.status === "associating" || analysisStage === "opening";
 
   /*
    * Escape cierra el drawer. Es el equivalente por teclado del clic en el fondo, y lo
@@ -160,13 +181,19 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
    * un análisis en curso por apoyar una tecla es peor que tener que apuntar al botón.
    */
   useEffect(() => {
-    if (running) return;
+    if (interactionLocked) return;
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, running]);
+  }, [interactionLocked, onClose]);
+
+  useEffect(() => {
+    if (analysisStage === "idle") return;
+    const frame = window.requestAnimationFrame(() => progressRef.current?.scrollIntoView({ block: "nearest" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [analysisStage]);
 
   const normalizedCaseId = caseId.trim();
   const caseIdIssue = caseIdError(normalizedCaseId);
@@ -184,6 +211,13 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const axialInputId = studyUpload.study?.axial?.inputId ?? uploads.axial.input?.inputId;
   const sagittalReady = Boolean(normalizedCaseId && sagittalInputId);
   const axialReady = Boolean(axialInputId);
+  const activeAnalysisStep = analysisStage === "idle" ? -1 : analysisSteps.findIndex((step) => step.id === analysisStage);
+
+  function openCompletedStudy(caseIdToOpen: string) {
+    setAnalysisStage("opening");
+    setMessage("Análisis completado. Abriendo el estudio.");
+    onAnalysisReady(caseIdToOpen);
+  }
 
   async function uploadStudy(file?: File) {
     if (!file) return;
@@ -202,6 +236,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
     setPersistedRun(null);
     setProductState(null);
     setAssociationState({ status: "idle" });
+    setAnalysisStage("idle");
     setStudyUpload({ fileName: file.name, status: "uploading" });
     try {
       const study = await uploadStudyArchive(file, normalizedCaseId);
@@ -263,8 +298,14 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   async function retryProductExtensions() {
     if (!persistedRun || running) return;
     setRunning(true);
+    setAnalysisStage("completing");
     try {
-      await runProductExtensions(persistedRun);
+      const nextProductState = await runProductExtensions(persistedRun);
+      if (["completed", "degraded"].includes(nextProductState.phase) && associationState.status === "associated") {
+        openCompletedStudy(persistedRun.caseId);
+      } else {
+        setAnalysisStage("idle");
+      }
     } finally {
       setRunning(false);
     }
@@ -287,7 +328,13 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
 
   async function retryPatientAssociation() {
     if (!persistedRun || !selectedPatient || running || associationState.status === "associating") return;
-    await attemptPatientAssociation(persistedRun, selectedPatient.id);
+    setAnalysisStage("associating");
+    const result = await attemptPatientAssociation(persistedRun, selectedPatient.id);
+    if (result.status === "associated" && productState && ["completed", "degraded"].includes(productState.phase)) {
+      openCompletedStudy(persistedRun.caseId);
+    } else {
+      setAnalysisStage("idle");
+    }
   }
 
   async function run() {
@@ -295,7 +342,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
       setMessage("Seleccioná o creá un paciente antes de iniciar el análisis.");
       return;
     }
-    if (!sagittalReady || running) return;
+    if (!sagittalReady || running || runInFlightRef.current) return;
     const subjectError = validateSubjectRef(metadata.subjectRef);
     if (subjectError) {
       setMetadataError(subjectError);
@@ -304,10 +351,10 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
     }
     setMetadataError("");
     setAssociationState({ status: "idle" });
+    runInFlightRef.current = true;
     setRunning(true);
-    // El backend no expone progreso granular: se dice eso en vez de mostrar una
-    // barra o un porcentaje inventado.
-    setMessage("Procesando. El backend no informa progreso, solo el resultado.");
+    setAnalysisStage("processing");
+    setMessage("Procesando el estudio. Podés seguir el estado en este panel.");
     try {
       const normalizedStudyMetadata = normalizeStudyMetadataInput(metadata);
       const payload: MultiplanarRunPayload = {
@@ -344,16 +391,26 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
       if (readiness.ready) {
         const context = { caseId: normalizedCaseId, runId: result.runId, study: studyUpload.study };
         setPersistedRun(context);
-        await runProductExtensions(context);
-        await attemptPatientAssociation(context, selectedPatient.id);
+        setAnalysisStage("completing");
+        const nextProductState = await runProductExtensions(context);
+        setAnalysisStage("associating");
+        const association = await attemptPatientAssociation(context, selectedPatient.id);
+        if (association.status === "associated" && ["completed", "degraded"].includes(nextProductState.phase)) {
+          openCompletedStudy(context.caseId);
+        } else {
+          setAnalysisStage("idle");
+        }
         return;
       }
       // La corrida existe pero no dejó un sagital evaluable: se queda acá con el
       // motivo, en vez de abrir una sala de lectura sin nada que leer.
       setMessage(`La corrida terminó sin sagital evaluable. ${readiness.reasons.join(" ")}`);
+      setAnalysisStage("idle");
     } catch (error) {
       setMessage(apiErrorMessage(error, "ejecutar el análisis"));
+      setAnalysisStage("idle");
     } finally {
+      runInFlightRef.current = false;
       setRunning(false);
     }
   }
@@ -361,7 +418,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   return (
     // El fondo cierra el drawer al hacerle clic. Es una comodidad de mouse: el
     // equivalente por teclado es Escape, que se maneja arriba, mas el boton de cerrar.
-    <div className="wl-drawer-backdrop" role="presentation" onClick={onClose}>
+    <div className="wl-drawer-backdrop" role="presentation" onClick={() => { if (!interactionLocked) onClose(); }}>
       {/*
         El onClick del panel no hace nada propio: solo frena la propagacion para que un
         clic adentro no llegue al fondo y cierre el drawer. Es una preocupacion de mouse
@@ -377,15 +434,19 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
       >
         <header className="wl-drawer-head">
           <h2>Nuevo análisis</h2>
-          <button aria-label="Cerrar" className="wl-drawer-close" onClick={onClose} type="button">×</button>
+          <button aria-label="Cerrar" className="wl-drawer-close" disabled={interactionLocked} onClick={onClose} type="button">×</button>
         </header>
 
         <div className="wl-drawer-body">
+          <p className="wl-drawer-intro">
+            Seleccioná el paciente, completá los datos del estudio, cargá las imágenes y ejecutá el análisis.
+          </p>
           <PatientSelector
             disabled={running || Boolean(persistedRun)}
             onSelected={(patient) => {
               setSelectedPatient(patient);
               setAssociationState({ status: "idle" });
+              setAnalysisStage("idle");
               setMessage("");
             }}
             selectedPatient={selectedPatient}
@@ -397,7 +458,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
             </p>
           )}
 
-          <h3 className="wl-section-title">Datos del estudio</h3>
+          <h3 className="wl-section-title"><span aria-hidden="true">02</span> Datos del estudio</h3>
 
           <label className="wl-field">
             <span>ID de caso de-identificado</span>
@@ -407,6 +468,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
                 setPersistedRun(null);
                 setProductState(null);
                 setAssociationState({ status: "idle" });
+                setAnalysisStage("idle");
               }}
               placeholder="CASE-XXXX"
               value={caseId}
@@ -417,13 +479,13 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
           </label>
 
           <label className="wl-field">
-            <span>Referencia técnica legacy del estudio (opcional)</span>
+            <span>Referencia interna del estudio (opcional)</span>
             <input
               onChange={(event) => setMetadata((current) => ({ ...current, subjectRef: event.target.value }))}
-              placeholder="SPIDER-101"
+              placeholder="EST-2026-001"
               value={metadata.subjectRef}
             />
-            <em>Campo histórico del Study; no identifica al Patient seleccionado y no se sincroniza.</em>
+            <em>Usá una referencia breve para reconocer este estudio si lo necesitás.</em>
           </label>
 
           <div className="wl-field-row">
@@ -459,6 +521,8 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
           </label>
 
           {metadataError && <p className="wl-drawer-error">{metadataError}</p>}
+
+          <h3 className="wl-section-title"><span aria-hidden="true">03</span> Imágenes</h3>
 
           <div className="wl-upload">
             <div className="wl-upload-head">
@@ -547,6 +611,30 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
             ))}
           </div>
 
+          {analysisStage !== "idle" && (
+            <section ref={progressRef} className="wl-analysis-progress" aria-live="polite" aria-label="Progreso del análisis" role="status">
+              <div className="wl-analysis-progress-head">
+                <LoaderCircle aria-hidden className="wl-analysis-spinner" size={20} />
+                <div>
+                  <strong>{analysisSteps[activeAnalysisStep]?.label}</strong>
+                  <p>{analysisStageCopy[analysisStage]}</p>
+                </div>
+              </div>
+              <ol>
+                {analysisSteps.map((step, index) => (
+                  <li
+                    className={index < activeAnalysisStep ? "is-complete" : index === activeAnalysisStep ? "is-active" : ""}
+                    key={step.id}
+                  >
+                    <span aria-hidden="true">{index < activeAnalysisStep ? "✓" : index + 1}</span>
+                    {step.label}
+                  </li>
+                ))}
+              </ol>
+              <small>El sistema no informa porcentajes; los estados cambian sólo cuando cada etapa termina.</small>
+            </section>
+          )}
+
           {productState && (
             <section className={`wl-product-progress is-${productState.phase}`} aria-live="polite">
               <strong>{productPhaseLabel[productState.phase]}</strong>
@@ -586,7 +674,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
         </div>
 
         <footer className="wl-drawer-foot">
-          <button className="wl-drawer-cancel" disabled={running} onClick={onClose} type="button">Cancelar</button>
+          <button className="wl-drawer-cancel" disabled={interactionLocked} onClick={onClose} type="button">Cancelar</button>
           {persistedRun && associationState.status === "error" ? (
             <button className="wl-drawer-run" onClick={() => void retryPatientAssociation()} type="button">
               Reintentar asociación
@@ -619,7 +707,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
               title={!patientReady ? "Seleccioná un paciente antes de analizar" : undefined}
               type="button"
             >
-              {running ? "Procesando…" : "Analizar"}
+              {running ? <><LoaderCircle aria-hidden className="wl-button-spinner" size={15} />Procesando…</> : "Analizar"}
             </button>
           )}
         </footer>

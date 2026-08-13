@@ -102,9 +102,10 @@ test("mobile transforma filas en cards sin cambiar el DOM tabular", () => {
 });
 
 test("las celdas mobile tienen labels reales", () => {
-  for (const label of ["Caso", "Paciente", "Fecha", "Planos", "Modelo", "Revisión", "Prioridad"]) {
+  for (const label of ["Caso", "Paciente", "Fecha", "Planos", "Revisión", "Prioridad"]) {
     assert.match(worklist, new RegExp(`data-label="${label}"`));
   }
+  assert.doesNotMatch(worklist, /data-label="Modelo"|>Modelo</);
 });
 
 test("sidebar conserva aria-current y añade separación de Settings", () => {

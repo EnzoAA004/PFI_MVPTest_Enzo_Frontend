@@ -275,9 +275,10 @@ await check("409 nunca usa CORRECTION ni auto-reassign", () => {
   assert.doesNotMatch(associationSource, /CORRECTION/);
   assert.match(drawer, /Requiere revisión manual; no se reasignó automáticamente/);
 });
-await check("subjectRef queda rotulado como legacy separado", () => {
-  assert.match(drawer, /Referencia técnica legacy del estudio/);
-  assert.match(drawer, /no identifica al Patient seleccionado y no se sincroniza/);
+await check("subjectRef conserva contrato con copy operativo separado", () => {
+  assert.match(drawer, /Referencia interna del estudio \(opcional\)/);
+  assert.match(drawer, /referencia breve para reconocer este estudio/);
+  assert.doesNotMatch(drawer, /Referencia técnica legacy del estudio|SPIDER-101/);
 });
 await check("caseId sigue independiente de Patient", () => {
   assert.match(drawer, /caseId: normalizedCaseId/);
