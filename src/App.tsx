@@ -7,56 +7,21 @@ import { SESSION_INVALIDATED_EVENT, onCrossTabSessionSync } from "./security/ses
 import { AppShell } from "./components/AppShell";
 import { AuthView } from "./components/AuthView";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
-import { PatientHistoryView } from "./components/PatientHistoryView";
+import { PatientDetailView } from "./components/PatientDetailView";
 import { PatientsView } from "./components/PatientsView";
 import { PendingApprovalView } from "./components/PendingApprovalView";
 import { SettingsView } from "./features/settings/SettingsView";
 import { StudyReviewView } from "./components/StudyReviewView";
 import { Worklist } from "./features/worklist/Worklist";
-import { deriveSummary, isReviewQueueItem, mergeStudyRowsWithSelectedRun, normalizeSelectedRunForReview, selectReviewableRunFromDetail, shouldFetchSubjectHistory, toSelectedStudyReference } from "./appDataGuards";
+import { deriveSummary, isReviewQueueItem, mergeStudyRowsWithSelectedRun, normalizeSelectedRunForReview, selectReviewableRunFromDetail, toSelectedStudyReference } from "./appDataGuards";
 import { isDemoDataMode, validateVisibleDataOrigin } from "./dataMode";
 import { appendBackendAudit, getBackendReviewSnapshot } from "./reviewPersistenceApi";
 import { appendAuditEvent, loadReviewHistory, saveMeasurementEdits, saveProfessionalReview } from "./storage";
 import { fetchStudyDetail } from "./studyApi";
-import { fetchSubjectHistory } from "./subjectHistoryApi";
-import { displayModelKey, displayPrimaryPlane, displayStudyDate, studyHasReviewableRun } from "./studyDisplay";
+import { studyHasReviewableRun } from "./studyDisplay";
 import { useLocation, useNavigate } from "react-router-dom";
-import { caseIdFromPath, pathForPatientTarget, pathForStudy, pathForView, patientTargetFromPath, viewForPath } from "./routes";
-import type { AiModel, AiRunResponse, AuditEvent, AuthSession, HistoryTarget, Measurement, PatientHistoryResponse, PatientStudy, ReviewStatus, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow, ViewKey } from "./appTypes";
-
-function toPatientStudy(study: StudyRow): PatientStudy {
-  return {
-    caseId: study.caseId,
-    subjectRef: study.subjectRef,
-    studyDate: study.studyDate,
-    modality: study.modality,
-    description: study.description,
-    planes: study.planes.length ? study.planes.map(displayPrimaryPlane).join(", ") : displayPrimaryPlane(study.primaryPlane ?? study.plane),
-    modelVersion: displayModelKey(study.modelKey),
-    modelKey: study.modelKey,
-    latestRunId: study.latestRunId,
-    reviewStatus: study.reviewStatus,
-    priority: study.priority,
-    createdAt: study.createdAt,
-    updatedAt: study.updatedAt,
-  };
-}
-
-function toTraceabilityStudy(detail: StudyDetailResponse): PatientStudy {
-  const study = detail.study;
-  const latestRun = detail.runs?.[0];
-  return {
-    ...toPatientStudy(study),
-    modelVersion: latestRun?.modelKey ?? toPatientStudy(study).modelVersion,
-    modelKey: latestRun?.modelKey ?? study.modelKey,
-    latestRunId: latestRun?.runId ?? study.latestRunId,
-    reviewStatus: latestRun?.reviewStatus ?? study.reviewStatus,
-    reviewer: latestRun?.reviewer ?? null,
-    reviewedAt: latestRun?.reviewedAt ?? null,
-    measurementsByPlane: latestRun?.measurementsByPlane,
-    corrections: latestRun?.corrections,
-  };
-}
+import { caseIdFromPath, pathForPatient, pathForStudy, pathForView, patientIdFromPath, viewForPath } from "./routes";
+import type { AiModel, AiRunResponse, AuditEvent, AuthSession, Measurement, ReviewStatus, SelectedStudyReference, StudiesSummary, StudyDetailResponse, StudyRow, ViewKey } from "./appTypes";
 
 function LoadingState({ title, detail }: { title: string; detail: string }) {
   return <section className="panel-card clinical-loading-state" aria-live="polite"><span className="clinical-spinner" /><div><h2>{title}</h2><p>{detail}</p></div></section>;
@@ -126,7 +91,6 @@ function App() {
   const [aiModuleStatus, setAiModuleStatus] = useState("idle");
   const [reviewSnapshotStatus, setReviewSnapshotStatus] = useState("idle");
   const [studiesError, setStudiesError] = useState("");
-  const [historyTarget, setHistoryTarget] = useState<HistoryTarget | null>(null);
   const [selectedStudy, setSelectedStudy] = useState<SelectedStudyReference | null>(null);
   /*
    * Detalle persistido del estudio abierto. Vive acá y viaja por props: antes iba
@@ -142,10 +106,6 @@ function App() {
    */
   const requestedCaseIdRef = useRef<string | undefined>(undefined);
   const [studiesSummary, setStudiesSummary] = useState<StudiesSummary | undefined>();
-  const [patientHistoryResponse, setPatientHistoryResponse] = useState<PatientHistoryResponse | null>(null);
-  const [studyTraceabilityStudies, setStudyTraceabilityStudies] = useState<PatientStudy[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState("");
   const [selectedRun, setSelectedRun] = useState<AiRunResponse | null>(null);
   const [studyReview, setStudyReview] = useState<any | null>(null);
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
@@ -165,19 +125,7 @@ function App() {
   const studies = useMemo(() => {
     return mergeStudyRowsWithSelectedRun(backendStudies, safeRun);
   }, [backendStudies, safeRun]);
-  const backendPatientStudies = useMemo(() => {
-    if (!backendStudies.length) return [];
-    if (historyTarget?.kind === "study") return studyTraceabilityStudies;
-    const subjectRef = historyTarget?.kind === "subject" ? historyTarget.subjectRef : patientHistoryResponse?.subjectRef ?? null;
-    return studies.filter((study) => !subjectRef || study.subjectRef === subjectRef).map(toPatientStudy);
-  }, [backendStudies.length, historyTarget, patientHistoryResponse?.subjectRef, studies, studyTraceabilityStudies]);
-  const visiblePatientStudies = historyTarget?.kind === "subject"
-    ? patientHistoryResponse?.studies ?? []
-    : historyTarget?.kind === "study"
-      ? studyTraceabilityStudies
-      : [];
   const shouldShowDataLoading = databaseDataStatus === "loading" && backendStudies.length === 0;
-  const historySubjectRef = historyTarget?.kind === "subject" ? historyTarget.subjectRef : patientHistoryResponse?.subjectRef ?? null;
   const realStudyRows = studiesBackendAvailable ? studies : [];
   const reviewQueueCount = realStudyRows.filter(isReviewQueueItem).length;
   const pendingApproval = Boolean(session && (session.user.approved === false || session.user.roles.includes("PENDING_APPROVAL")));
@@ -280,47 +228,6 @@ function App() {
     });
   }, [contractIssue]);
 
-  useEffect(() => {
-    if (!historyTarget) {
-      setPatientHistoryResponse(null);
-      setStudyTraceabilityStudies([]);
-      return;
-    }
-    let cancelled = false;
-    setHistoryLoading(true);
-    setHistoryError("");
-    if (historyTarget.kind === "study") {
-      setPatientHistoryResponse(null);
-      void fetchStudyDetail({ caseId: historyTarget.caseId }).then((detail) => {
-        if (!cancelled) setStudyTraceabilityStudies([toTraceabilityStudy(detail)]);
-      }).catch((historyFetchError) => {
-        if (!cancelled) {
-          setStudyTraceabilityStudies([]);
-          setHistoryError(apiErrorDetail(historyFetchError));
-        }
-      }).finally(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
-      return () => { cancelled = true; };
-    }
-    setStudyTraceabilityStudies([]);
-    if (!shouldFetchSubjectHistory(historyTarget.subjectRef)) {
-      setHistoryLoading(false);
-      return;
-    }
-    void fetchSubjectHistory(historyTarget.subjectRef).then((historyResponse) => {
-      if (!cancelled) setPatientHistoryResponse(historyResponse);
-    }).catch((historyFetchError) => {
-      if (!cancelled) {
-        setPatientHistoryResponse(null);
-        setHistoryError(apiErrorDetail(historyFetchError));
-      }
-    }).finally(() => {
-      if (!cancelled) setHistoryLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [historyTarget]);
-
   function recordAudit(action: string, detail: string, actor = "Revisor") {
     setAuditTrail(appendAuditEvent({ action, detail, actor }));
     if (session) void appendBackendAudit(actor, action, detail).catch(() => undefined);
@@ -329,16 +236,12 @@ function App() {
   function resetProtectedState() {
     setBackendStudies([]);
     setStudiesSummary(undefined);
-    setPatientHistoryResponse(null);
-    setStudyTraceabilityStudies([]);
     setSelectedRun(null);
     setStudyReview(null);
     setMeasurements([]);
     setAuditTrail([]);
     setSelectedStudy(null);
-    setHistoryTarget(null);
     setStudiesError("");
-    setHistoryError("");
     setReviewError("");
     setError("");
     setInfo("");
@@ -465,28 +368,7 @@ function App() {
     return () => { cancelled = true; };
   }, [routeCaseId, session]);
 
-  /*
-   * El historial es el detalle de Paciente, no un destino aparte: la URL lo dice
-   * (/pacientes/:subjectRef) y el efecto de abajo lo resuelve, así que este
-   * handler solo navega. Eso hace que el historial de un paciente también se
-   * pueda compartir por link.
-   */
-  function handleOpenPatientHistory(target: HistoryTarget) {
-    navigate(pathForPatientTarget(target));
-  }
-
-  /* El objetivo del historial se deriva de la URL, igual que el estudio abierto. */
-  const routePatientTarget = patientTargetFromPath(location.pathname);
-  const routePatientKey = routePatientTarget
-    ? routePatientTarget.kind === "subject" ? `subject:${routePatientTarget.subjectRef}` : `study:${routePatientTarget.caseId}`
-    : "";
-  useEffect(() => {
-    if (!session || !routePatientTarget) return;
-    setHistoryTarget(routePatientTarget);
-    setPatientHistoryResponse(null);
-    setStudyTraceabilityStudies([]);
-    setHistoryError("");
-  }, [routePatientKey, session]);
+  const routePatientId = patientIdFromPath(location.pathname);
 
   function handleMeasurementsChange(nextMeasurements: Measurement[], detail: string) {
     const runId = safeRun?.runId;
@@ -587,10 +469,6 @@ function App() {
   async function handleStudyMetadataUpdated() {
     await refreshStudiesFromPostgres();
     await refreshSelectedStudyFromPostgres();
-    if (historyTarget?.kind === "subject") {
-      const historyResponse = await fetchSubjectHistory(historyTarget.subjectRef);
-      setPatientHistoryResponse(historyResponse);
-    }
   }
 
   // "dashboard", "studies" and "queue" all resolve to the single worklist; the old
@@ -624,11 +502,8 @@ function App() {
       {info && <div className="toast info">{info}</div>}
       {isWorklistView && <Worklist studies={realStudyRows} loading={shouldShowDataLoading} onOpenReview={handleOpenReview} onAnalysisReady={handleViewSavedAnalysis} />}
       {activeView === "review" && (reviewLoading ? <LoadingState title="Cargando corrida" detail={`Consultando corridas persistidas para ${selectedStudy?.caseId ?? "el estudio seleccionado"}.`} /> : contractIssue ? <ContractErrorState detail={`${contractIssue.message}${contractIssue.path ? ` (${contractIssue.path})` : ""}${contractIssue.traceId ? ` · trace ${contractIssue.traceId}` : ""}`} onBackToStudies={() => changeView(lastStudyNavView)} /> : reviewError ? <ContractErrorState detail={reviewError} onBackToStudies={() => changeView(lastStudyNavView)} /> : safeRun ? <StudyReviewView run={safeRun} studyReview={studyReview} measurements={measurements} auditTrail={auditTrail} saving={saving} onBackToStudies={() => changeView(lastStudyNavView)} onMeasurementsChange={handleMeasurementsChange} onSaveReview={handleSaveReview} onStudyMetadataUpdated={handleStudyMetadataUpdated} selectedDetail={selectedDetail} /> : <EmptyReviewState onBackToStudies={() => changeView(lastStudyNavView)} />)}
-      {activeView === "patients" && <PatientsView studies={realStudyRows} loading={shouldShowDataLoading} onOpenHistory={handleOpenPatientHistory} />}
-      {activeView === "history" && (historyLoading ? <LoadingState title="Cargando historial" detail={historyTarget?.kind === "study" ? "Consultando trazabilidad real del estudio." : "Consultando historial longitudinal de-identificado."} /> : <PatientHistoryView studies={visiblePatientStudies} target={historyTarget} subjectRef={historySubjectRef} source={patientHistoryResponse?.source ?? (historyTarget?.kind === "study" ? "study-traceability" : "postgres-domain")} summary={patientHistoryResponse?.summary} error={historyError} onOpenStudyReview={(caseId) => {
-        const study = studies.find((row) => row.caseId === caseId);
-        if (study) handleOpenReview(study);
-      }} />)}
+      {activeView === "patients" && <PatientsView onOpenPatient={(patientId) => navigate(pathForPatient(patientId))} />}
+      {activeView === "history" && <PatientDetailView patientId={routePatientId ?? ""} onBack={() => navigate(pathForView("patients"))} onOpenStudy={(caseId) => navigate(pathForStudy(caseId))} />}
       {activeView === "settings" && <SettingsView user={session.user} onUserUpdated={(user) => setSession((current) => current ? { ...current, user } : current)} onLogout={logout} />}
     </AppShell>
   );

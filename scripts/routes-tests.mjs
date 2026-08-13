@@ -23,10 +23,10 @@ exports.pathForView = pathForView;
 exports.pathForStudy = pathForStudy;
 exports.viewForPath = viewForPath;
 exports.caseIdFromPath = caseIdFromPath;
-exports.pathForPatientTarget = pathForPatientTarget;
-exports.patientTargetFromPath = patientTargetFromPath;`, sandbox);
+exports.pathForPatient = pathForPatient;
+exports.patientIdFromPath = patientIdFromPath;`, sandbox);
 
-const { ROUTES, pathForView, pathForStudy, viewForPath, caseIdFromPath, pathForPatientTarget, patientTargetFromPath } = sandbox.exports;
+const { ROUTES, pathForView, pathForStudy, viewForPath, caseIdFromPath, pathForPatient, patientIdFromPath } = sandbox.exports;
 
 let count = 0;
 function test(name, fn) {
@@ -58,30 +58,20 @@ test("C toda ruta conocida vuelve a su vista", () => {
 test("C2 Paciente tiene lista y detalle bajo el mismo destino", () => {
   assert.equal(viewForPath(ROUTES.patients), "patients");
   assert.equal(viewForPath(`${ROUTES.patients}/`), "patients");
-  assert.equal(viewForPath(pathForPatientTarget({ kind: "subject", subjectRef: "SPIDER-101" })), "history");
-  assert.equal(viewForPath(pathForPatientTarget({ kind: "study", caseId: "CASE-1" })), "history");
+  assert.equal(viewForPath(pathForPatient("11111111-1111-4111-8111-111111111111")), "history");
 });
 
-test("C3 el objetivo del historial sobrevive el viaje de ida y vuelta", () => {
-  // Se comparan campos y no el objeto: lo construye el modulo cargado en el vm,
-  // cuyo Object.prototype es otro y hace fallar a deepStrictEqual.
-  for (const subjectRef of ["SPIDER-101", "sujeto raro", "a/b"]) {
-    const target = patientTargetFromPath(pathForPatientTarget({ kind: "subject", subjectRef }));
-    assert.equal(target.kind, "subject");
-    assert.equal(target.subjectRef, subjectRef);
-  }
-  for (const caseId of ["CASE-1", "Caso prueba", "a/b"]) {
-    const target = patientTargetFromPath(pathForPatientTarget({ kind: "study", caseId }));
-    assert.equal(target.kind, "study");
-    assert.equal(target.caseId, caseId);
+test("C3 el patientId sobrevive el viaje de ida y vuelta", () => {
+  for (const patientId of ["11111111-1111-4111-8111-111111111111", "patient interno", "a/b"]) {
+    assert.equal(patientIdFromPath(pathForPatient(patientId)), patientId);
   }
 });
 
 test("C4 la lista de pacientes no tiene objetivo, y un escape invalido no rompe", () => {
-  assert.equal(patientTargetFromPath(ROUTES.patients), undefined);
-  assert.equal(patientTargetFromPath(`${ROUTES.patients}/`), undefined);
-  assert.doesNotThrow(() => patientTargetFromPath(`${ROUTES.patients}/%E0%A4%A`));
-  assert.equal(patientTargetFromPath(`${ROUTES.patients}/%E0%A4%A`), undefined);
+  assert.equal(patientIdFromPath(ROUTES.patients), undefined);
+  assert.equal(patientIdFromPath(`${ROUTES.patients}/`), undefined);
+  assert.doesNotThrow(() => patientIdFromPath(`${ROUTES.patients}/%E0%A4%A`));
+  assert.equal(patientIdFromPath(`${ROUTES.patients}/%E0%A4%A`), undefined);
 });
 
 test("C5 Ayuda ya no es un destino del menu", () => {

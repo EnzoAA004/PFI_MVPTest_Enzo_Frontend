@@ -2135,6 +2135,190 @@ body {
   color: var(--text-muted);
 }
 
+/* Patient entity navigation: list -> patient -> explicitly associated Studies. */
+.patient-directory-view,
+.patient-detail-view {
+  gap: var(--sp-4);
+}
+
+.patient-directory-panel,
+.patient-studies-panel {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.patient-directory-search {
+  align-items: end;
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: minmax(240px, 1fr) auto;
+}
+
+.patient-directory-list,
+.patient-study-timeline {
+  display: grid;
+  gap: var(--sp-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.patient-directory-list li {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  display: flex;
+  gap: var(--sp-4);
+  justify-content: space-between;
+  padding: var(--sp-4);
+}
+
+.patient-directory-list li > div {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.patient-directory-list strong {
+  font-size: var(--fs-h3);
+  overflow-wrap: anywhere;
+}
+
+.patient-directory-list span,
+.patient-study-date-missing {
+  color: var(--text-muted);
+}
+
+.patient-detail-header {
+  align-items: center;
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: minmax(220px, .8fr) minmax(520px, 1.6fr);
+}
+
+.patient-back-link {
+  background: transparent;
+  border: 0;
+  color: var(--primary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  margin-bottom: var(--sp-2);
+  padding: 0;
+}
+
+.patient-back-link:focus-visible,
+.patient-study-card button:focus-visible,
+.patient-directory-list button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.patient-detail-summary {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  margin: 0;
+}
+
+.patient-detail-summary div,
+.patient-study-card dl div {
+  display: grid;
+  gap: var(--sp-1);
+}
+
+.patient-detail-summary dt,
+.patient-study-card dt {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+}
+
+.patient-detail-summary dd,
+.patient-study-card dd {
+  margin: 0;
+}
+
+.patient-detail-summary dd {
+  font-weight: var(--fw-semibold);
+}
+
+.patient-study-timeline {
+  position: relative;
+}
+
+.patient-study-timeline::before {
+  background: var(--border);
+  bottom: var(--sp-4);
+  content: "";
+  left: 7px;
+  position: absolute;
+  top: var(--sp-4);
+  width: 2px;
+}
+
+.patient-study-timeline > li {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: 16px minmax(0, 1fr);
+  position: relative;
+}
+
+.patient-study-marker {
+  background: var(--primary);
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  height: 16px;
+  margin-top: var(--sp-4);
+  position: relative;
+  width: 16px;
+  z-index: 1;
+}
+
+.patient-study-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+.patient-study-card header {
+  align-items: start;
+  display: flex;
+  gap: var(--sp-3);
+  justify-content: space-between;
+}
+
+.patient-study-card h3 {
+  margin: var(--sp-1) 0 0;
+  overflow-wrap: anywhere;
+}
+
+.patient-study-card time,
+.patient-study-date-missing {
+  font-size: var(--fs-small);
+  font-weight: var(--fw-semibold);
+}
+
+.patient-study-card dl {
+  display: grid;
+  gap: var(--sp-3);
+  grid-template-columns: minmax(100px, .5fr) minmax(100px, .5fr) minmax(180px, 1.5fr);
+  margin: 0;
+}
+
+.patient-study-card > button {
+  justify-self: start;
+}
+
+.patient-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
 .settings-grid,
 .help-grid {
   display: grid;
@@ -3083,6 +3267,24 @@ body,
   .patient-header-grid,
   .measurement-review-row {
     grid-template-columns: 1fr;
+  }
+  .patient-detail-header,
+  .patient-detail-summary,
+  .patient-study-card dl {
+    grid-template-columns: 1fr;
+  }
+  .patient-directory-search {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+  .patient-directory-list li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .patient-directory-list button,
+  .patient-study-card > button {
+    justify-self: stretch;
+    width: 100%;
   }
   .full-viewer .generic-spine-canvas-wrap,
   .full-viewer .generic-spine-canvas,

@@ -45,42 +45,31 @@ export function pathForStudy(caseId: string): string {
  */
 export function viewForPath(pathname: string): ViewKey {
   if (pathname.startsWith(ROUTES.study)) return "review";
-  // Paciente es un solo destino con dos niveles: la lista y el historial de uno.
+  // Paciente es un solo destino con dos niveles: la lista y el detalle real de uno.
   if (pathname === ROUTES.patients || pathname === `${ROUTES.patients}/`) return "patients";
   if (pathname.startsWith(`${ROUTES.patients}/`)) return "history";
   if (pathname.startsWith(ROUTES.settings)) return "settings";
   return "dashboard";
 }
 
-const STUDY_TRACE_SEGMENT = "estudio";
-
-/** URL del historial de un paciente o de la trazabilidad de un estudio. */
-export function pathForPatientTarget(target: { kind: "subject"; subjectRef: string } | { kind: "study"; caseId: string }): string {
-  return target.kind === "subject"
-    ? `${ROUTES.patients}/${encodeURIComponent(target.subjectRef)}`
-    : `${ROUTES.patients}/${STUDY_TRACE_SEGMENT}/${encodeURIComponent(target.caseId)}`;
+/** URL del detalle de una entidad Patient persistida. */
+export function pathForPatient(patientId: string): string {
+  return `${ROUTES.patients}/${encodeURIComponent(patientId)}`;
 }
 
 /**
- * Objetivo del historial que pide una URL, o undefined si la ruta es la lista.
+ * UUID técnico pedido por una URL de Patient, o undefined si la ruta es la lista.
  *
  * Un segmento mal escapado devuelve undefined en vez de lanzar: un link roto debe
  * caer en la lista de pacientes, no romper la navegación.
  */
-export function patientTargetFromPath(pathname: string):
-  | { kind: "subject"; subjectRef: string }
-  | { kind: "study"; caseId: string }
-  | undefined {
+export function patientIdFromPath(pathname: string): string | undefined {
   if (!pathname.startsWith(`${ROUTES.patients}/`)) return undefined;
   const segments = pathname.slice(ROUTES.patients.length + 1).split("/").filter(Boolean);
-  if (!segments.length) return undefined;
+  if (segments.length !== 1) return undefined;
   try {
-    if (segments[0] === STUDY_TRACE_SEGMENT) {
-      const caseId = segments[1] ? decodeURIComponent(segments[1]) : "";
-      return caseId ? { kind: "study", caseId } : undefined;
-    }
-    const subjectRef = decodeURIComponent(segments[0]);
-    return subjectRef ? { kind: "subject", subjectRef } : undefined;
+    const patientId = decodeURIComponent(segments[0]);
+    return patientId || undefined;
   } catch {
     return undefined;
   }

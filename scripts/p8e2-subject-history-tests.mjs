@@ -19,27 +19,6 @@ exports.priorityToBackend = priorityToBackend;`, sandbox);
   return sandbox.exports;
 }
 
-function loadPatients() {
-  const source = readFileSync(join(root, "src/components/PatientsView.tsx"), "utf8")
-    .replace(/^import .*$/gm, "")
-    .replace(/export /g, "");
-  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  const sandbox = {
-    exports: {},
-    console,
-    useMemo: (fn) => fn(),
-    useState: (initial) => [initial, () => undefined],
-    displayReviewStatus: (value) => value === "aceptado" ? "Finalizado" : value,
-    displayStudyDate: (value) => value ?? "Fecha no informada",
-    PriorityBadge: () => ({}),
-    ReviewBadge: () => ({}),
-    require: (id) => id === "react/jsx-runtime" ? { jsx: () => ({}), jsxs: () => ({}), Fragment: "Fragment" } : {},
-  };
-  vm.runInNewContext(`${js}
-exports.buildPatients = buildPatients;`, sandbox);
-  return sandbox.exports;
-}
-
 function loadSubjectHistory() {
   const source = readFileSync(join(root, "src/subjectHistoryApi.ts"), "utf8")
     .replace(/^import .*$/gm, "")
@@ -80,7 +59,6 @@ exports.ContractError = ContractError;`, sandbox);
 }
 
 const metadata = loadStudyMetadata();
-const patients = loadPatients();
 const subjectHistory = loadSubjectHistory();
 
 let count = 0;
@@ -156,17 +134,16 @@ test("P8-E2.1 C no se envia PUT para reemplazar solo subjectRef existente", () =
   assert.match(saveFunction, /La referencia de-identificada ya fue asignada y no puede reemplazarse/);
 });
 
-test("P8-E2.1 D SPIDER-101 y spider-101 se agrupan por referencia case-insensitive", () => {
-  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: "SPIDER-101" }), study({ caseId: "CASE-B", subjectRef: "spider-101" })]);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].label, "SPIDER-101");
-  assert.equal(rows[0].totalStudies, 2);
+test("P8-E2.1 D la nueva lista de Patients no agrupa por subjectRef", () => {
+  const source = readFileSync(join(root, "src/components/PatientsView.tsx"), "utf8");
+  assert.match(source, /searchPatients\(query, 100\)/);
+  assert.doesNotMatch(source, /subjectRef|buildPatients|StudyRow/);
 });
 
-test("P8-E2.1 E dos subjectRef null quedan separados por caseId", () => {
-  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: null }), study({ caseId: "CASE-B", subjectRef: null })]);
-  assert.equal(rows.length, 2);
-  assert.equal(rows.every((row) => row.kind === "study"), true);
+test("P8-E2.1 E los Studies legacy no fabrican Patients en Frontend", () => {
+  const source = readFileSync(join(root, "src/App.tsx"), "utf8");
+  assert.doesNotMatch(source, /buildPatients|fetchSubjectHistory|PatientHistoryView/);
+  assert.match(source, /<PatientsView/);
 });
 
 test("P8-E2.1 F source distinto de postgres-domain lanza ContractError", () => {
@@ -328,25 +305,21 @@ test("L no se deriva referencia desde caseId, archivo o inputId", () => {
   assert.doesNotMatch(timeline, /subjectRef:\s*normalizedCaseId|subjectRef:\s*file|subjectRef:\s*uploads/);
 });
 
-test("M dos estudios con SPIDER-101 aparecen agrupados", () => {
-  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: "SPIDER-101" }), study({ caseId: "CASE-B", subjectRef: "SPIDER-101" })]);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].kind, "subject");
-  assert.equal(rows[0].target.subjectRef, "SPIDER-101");
-  assert.equal(rows[0].totalStudies, 2);
+test("M Patient Detail no usa el endpoint legacy de subjectRef", () => {
+  const source = readFileSync(join(root, "src/components/PatientDetailView.tsx"), "utf8");
+  assert.match(source, /getPatientStudies\(patientId\)/);
+  assert.doesNotMatch(source, /subjectRef|fetchSubjectHistory/);
 });
 
-test("N SPIDER-202 no aparece en SPIDER-101", () => {
-  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: "SPIDER-101" }), study({ caseId: "CASE-C", subjectRef: "SPIDER-202" })]);
-  assert.equal(rows.length, 2);
-  assert.equal(rows.find((row) => row.target.subjectRef === "SPIDER-101").totalStudies, 1);
+test("N la identidad visible del Patient es patientReference", () => {
+  const source = readFileSync(join(root, "src/components/PatientDetailView.tsx"), "utf8");
+  assert.match(source, /state\.patient\.patientReference/);
+  assert.doesNotMatch(source, />\{patientId\}</);
 });
 
-test("O dos estudios null generan dos trazabilidades individuales", () => {
-  const rows = patients.buildPatients([study({ caseId: "CASE-A", subjectRef: null }), study({ caseId: "CASE-B", subjectRef: null })]);
-  assert.equal(rows.length, 2);
-  assert.equal(rows.every((row) => row.kind === "study"), true);
-  assert.equal(JSON.stringify(rows.map((row) => row.target.caseId).sort()), JSON.stringify(["CASE-A", "CASE-B"]));
+test("O el endpoint legacy de subjects se conserva aislado", () => {
+  const source = readFileSync(join(root, "src/subjectHistoryApi.ts"), "utf8");
+  assert.match(source, /\/api\/subjects\/\$\{encodeURIComponent\(subjectRef\)\}\/history/);
 });
 
 test("P historial subject consulta /api/subjects/{subjectRef}/history", () => {
@@ -354,10 +327,11 @@ test("P historial subject consulta /api/subjects/{subjectRef}/history", () => {
   assert.match(source, /\/api\/subjects\/\$\{encodeURIComponent\(subjectRef\)\}\/history/);
 });
 
-test("Q trazabilidad de estudio no llama endpoint de sujetos", () => {
+test("Q App navega Patient real por UUID y Study por caseId", () => {
   const source = readFileSync(join(root, "src/App.tsx"), "utf8");
-  assert.match(source, /historyTarget\.kind === "study"/);
-  assert.match(source, /fetchStudyDetail\(\{ caseId: historyTarget\.caseId \}\)/);
+  assert.match(source, /pathForPatient\(patientId\)/);
+  assert.match(source, /pathForStudy\(caseId\)/);
+  assert.doesNotMatch(source, /historyTarget|fetchSubjectHistory/);
 });
 
 test("R no se fabrican CASE-HISTORY ni métricas ficticias", () => {
@@ -376,9 +350,10 @@ test("S StudyReviewView abre formulario real y refresca después del éxito", ()
   assert.match(source, /onStudyMetadataUpdated\?\.\(caseId\)/);
 });
 
-test("T App no usa historial local como fallback longitudinal subject", () => {
+test("T App no usa historial legacy como fallback longitudinal", () => {
   const source = readFileSync(join(root, "src/App.tsx"), "utf8");
-  assert.match(source, /historyTarget\?\.kind === "subject"\s*\?\s*patientHistoryResponse\?\.studies \?\? \[\]/);
+  assert.doesNotMatch(source, /patientHistoryResponse|PatientHistoryView|historyTarget/);
+  assert.match(source, /<PatientDetailView/);
 });
 
 console.log(`P8-E2 subject history tests passed: ${count}`);
