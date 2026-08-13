@@ -403,6 +403,128 @@
 
   .wl-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
 
+  .wl-section-title {
+    margin: var(--sp-1) 0 0;
+    font-size: var(--fs-small);
+    font-weight: var(--fw-semibold);
+  }
+
+  .wl-patient-selector,
+  .wl-patient-selected,
+  .wl-association-state {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    padding: var(--sp-3);
+    background: var(--surface-subtle);
+  }
+
+  .wl-patient-selector { display: flex; flex-direction: column; gap: var(--sp-3); }
+
+  .wl-patient-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--sp-2);
+  }
+
+  .wl-patient-heading strong { font-size: var(--fs-small); }
+  .wl-patient-heading span { color: var(--text-muted); font-size: var(--fs-micro); }
+
+  .wl-patient-modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-2);
+  }
+
+  .wl-patient-modes label {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    min-height: 32px;
+    padding: 0 var(--sp-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    font-size: var(--fs-micro);
+    cursor: pointer;
+  }
+
+  .wl-patient-search,
+  .wl-patient-create { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+  .wl-patient-search-state p { margin: 0; color: var(--text-muted); font-size: var(--fs-micro); }
+
+  .wl-patient-results {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 150px;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .wl-patient-results button {
+    width: 100%;
+    min-height: 32px;
+    padding: 0 var(--sp-2);
+    border: 1px solid transparent;
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .wl-patient-results button:hover { border-color: var(--primary); }
+
+  .wl-patient-selected {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px var(--sp-3);
+    align-items: center;
+  }
+
+  .wl-patient-selected span { color: var(--text-muted); font-size: var(--fs-micro); }
+  .wl-patient-selected strong { grid-column: 1; }
+  .wl-patient-selected button { grid-column: 2; grid-row: 1 / span 2; }
+
+  .wl-patient-selected button,
+  .wl-patient-create-button,
+  .wl-patient-link {
+    min-height: 32px;
+    padding: 0 var(--sp-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .wl-patient-create-button { align-self: flex-end; background: var(--primary); border-color: var(--primary); color: #fff; }
+  .wl-patient-link { align-self: flex-start; border: 0; padding: 0; background: transparent; color: var(--primary); }
+
+  .wl-patient-results button:focus-visible,
+  .wl-patient-selected button:focus-visible,
+  .wl-patient-create-button:focus-visible,
+  .wl-patient-link:focus-visible,
+  .wl-patient-modes input:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  .wl-patient-selected button:disabled,
+  .wl-patient-create-button:disabled { opacity: .45; cursor: not-allowed; }
+
+  .wl-association-state { display: flex; flex-direction: column; gap: var(--sp-1); }
+  .wl-association-state p { margin: 0; font-size: var(--fs-micro); }
+  .wl-association-state.is-associated { border-color: var(--success); }
+  .wl-association-state.is-error,
+  .wl-association-state.is-conflict { border-color: var(--warning); }
+
   .wl-upload {
     border: 1px solid var(--border);
     border-radius: var(--radius-chip);
@@ -531,4 +653,10 @@
   }
 
   .wl-drawer-run:disabled { opacity: .45; cursor: not-allowed; }
+
+  @media (max-width: 480px) {
+    .wl-patient-modes,
+    .wl-field-row { grid-template-columns: 1fr; }
+    .wl-patient-heading { align-items: flex-start; flex-direction: column; }
+  }
 }
