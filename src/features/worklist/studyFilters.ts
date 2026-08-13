@@ -1,6 +1,6 @@
 import type { StudyRow } from "../../appTypes";
 import { displayReviewStatus } from "../../clinicalDisplay";
-import { displayLatestRunId, displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../../studyDisplay";
+import { displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../../studyDisplay";
 
 /**
  * Worklist filtering, kept pure so it can be tested without React.
@@ -38,10 +38,8 @@ export function matchesQuery(study: StudyRow, query: string) {
   return [
     study.caseId,
     displaySubjectRef(study.subjectRef),
-    displayLatestRunId(study.latestRunId),
     displayPrimaryPlane(study.primaryPlane),
     displayStudyDate(study.studyDate),
-    displayModelKey(study.modelKey),
     study.modelStatus,
     study.reviewStatus,
     displayReviewStatus(study.reviewStatus),

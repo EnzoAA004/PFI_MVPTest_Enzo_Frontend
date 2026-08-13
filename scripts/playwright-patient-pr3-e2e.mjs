@@ -273,17 +273,17 @@ async function runExistingPatientAndAssociationRetry(browser) {
   await page.getByRole("button", { name: "Analizar" }).click();
   await page.waitForSelector("text=Análisis completado, pero no se pudo asociar el estudio al paciente", { timeout: 10000 });
   assertTruthy(state.calls.run === 1 && state.calls.association.length === 1, "el exito parcial debe ejecutar un run y un PUT");
+  await assertResponsive(page, 1366, 768);
+  await assertResponsive(page, 1920, 1080);
+  await assertResponsive(page, 390, 844);
   await page.getByRole("button", { name: "Reintentar asociación" }).click();
-  await page.waitForSelector("text=Study asociado correctamente");
+  await page.locator(".wl-drawer").waitFor({ state: "detached" });
   assertTruthy(state.calls.run === 1, "reintentar asociación no debe reejecutar AI");
   assertTruthy(state.calls.create.length === 0, "reintentar asociación no debe recrear Patient");
   assertTruthy(state.calls.association.length === 2, "reintentar asociación debe repetir solo el PUT");
   assertTruthy(state.calls.association[0].expectedPatientId === null, "la primera asociación debe ser optimista desde null");
   assertTruthy(state.calls.association[0].reason === "INITIAL_ASSIGNMENT", "la primera asociación debe usar INITIAL_ASSIGNMENT");
 
-  await assertResponsive(page, 1366, 768);
-  await assertResponsive(page, 1920, 1080);
-  await assertResponsive(page, 390, 844);
   await page.close();
 }
 
@@ -347,7 +347,7 @@ async function runAnalysisRetry(browser) {
   assertTruthy(await page.locator("text=Paciente seleccionado").count() === 1, "el Patient debe persistir tras fallo de análisis");
   assertTruthy(state.calls.association.length === 0, "un análisis fallido no debe intentar asociación");
   await page.getByRole("button", { name: "Analizar" }).click();
-  await page.waitForSelector("text=Study asociado correctamente", { timeout: 10000 });
+  await page.locator(".wl-drawer").waitFor({ state: "detached", timeout: 10000 });
   assertTruthy(state.calls.run === 2, "retry debe ejecutar exactamente una nueva corrida");
   assertTruthy(state.calls.association.length === 1, "retry exitoso debe asociar una sola vez");
   assertTruthy(state.calls.create.length === 0, "retry de análisis no debe recrear Patient");

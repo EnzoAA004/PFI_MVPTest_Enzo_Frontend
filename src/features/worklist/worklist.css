@@ -266,12 +266,6 @@
     padding: 1px 5px;
   }
 
-  .wl-model {
-    font-family: var(--font-mono);
-    font-size: var(--fs-micro);
-    color: var(--text-muted);
-  }
-
   .wl-empty-cell { color: var(--text-muted); opacity: .65; }
 
   .wl-state {
@@ -385,7 +379,6 @@
 
     .wl-case { grid-column: 1 / -1; justify-content: start; padding: 0 0 var(--sp-2); border-bottom: 1px solid var(--border-subtle); }
     .wl-case-desc { max-width: 100%; }
-    .wl-model { overflow: hidden; text-overflow: ellipsis; }
     .wl-align-end { text-align: left; }
 
     .wl-pagination { align-items: stretch; flex-direction: column; }
@@ -431,6 +424,8 @@
     padding: 0 var(--sp-1);
   }
 
+  .wl-drawer-close:disabled { cursor: not-allowed; opacity: .4; }
+
   .wl-drawer-body {
     flex: 1;
     overflow-y: auto;
@@ -438,6 +433,13 @@
     display: flex;
     flex-direction: column;
     gap: var(--sp-3);
+  }
+
+  .wl-drawer-intro {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+    line-height: 1.5;
   }
 
   .wl-field { display: flex; flex-direction: column; gap: 4px; }
@@ -461,6 +463,19 @@
     margin: var(--sp-1) 0 0;
     font-size: var(--fs-small);
     font-weight: var(--fw-semibold);
+  }
+
+  .wl-section-title span,
+  .wl-patient-heading strong span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    margin-right: var(--sp-1);
+    color: var(--clinical-accent);
+    font-size: var(--fs-micro);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .04em;
   }
 
   .wl-patient-selector,
@@ -542,6 +557,12 @@
   }
 
   .wl-patient-selected span { color: var(--text-muted); font-size: var(--fs-micro); }
+  .wl-patient-selected-label b {
+    margin-right: var(--sp-1);
+    color: var(--clinical-accent);
+    font-weight: var(--fw-semibold);
+    letter-spacing: .04em;
+  }
   .wl-patient-selected strong { grid-column: 1; }
   .wl-patient-selected button { grid-column: 2; grid-row: 1 / span 2; }
 
@@ -680,6 +701,81 @@
   .wl-product-progress li em { font-size: var(--fs-micro); color: var(--text-muted); }
   .wl-product-progress li small { grid-column: 1 / -1; color: var(--text-muted); overflow-wrap: anywhere; }
 
+  .wl-analysis-progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-3);
+    border: 1px solid color-mix(in srgb, var(--clinical-accent) 30%, var(--border));
+    border-radius: var(--radius-card);
+    background: color-mix(in srgb, var(--clinical-accent-soft) 58%, var(--surface));
+  }
+
+  .wl-analysis-progress-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: var(--sp-2);
+  }
+
+  .wl-analysis-progress-head strong { font-size: var(--fs-small); }
+  .wl-analysis-progress-head p {
+    margin: 2px 0 0;
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    line-height: 1.45;
+  }
+
+  .wl-analysis-progress ol {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--sp-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .wl-analysis-progress li {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1.25;
+  }
+
+  .wl-analysis-progress li span {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wl-analysis-progress li.is-active { color: var(--text); font-weight: var(--fw-semibold); }
+  .wl-analysis-progress li.is-active span { border-color: var(--clinical-accent); color: var(--clinical-accent); }
+  .wl-analysis-progress li.is-complete span { border-color: var(--success); color: var(--success); }
+  .wl-analysis-progress > small { color: var(--text-muted); font-size: 10px; }
+
+  .wl-analysis-spinner,
+  .wl-button-spinner { animation: wl-spin 850ms linear infinite; }
+
+  .wl-analysis-spinner { color: var(--clinical-accent); margin-top: 1px; }
+  .wl-button-spinner { flex: none; }
+
+  @keyframes wl-spin { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wl-analysis-spinner,
+    .wl-button-spinner { animation-duration: 1800ms; }
+  }
+
   .wl-drawer-foot {
     display: flex;
     justify-content: flex-end;
@@ -701,6 +797,10 @@
   }
 
   .wl-drawer-run {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
     background: var(--primary);
     border-color: var(--primary);
     color: #fff;
@@ -712,5 +812,6 @@
     .wl-patient-modes,
     .wl-field-row { grid-template-columns: 1fr; }
     .wl-patient-heading { align-items: flex-start; flex-direction: column; }
+    .wl-analysis-progress ol { grid-template-columns: 1fr 1fr; }
   }
 }

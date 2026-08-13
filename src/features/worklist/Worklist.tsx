@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { NewAnalysisDrawer } from "./NewAnalysisDrawer";
 import { ChevronDown, ChevronUp, ChevronsUpDown, Plus, Search } from "lucide-react";
 import type { Priority, ReviewStatus, StudyRow } from "../../appTypes";
-import { displayModelKey, displayStudyDate, displaySubjectRef, studyHasReviewableRun } from "../../studyDisplay";
+import { displayStudyDate, displaySubjectRef } from "../../studyDisplay";
 import { WORKLIST_FILTERS, countsByFilter, filterStudies, type WorklistFilterId } from "./studyFilters";
 import { OperationsPageHeader } from "../../components/OperationsPageHeader";
 import { PriorityBadge, ReviewBadge } from "../../components/StatusBadge";
@@ -20,7 +20,7 @@ import { PriorityBadge, ReviewBadge } from "../../components/StatusBadge";
 
 const PAGE_SIZE = 25;
 
-type SortKey = "caseId" | "subjectRef" | "studyDate" | "modelKey" | "reviewStatus" | "priority";
+type SortKey = "caseId" | "subjectRef" | "studyDate" | "reviewStatus" | "priority";
 type SortDirection = "asc" | "desc";
 
 const reviewWeight: Record<ReviewStatus, number> = { observado: 0, pendiente: 1, aceptado: 2, descartado: 3 };
@@ -31,7 +31,6 @@ function sortValue(study: StudyRow, key: SortKey): string | number {
   if (key === "priority") return priorityWeight[study.priority] ?? 99;
   if (key === "studyDate") return Date.parse(study.studyDate ?? "") || 0;
   if (key === "subjectRef") return String(study.subjectRef ?? "").toLowerCase();
-  if (key === "modelKey") return String(study.modelKey ?? "").toLowerCase();
   return String(study.caseId ?? "").toLowerCase();
 }
 
@@ -126,7 +125,7 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
             <input
               value={query}
               onChange={(event) => { setQuery(event.target.value); setPage(0); }}
-              placeholder="Buscar caso, paciente, corrida, modelo…"
+              placeholder="Buscar caso, paciente o descripción…"
               type="search"
               aria-label="Buscar estudios"
             />
@@ -165,14 +164,12 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
               <SortHeader column="subjectRef">Paciente</SortHeader>
               <SortHeader column="studyDate">Fecha</SortHeader>
               <th>Planos</th>
-              <SortHeader column="modelKey">Modelo</SortHeader>
               <SortHeader column="reviewStatus">Revisión</SortHeader>
               <SortHeader column="priority" align="end">Prioridad</SortHeader>
             </tr>
           </thead>
           <tbody>
             {visible.map((study) => {
-              const reviewable = studyHasReviewableRun(study);
               return (
                 <tr
                   key={rowKey(study)}
@@ -196,11 +193,6 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
                         ? study.planes.map((plane) => <em key={plane} className="wl-plane">{plane === "sagittal" ? "SAG" : "AX"}</em>)
                         : <span className="wl-empty-cell">—</span>}
                     </span>
-                  </td>
-                  <td data-label="Modelo">
-                    {reviewable
-                      ? <span className="wl-model">{displayModelKey(study.modelKey)}</span>
-                      : <span className="wl-empty-cell">sin corrida</span>}
                   </td>
                   <td data-label="Revisión"><ReviewBadge status={study.reviewStatus} /></td>
                   <td className="wl-align-end" data-label="Prioridad">
