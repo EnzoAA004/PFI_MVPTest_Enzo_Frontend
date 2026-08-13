@@ -4,6 +4,7 @@ import type { Plane } from "../../appTypes";
 import type { InputResponse, StudyIngestionResponse } from "../../contracts/inputApiTypes";
 import type { MultiplanarRunPayload } from "../../contracts/multiplanarHttpTypes";
 import { evaluateRealInferenceReadiness } from "../../inferenceReadiness";
+import type { PatientSummary } from "../../patientApi";
 import {
   emptyStudyMetadataDraft,
   normalizeStudyMetadataInput,
@@ -17,6 +18,11 @@ import {
   type ProductAnalysisState,
   type ProductFlowPhase,
 } from "./productAnalysisFlow";
+import { PatientSelector } from "./PatientSelector";
+import {
+  associatePatientAfterAnalysis,
+  type PatientAssociationResult,
+} from "./patientStudyAssociation";
 
 /**
  * Carga de un estudio nuevo, como panel sobre la lista de trabajo.
@@ -57,6 +63,11 @@ type StudyUploadState = {
   study?: StudyIngestionResponse;
   error?: string;
 };
+
+type AssociationState =
+  | { status: "idle" }
+  | { status: "associating" }
+  | PatientAssociationResult;
 
 function seriesLabel(series: { plane: string; weighting: string; description: string; sliceCount: number }) {
   const plane = series.plane === "sagittal" ? "Sagital" : series.plane === "axial" ? "Axial" : series.plane === "coronal" ? "Coronal" : series.plane;
@@ -129,6 +140,7 @@ function productSeriesLabel(status: ProductAnalysisState["series"]["sagittal_t1"
 }
 
 export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
+  const [selectedPatient, setSelectedPatient] = useState<PatientSummary | null>(null);
   const [caseId, setCaseId] = useState("");
   const [metadata, setMetadata] = useState<StudyMetadataDraft>(() => emptyStudyMetadataDraft());
   const [metadataError, setMetadataError] = useState("");
@@ -140,6 +152,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const [message, setMessage] = useState("");
   const [productState, setProductState] = useState<ProductAnalysisState | null>(null);
   const [persistedRun, setPersistedRun] = useState<{ caseId: string; runId: string; study?: StudyIngestionResponse } | null>(null);
+  const [associationState, setAssociationState] = useState<AssociationState>({ status: "idle" });
 
   /*
    * Escape cierra el drawer. Es el equivalente por teclado del clic en el fondo, y lo
@@ -160,6 +173,8 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   /* Sin un identificador válido no se habilita la carga: el archivo se subiría para
      ser rechazado, y el médico tendría que volver a elegirlo. */
   const caseIdReady = Boolean(normalizedCaseId) && !caseIdIssue;
+  const patientReady = Boolean(selectedPatient?.id);
+  const studyIdentityReady = caseIdReady && patientReady;
   /*
    * El identificador de entrada puede venir de las dos vías. La del estudio completo
    * tiene prioridad porque el plano lo decidió la metadata; la de plano suelto es lo
@@ -172,8 +187,12 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
 
   async function uploadStudy(file?: File) {
     if (!file) return;
-    if (!caseIdReady) {
-      setMessage(caseIdIssue || "Ingresá un identificador de caso de-identificado antes de cargar el estudio.");
+    if (!studyIdentityReady) {
+      setMessage(
+        !patientReady
+          ? "Seleccioná o creá un paciente antes de cargar el estudio."
+          : caseIdIssue || "Ingresá un identificador de caso de-identificado antes de cargar el estudio.",
+      );
       return;
     }
     if (!file.name.toLowerCase().endsWith(".zip")) {
@@ -182,6 +201,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
     }
     setPersistedRun(null);
     setProductState(null);
+    setAssociationState({ status: "idle" });
     setStudyUpload({ fileName: file.name, status: "uploading" });
     try {
       const study = await uploadStudyArchive(file, normalizedCaseId);
@@ -194,8 +214,12 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
 
   async function upload(plane: Plane, file?: File) {
     if (!file) return;
-    if (!caseIdReady) {
-      setMessage(caseIdIssue || "Ingresá un identificador de caso de-identificado antes de cargar archivos.");
+    if (!studyIdentityReady) {
+      setMessage(
+        !patientReady
+          ? "Seleccioná o creá un paciente antes de cargar archivos."
+          : caseIdIssue || "Ingresá un identificador de caso de-identificado antes de cargar archivos.",
+      );
       return;
     }
     if (!hasAllowedExtension(file.name)) {
@@ -246,7 +270,31 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
     }
   }
 
+  async function attemptPatientAssociation(
+    context: { caseId: string },
+    patientId: string,
+  ) {
+    setAssociationState({ status: "associating" });
+    const result = await associatePatientAfterAnalysis(context.caseId, patientId);
+    setAssociationState(result);
+    setMessage(
+      result.status === "associated"
+        ? "Análisis completado y estudio asociado al paciente."
+        : result.message,
+    );
+    return result;
+  }
+
+  async function retryPatientAssociation() {
+    if (!persistedRun || !selectedPatient || running || associationState.status === "associating") return;
+    await attemptPatientAssociation(persistedRun, selectedPatient.id);
+  }
+
   async function run() {
+    if (!selectedPatient) {
+      setMessage("Seleccioná o creá un paciente antes de iniciar el análisis.");
+      return;
+    }
     if (!sagittalReady || running) return;
     const subjectError = validateSubjectRef(metadata.subjectRef);
     if (subjectError) {
@@ -255,6 +303,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
       return;
     }
     setMetadataError("");
+    setAssociationState({ status: "idle" });
     setRunning(true);
     // El backend no expone progreso granular: se dice eso en vez de mostrar una
     // barra o un porcentaje inventado.
@@ -296,6 +345,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
         const context = { caseId: normalizedCaseId, runId: result.runId, study: studyUpload.study };
         setPersistedRun(context);
         await runProductExtensions(context);
+        await attemptPatientAssociation(context, selectedPatient.id);
         return;
       }
       // La corrida existe pero no dejó un sagital evaluable: se queda acá con el
@@ -331,6 +381,24 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
         </header>
 
         <div className="wl-drawer-body">
+          <PatientSelector
+            disabled={running || Boolean(persistedRun)}
+            onSelected={(patient) => {
+              setSelectedPatient(patient);
+              setAssociationState({ status: "idle" });
+              setMessage("");
+            }}
+            selectedPatient={selectedPatient}
+          />
+
+          {!patientReady && (
+            <p className="wl-drawer-warning" id="patient-required-message">
+              Seleccioná un paciente para habilitar la carga y el análisis.
+            </p>
+          )}
+
+          <h3 className="wl-section-title">Datos del estudio</h3>
+
           <label className="wl-field">
             <span>ID de caso de-identificado</span>
             <input
@@ -338,6 +406,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
                 setCaseId(event.target.value);
                 setPersistedRun(null);
                 setProductState(null);
+                setAssociationState({ status: "idle" });
               }}
               placeholder="CASE-XXXX"
               value={caseId}
@@ -348,13 +417,13 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
           </label>
 
           <label className="wl-field">
-            <span>Referencia de paciente de-identificada</span>
+            <span>Referencia técnica legacy del estudio (opcional)</span>
             <input
               onChange={(event) => setMetadata((current) => ({ ...current, subjectRef: event.target.value }))}
               placeholder="SPIDER-101"
               value={metadata.subjectRef}
             />
-            <em>Código académico estable. No ingreses nombre, DNI, email ni datos identificatorios.</em>
+            <em>Campo histórico del Study; no identifica al Patient seleccionado y no se sincroniza.</em>
           </label>
 
           <div className="wl-field-row">
@@ -396,7 +465,14 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
               <strong>Estudio completo</strong>
               <span>.zip · las series se separan solas</span>
             </div>
-            <input accept=".zip" disabled={!caseIdReady} onChange={(event) => { void uploadStudy(event.target.files?.[0]); event.target.value = ""; }} type="file" />
+            <input
+              accept=".zip"
+              aria-describedby={!patientReady ? "patient-required-message" : undefined}
+              disabled={!studyIdentityReady}
+              onChange={(event) => { void uploadStudy(event.target.files?.[0]); event.target.value = ""; }}
+              title={!patientReady ? "Seleccioná un paciente antes de cargar el estudio" : undefined}
+              type="file"
+            />
             {studyUpload.status === "uploading" && <p className="wl-upload-state">Leyendo {studyUpload.fileName}…</p>}
             {studyUpload.status === "error" && <p className="wl-drawer-error">{studyUpload.error}</p>}
             {studyUpload.status === "uploaded" && studyUpload.study && (
@@ -456,7 +532,14 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
                   <strong>{planeLabel(plane)}</strong>
                   <span>{plane === "sagittal" ? "obligatorio" : "opcional · experimental"}</span>
                 </div>
-                <input accept={uploadAccept} disabled={!caseIdReady} onChange={(event) => onFileChange(plane, event)} type="file" />
+                <input
+                  accept={uploadAccept}
+                  aria-describedby={!patientReady ? "patient-required-message" : undefined}
+                  disabled={!studyIdentityReady}
+                  onChange={(event) => onFileChange(plane, event)}
+                  title={!patientReady ? "Seleccioná un paciente antes de cargar archivos" : undefined}
+                  type="file"
+                />
                 {uploads[plane].status === "uploading" && <p className="wl-upload-state">Cargando {uploads[plane].fileName}…</p>}
                 {uploads[plane].status === "uploaded" && <p className="wl-upload-state is-ok">{uploads[plane].fileName} cargado.</p>}
                 {uploads[plane].status === "error" && <p className="wl-drawer-error">{uploads[plane].error}</p>}
@@ -484,26 +567,58 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
             </section>
           )}
 
+          {persistedRun && associationState.status !== "idle" && (
+            <section
+              aria-live="polite"
+              className={`wl-association-state is-${associationState.status}`}
+            >
+              <strong>Asociación del estudio</strong>
+              {associationState.status === "associating" && <p>Asociando el Study persistido al paciente…</p>}
+              {associationState.status === "associated" && <p>Study asociado correctamente.</p>}
+              {associationState.status === "error" && <p>{associationState.message}</p>}
+              {associationState.status === "conflict" && (
+                <p>{associationState.message} Requiere revisión manual; no se reasignó automáticamente.</p>
+              )}
+            </section>
+          )}
+
           {message && <p className="wl-drawer-message">{message}</p>}
         </div>
 
         <footer className="wl-drawer-foot">
           <button className="wl-drawer-cancel" disabled={running} onClick={onClose} type="button">Cancelar</button>
-          {persistedRun && productState?.phase === "error" && (
-            <button className="wl-drawer-cancel" disabled={running} onClick={() => onAnalysisReady(persistedRun.caseId)} type="button">
-              Abrir sin P10.7
+          {persistedRun && associationState.status === "error" ? (
+            <button className="wl-drawer-run" onClick={() => void retryPatientAssociation()} type="button">
+              Reintentar asociación
             </button>
-          )}
-          {persistedRun && productState?.phase === "error" ? (
-            <button className="wl-drawer-run" disabled={running || !productState.retryable} onClick={() => void retryProductExtensions()} type="button">
-              {running ? "Reintentando…" : productState.retryable ? "Reintentar P10.7" : "P10.7 no disponible"}
+          ) : persistedRun && associationState.status === "conflict" ? (
+            <button className="wl-drawer-run" disabled title="La asociación requiere revisión manual" type="button">
+              Revisión manual requerida
             </button>
-          ) : persistedRun && productState && ["completed", "degraded"].includes(productState.phase) ? (
+          ) : persistedRun && associationState.status === "associating" ? (
+            <button className="wl-drawer-run" disabled type="button">Asociando…</button>
+          ) : persistedRun && associationState.status === "associated" && productState?.phase === "error" ? (
+            <>
+              <button className="wl-drawer-cancel" disabled={running} onClick={() => onAnalysisReady(persistedRun.caseId)} type="button">
+                Abrir sin P10.7
+              </button>
+              <button className="wl-drawer-run" disabled={running || !productState.retryable} onClick={() => void retryProductExtensions()} type="button">
+                {running ? "Reintentando…" : productState.retryable ? "Reintentar P10.7" : "P10.7 no disponible"}
+              </button>
+            </>
+          ) : persistedRun && associationState.status === "associated" && productState && ["completed", "degraded"].includes(productState.phase) ? (
             <button className="wl-drawer-run" disabled={running} onClick={() => onAnalysisReady(persistedRun.caseId)} type="button">
               Abrir sala de lectura
             </button>
           ) : (
-            <button className="wl-drawer-run" disabled={!sagittalReady || running} onClick={() => void run()} type="button">
+            <button
+              aria-describedby={!patientReady ? "patient-required-message" : undefined}
+              className="wl-drawer-run"
+              disabled={!patientReady || !sagittalReady || running}
+              onClick={() => void run()}
+              title={!patientReady ? "Seleccioná un paciente antes de analizar" : undefined}
+              type="button"
+            >
               {running ? "Procesando…" : "Analizar"}
             </button>
           )}
