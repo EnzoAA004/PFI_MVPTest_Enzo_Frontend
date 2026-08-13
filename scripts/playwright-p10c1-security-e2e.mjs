@@ -128,7 +128,7 @@ async function run() {
         return route.fulfill({ json: {} });
       });
       await page.goto(appUrl);
-      await page.waitForSelector("text=Inicio", { timeout: 15000 });
+      await page.waitForSelector("text=Lista de trabajo", { timeout: 15000 });
       assertTruthy(!(await page.locator("text=Ingresar como profesional").count()), "una sesion valida no debe mostrar el login");
       const relevant = jsErrors.filter((message) => !message.includes("Failed to load resource") && !message.includes("favicon"));
       assertTruthy(relevant.length === 0, `E2E1 no debe generar errores JS: ${relevant.join(" | ")}`);
@@ -161,7 +161,7 @@ async function run() {
         return route.fulfill({ json: {} });
       });
       await page.goto(appUrl);
-      await page.waitForSelector("text=Inicio", { timeout: 15000 });
+      await page.waitForSelector("text=Lista de trabajo", { timeout: 15000 });
       for (let attempt = 0; attempt < 50 && studiesCalls < 2; attempt += 1) await sleep(100);
       assertTruthy(!(await page.locator("text=Ingresar como profesional").count()), "un 401 recuperable no debe forzar logout");
       assertTruthy(refreshCalls === 1, `refresh debe llamarse exactamente una vez, se llamo ${refreshCalls}`);
@@ -187,7 +187,7 @@ async function run() {
       });
       await page.goto(appUrl);
       await page.waitForSelector("text=Ingresar como profesional", { timeout: 15000 });
-      assertTruthy(!(await page.locator("text=Inicio").count()), "una sesion revocada no debe dejar pantallas protegidas visibles");
+      assertTruthy(!(await page.locator("text=Lista de trabajo").count()), "una sesion revocada no debe dejar pantallas protegidas visibles");
       const storedSession = await readAuthKeyFromIndexedDb(page);
       assertTruthy(storedSession === null, "la sesion revocada debe limpiarse de IndexedDB");
       await context.close();
@@ -214,10 +214,10 @@ async function run() {
         return route.fulfill({ json: {} });
       });
       await page.goto(appUrl);
-      await page.waitForSelector("text=Inicio", { timeout: 15000 });
+      await page.waitForSelector("text=Lista de trabajo", { timeout: 15000 });
       assertTruthy(!(await page.locator("text=Ingresar como profesional").count()), "un 403 nunca debe forzar logout: la sesion sigue activa");
       assertTruthy(refreshCalls === 0, "un 403 nunca debe disparar un refresh de sesion");
-      await page.waitForSelector("text=Error al consultar estudios", { timeout: 15000 });
+      await page.waitForSelector("text=No se pudo cargar la lista de estudios", { timeout: 15000 });
       const bodyText = await page.locator("body").innerText();
       assertTruthy(!bodyText.includes("AccessDeniedException"), "el nombre de la excepcion interna nunca debe llegar al DOM");
       assertTruthy(bodyText.includes("No tenés permiso") || bodyText.includes("permiso"), "el 403 debe mostrar un mensaje seguro de permiso insuficiente");
@@ -289,7 +289,7 @@ async function run() {
         return route.fulfill({ json: {} });
       });
       await page.goto(appUrl);
-      await page.waitForSelector("text=Inicio", { timeout: 15000 });
+      await page.waitForSelector("text=Lista de trabajo", { timeout: 15000 });
       await page.locator("text=Estudios").first().click().catch(() => undefined);
       await page.waitForSelector(`text=${caseId}`, { timeout: 15000 }).catch(() => undefined);
       // Give the app time to have attempted (and rejected) the malicious asset
@@ -317,8 +317,8 @@ async function run() {
         return route.fulfill({ json: {} });
       });
       await page.goto(appUrl);
-      await page.waitForSelector("text=Inicio", { timeout: 15000 });
-      await page.waitForSelector("text=Error al consultar estudios", { timeout: 15000 });
+      await page.waitForSelector("text=Lista de trabajo", { timeout: 15000 });
+      await page.waitForSelector("text=No se pudo cargar la lista de estudios", { timeout: 15000 });
       const bodyText = await page.locator("body").innerText();
       assertTruthy(!bodyText.includes("PSQLException"), "el stack trace del backend nunca debe llegar al DOM");
       assertTruthy(!bodyText.includes("jdbc:postgresql"), "la cadena de conexion nunca debe llegar al DOM");

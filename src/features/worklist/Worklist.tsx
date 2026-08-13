@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { NewAnalysisDrawer } from "./NewAnalysisDrawer";
-import { ChevronDown, ChevronUp, ChevronsUpDown, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Plus, Search } from "lucide-react";
 import type { Priority, ReviewStatus, StudyRow } from "../../appTypes";
-import { displayReviewStatus } from "../../clinicalDisplay";
 import { displayModelKey, displayStudyDate, displaySubjectRef, studyHasReviewableRun } from "../../studyDisplay";
 import { WORKLIST_FILTERS, countsByFilter, filterStudies, type WorklistFilterId } from "./studyFilters";
+import { OperationsPageHeader } from "../../components/OperationsPageHeader";
+import { PriorityBadge, ReviewBadge } from "../../components/StatusBadge";
 
 /**
  * Worklist — the entry point of the application.
@@ -113,12 +114,13 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
 
   return (
     <div className="wl">
-      <header className="wl-header">
-        <div className="wl-title">
-          <h1>Lista de trabajo</h1>
-          <span className="wl-total">{rows.length} de {studies.length} estudios</span>
-        </div>
-        <div className="wl-actions">
+      <OperationsPageHeader
+        eyebrow="Estudios"
+        title="Lista de trabajo"
+        description="Revisión y seguimiento de estudios procesados."
+        meta={<span className="wl-total">{rows.length} de {studies.length} estudios</span>}
+        actions={(
+          <div className="wl-actions">
           <label className="wl-search">
             <Search aria-hidden size={14} />
             <input
@@ -129,9 +131,10 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
               aria-label="Buscar estudios"
             />
           </label>
-          <button className="wl-primary" onClick={() => setDrawerOpen(true)} type="button">Nuevo análisis</button>
-        </div>
-      </header>
+            <button className="wl-primary" onClick={() => setDrawerOpen(true)} type="button"><Plus aria-hidden size={15} />Nuevo análisis</button>
+          </div>
+        )}
+      />
 
       <nav className="wl-filters" aria-label="Filtros de la lista de trabajo">
         {WORKLIST_FILTERS.map((filter) => (
@@ -142,8 +145,8 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
             type="button"
             aria-pressed={filter.id === filterId}
           >
-            {filter.label}
-            <em>{counts[filter.id]}</em>
+            <span>{filter.label}</span>
+            <strong>{counts[filter.id]}</strong>
           </button>
         ))}
       </nav>
@@ -158,7 +161,6 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
         <table className="wl-table">
           <thead>
             <tr>
-              <th className="wl-col-status"><span className="sr-only">Estado</span></th>
               <SortHeader column="caseId">Caso</SortHeader>
               <SortHeader column="subjectRef">Paciente</SortHeader>
               <SortHeader column="studyDate">Fecha</SortHeader>
@@ -180,31 +182,29 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openStudy(study); }
                   }}
+                  aria-label={`Abrir estudio ${study.caseId}`}
                 >
-                  <td className="wl-col-status"><span className={`wl-dot wl-dot-${study.reviewStatus}`} aria-hidden /></td>
-                  <td className="wl-case">
+                  <td className="wl-case" data-label="Caso">
                     <span className="wl-case-id">{study.caseId}</span>
                     {study.description ? <span className="wl-case-desc">{study.description}</span> : null}
                   </td>
-                  <td className="wl-num">{displaySubjectRef(study.subjectRef)}</td>
-                  <td className="wl-num">{displayStudyDate(study.studyDate)}</td>
-                  <td>
+                  <td className="wl-num" data-label="Paciente">{displaySubjectRef(study.subjectRef)}</td>
+                  <td className="wl-num" data-label="Fecha">{displayStudyDate(study.studyDate)}</td>
+                  <td data-label="Planos">
                     <span className="wl-planes">
                       {study.planes.length
                         ? study.planes.map((plane) => <em key={plane} className="wl-plane">{plane === "sagittal" ? "SAG" : "AX"}</em>)
                         : <span className="wl-empty-cell">—</span>}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="Modelo">
                     {reviewable
                       ? <span className="wl-model">{displayModelKey(study.modelKey)}</span>
                       : <span className="wl-empty-cell">sin corrida</span>}
                   </td>
-                  <td>{displayReviewStatus(study.reviewStatus)}</td>
-                  <td className="wl-align-end">
-                    {study.priority === "alta"
-                      ? <span className="wl-priority-high">Alta</span>
-                      : <span className="wl-empty-cell">{study.priority === "media" ? "Media" : "Baja"}</span>}
+                  <td data-label="Revisión"><ReviewBadge status={study.reviewStatus} /></td>
+                  <td className="wl-align-end" data-label="Prioridad">
+                    <PriorityBadge priority={study.priority} />
                   </td>
                 </tr>
               );
@@ -212,11 +212,11 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
           </tbody>
         </table>
 
-        {loading ? <p className="wl-state">Consultando estudios persistidos…</p> : null}
+        {loading ? <p className="wl-state" role="status" aria-live="polite">Cargando estudios…</p> : null}
         {!loading && !rows.length ? (
-          <p className="wl-state">
+          <p className="wl-state" role="status">
             {query.trim()
-              ? `Ningún estudio coincide con “${query.trim()}”.`
+              ? "No hay estudios para esta búsqueda."
               : `No hay estudios ${activeFilter.emptyLabel}.`}
           </p>
         ) : null}

@@ -29,7 +29,7 @@ export const WORKLIST_FILTERS: WorklistFilter[] = [
   { id: "observed", label: "Observados", emptyLabel: "observados", matches: (s) => s.reviewStatus === "observado" },
   { id: "high", label: "Prioridad alta", emptyLabel: "de prioridad alta", matches: (s) => s.priority === "alta" },
   { id: "closed", label: "Finalizados", emptyLabel: "finalizados", matches: (s) => s.reviewStatus === "aceptado" || s.reviewStatus === "descartado" },
-  { id: "all", label: "Todos", emptyLabel: "en el repositorio", matches: () => true },
+  { id: "all", label: "Total", emptyLabel: "en el repositorio", matches: () => true },
 ];
 
 export function matchesQuery(study: StudyRow, query: string) {
