@@ -542,10 +542,37 @@
     height: 6px;
   }
 
-  /* La tabla tiene seis columnas. Estirarlas sobre 1900 px deja un hueco de
-     300 px entre CASO y PACIENTE y obliga a barrer la pantalla entera para
-     seguir una fila. Los datos se leen como un bloque. */
-  .wl-table-wrap { max-width: 1120px; }
+  /*
+   * Reparto de columnas.
+   *
+   * Con el ancho automático el navegador distribuye el espacio sobrante en
+   * proporción al contenido, y como cuatro de las seis columnas son casi fijas
+   * —fecha, planos, revisión, prioridad— el sobrante caía casi entero entre
+   * CASO y PACIENTE: en una pantalla de 1900 px quedaba un hueco de ~300 px y
+   * había que barrer la pantalla para seguir una fila.
+   *
+   * Se reparte en porcentajes que suman 100, así que la tabla ocupa todo el
+   * ancho disponible y el sobrante va a las dos columnas de texto variable, que
+   * son las únicas que pueden usarlo. `table-layout: fixed` hace que el reparto
+   * no dependa del contenido: las columnas quedan en el mismo lugar aunque
+   * cambie la página, que es lo que permite comparar de una fila a la otra.
+   */
+  .wl-table { table-layout: fixed; }
+
+  /* El sobrante va a las dos primeras, que son las de texto de largo variable.
+     Las otras cuatro tienen contenido de largo conocido —una fecha ISO, dos
+     siglas, un estado, una prioridad— y ensancharlas sólo agrega hueco. */
+  .wl-table th:nth-child(1) { width: 30%; }
+  .wl-table th:nth-child(2) { width: 26%; }
+  .wl-table th:nth-child(3) { width: 12%; }
+  .wl-table th:nth-child(4) { width: 10%; }
+  .wl-table th:nth-child(5) { width: 12%; }
+  .wl-table th:nth-child(6) { width: 10%; }
+
+  /* Con anchos fijos un valor largo desbordaría la celda en vez de ensancharla:
+     se recorta con puntos suspensivos y el título completo queda en la fila. */
+  .wl-table td { overflow: hidden; text-overflow: ellipsis; }
+
   .wl-align-end { text-align: left; }
   .wl-table th[data-align="end"] { text-align: left; }
 
