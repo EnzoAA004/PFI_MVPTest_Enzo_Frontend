@@ -3753,3 +3753,284 @@ body,
   flex: 1 1 160px;
   min-width: 140px;
 }
+
+/* ============================================================================
+ * Pasada visual de entrega — acceso, barra de navegación e índice de pacientes.
+ *
+ * UI-PR1 y UI-PR2 migraron la lista de trabajo a su propia hoja con tokens
+ * (features/worklist/worklist.css). Las pantallas que quedaron fuera de esos
+ * dos PRs siguen sobre el legado de este archivo, donde la misma regla está
+ * declarada en dos o tres lugares y conviven pesos tipográficos 750 / 800 /
+ * 850 / 900 que ninguna fuente cargada tiene —Inter llega a 700, así que todos
+ * colapsan al mismo trazo—. Eso es lo que hace que Pacientes y el acceso se
+ * lean como otra aplicación al lado de la lista de trabajo.
+ *
+ * El bloque reabre la capa al final para ganar sin desenredar las
+ * declaraciones previas de cada selector. No toca marcado: es presentación.
+ * Lo que sigue después de la entrega es mover cada pantalla a su hoja de
+ * feature y borrar el legado, como ya se hizo con la lista de trabajo.
+ * ========================================================================= */
+@layer components {
+  /* --- Acceso ------------------------------------------------------------
+   * La tarjeta es translúcida (94 %) y está apoyada sobre un fondo con un
+   * corte diagonal duro al 45 %: la diagonal se ve a través del formulario y
+   * parte las etiquetas en dos tonos, que se lee como un error de render.
+   * La tarjeta pasa a ser opaca y el corte se degrada en vez de quedar a filo.
+   */
+  .auth-page {
+    background:
+      radial-gradient(circle at 22% 14%, color-mix(in srgb, var(--teal) 26%, transparent), transparent 44%),
+      linear-gradient(140deg, var(--bg-sidebar) 0%, var(--bg-sidebar) 54%, color-mix(in srgb, var(--bg-sidebar) 45%, var(--info-bg)) 76%, var(--info-bg) 100%);
+    padding: var(--sp-6);
+  }
+
+  .auth-card {
+    background: var(--surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-modal);
+    gap: var(--sp-4);
+    padding: var(--sp-6);
+  }
+
+  .auth-copy {
+    border-radius: var(--radius-card);
+    padding: var(--sp-4);
+  }
+
+  .auth-copy h1 {
+    font-size: var(--fs-h1);
+    font-weight: var(--fw-semibold);
+    letter-spacing: -0.01em;
+  }
+
+  /* El texto de arriba es una etiqueta, no un párrafo: en peso 900 competía
+     con el título que tiene justo debajo. */
+  .auth-copy p {
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.06em;
+  }
+
+  .auth-brand strong { font-weight: var(--fw-semibold); }
+  .auth-brand span { font-size: var(--fs-small); }
+
+  .auth-tabs { border-radius: var(--radius-btn); }
+
+  .auth-tabs button {
+    border-radius: var(--radius-chip);
+    font-size: var(--fs-body);
+    font-weight: var(--fw-medium);
+    min-height: var(--toolbar-h);
+  }
+
+  .auth-tabs button.active {
+    box-shadow: var(--shadow-sm);
+    font-weight: var(--fw-semibold);
+  }
+
+  .auth-form label {
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+  }
+
+  .auth-form input {
+    background: var(--surface);
+    border-radius: var(--radius-input);
+    min-height: var(--toolbar-h);
+    padding: 0 var(--sp-3);
+  }
+
+  /* --- Barra de navegación ------------------------------------------------
+   * El fondo es un degradado de un color hacia sí mismo, que no produce
+   * ningún efecto, y los espaciados son píxeles sueltos. La entrada activa
+   * además se desplaza 2 px: sobre una lista de tres ítems el salto se lee
+   * como un defecto, no como una respuesta al puntero.
+   */
+  .sidebar {
+    background: var(--bg-sidebar);
+    gap: var(--sp-6);
+    padding: var(--sp-4) var(--sp-3);
+  }
+
+  .brand { gap: var(--sp-3); }
+
+  .brand-mark {
+    border-radius: var(--radius-btn);
+    font-weight: var(--fw-semibold);
+    height: 36px;
+    width: 36px;
+  }
+
+  .brand strong {
+    font-size: var(--fs-h3);
+    font-weight: var(--fw-semibold);
+  }
+
+  .brand span { font-size: var(--fs-small); }
+
+  .side-nav button,
+  .sidebar-footer button {
+    border-radius: var(--radius-btn);
+    font-size: var(--fs-body);
+    font-weight: var(--fw-medium);
+    min-height: var(--toolbar-h);
+  }
+
+  .side-nav button:hover {
+    color: var(--surface);
+    transform: none;
+  }
+
+  .side-nav button.active {
+    color: var(--surface);
+    font-weight: var(--fw-semibold);
+    transform: none;
+  }
+
+  /* --- Menú de perfil -----------------------------------------------------
+   * `--shadow-md` no existe en tokens.css —están sm, subtle, legacy, card,
+   * float y modal—, así que el desplegable se abre sin sombra, plano sobre la
+   * tabla y sin nada que lo despegue de las filas.
+   */
+  .profile-menu-panel { box-shadow: var(--shadow-card); }
+
+  .profile-chip {
+    gap: var(--sp-2);
+    min-height: 36px;
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .profile-chip strong {
+    font-size: var(--fs-body);
+    font-weight: var(--fw-semibold);
+  }
+
+  .profile-chip small {
+    font-size: var(--fs-micro);
+    line-height: 1.3;
+  }
+
+  /* --- Encabezado de página ----------------------------------------------
+   * 2.1 rem con letter-spacing -0.05em contra los 18 px del título de la lista
+   * de trabajo: la misma jerarquía anunciada con dos tamaños que difieren casi
+   * al doble. Se alinea con `.wl-title h1`.
+   */
+  .page-heading h1,
+  .history-hero h1,
+  .compact-heading h1 {
+    font-size: var(--fs-h1);
+    font-weight: var(--fw-semibold);
+    letter-spacing: -0.01em;
+  }
+
+  .page-heading p,
+  .history-hero p {
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.06em;
+  }
+
+  /* El contador de la derecha compite con el título por ser lo más grande de
+     la pantalla; en la lista de trabajo el equivalente ("49 de 50 estudios")
+     es texto atenuado al lado del título. */
+  .screen-summary strong {
+    font-size: var(--fs-h2);
+    font-weight: var(--fw-semibold);
+  }
+
+  .screen-summary span { font-size: var(--fs-micro); }
+
+  /* --- Índice de pacientes ------------------------------------------------ */
+
+  /* La página ya se titula "Pacientes registrados": el encabezado de la
+     tarjeta repetía la misma jerarquía dos veces seguidas. Baja a subtítulo. */
+  .patient-directory-panel .section-title h2,
+  .patient-studies-panel .section-title h2 {
+    font-size: var(--fs-h3);
+    font-weight: var(--fw-semibold);
+  }
+
+  .patient-directory-panel .compact-copy { font-size: var(--fs-small); }
+
+  /* El buscador ocupaba todo el ancho para un campo de referencia de nueve
+     caracteres. Se acota y toma la altura de control de la lista de trabajo. */
+  .patient-directory-search { grid-template-columns: minmax(0, 360px) auto; }
+
+  .patient-directory-search .worklist-search-input span {
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-medium);
+    letter-spacing: 0.04em;
+  }
+
+  .patient-directory-search .worklist-search-input input {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    box-shadow: none;
+    font-size: var(--fs-small);
+    min-height: var(--control-h);
+    padding: 0 var(--sp-2);
+  }
+
+  /* Un paciente por tarjeta de 93 px: seis referencias llenan la pantalla y
+     cincuenta serían impracticables. Es un índice para recorrer, no seis
+     objetos destacados, así que pasa a filas separadas por una línea — la
+     misma densidad que la lista de trabajo. */
+  .patient-directory-list { gap: 0; }
+
+  .patient-directory-list li {
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    gap: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .patient-directory-list li:last-child { border-bottom: 0; }
+
+  .patient-directory-list li:hover { background: var(--surface-subtle); }
+
+  .patient-directory-list strong {
+    font-size: var(--fs-body);
+    font-weight: var(--fw-medium);
+  }
+
+  .patient-directory-list span { font-size: var(--fs-small); }
+
+  /* La misma acción repetida en cada fila no necesita el peso de un botón con
+     caja: es la acción obvia de la fila, no una decisión entre varias. */
+  .patient-directory-list button {
+    background: none;
+    border: 0;
+    border-radius: var(--radius-chip);
+    color: var(--text-primary-strong);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+    min-height: var(--control-h);
+    padding: 0 var(--sp-2);
+    white-space: nowrap;
+  }
+
+  .patient-directory-list button:hover:not(:disabled) {
+    background: var(--info-bg);
+  }
+}
+
+@layer components {
+  /* El bloque de arriba va sin consulta de medios, así que por orden de
+     aparición también gana dentro de `@media (max-width: 768px)`. Se repiten
+     acá las reglas que ese layout necesita distintas. */
+  @media (max-width: 768px) {
+    /* A lo ancho de la pantalla no hay dos columnas que acotar. */
+    .patient-directory-search { grid-template-columns: 1fr; }
+
+    /* Estirar al 100 % tenía sentido cuando la acción era un botón con caja:
+       como enlace queda un texto centrado y flotando en su propia línea. */
+    .patient-directory-list button {
+      align-self: start;
+      padding-left: 0;
+      text-align: left;
+      width: auto;
+    }
+  }
+}

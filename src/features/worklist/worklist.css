@@ -223,13 +223,27 @@
 
   .wl-align-end { text-align: right; }
 
+  /*
+   * `display: flex` sobre un <td> lo saca del algoritmo de tabla: la caja pasa
+   * a medir lo que mide su contenido en vez de estirarse a la altura de la
+   * fila, de modo que `vertical-align` deja de aplicar y el `justify-content`
+   * no tiene contra qué centrar. El resultado medido eran 16 px de desfase
+   * hacia arriba contra las otras cinco celdas, en las 25 filas.
+   *
+   * Las dos líneas se apilan igual con los spans en bloque, sin sacar la celda
+   * de la tabla. En el layout angosto no cambia nada: ahí `.wl-table td` ya
+   * redefine `display: grid` con más especificidad.
+   */
   .wl-case {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    vertical-align: middle;
     line-height: 1.25;
     padding-top: 4px;
     padding-bottom: 4px;
+  }
+
+  .wl-case-id,
+  .wl-case-desc {
+    display: block;
   }
 
   .wl-case-id {
