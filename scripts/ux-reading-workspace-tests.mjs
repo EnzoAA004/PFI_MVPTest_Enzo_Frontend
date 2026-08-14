@@ -45,9 +45,19 @@ check("la ruta de revisión activa AppShell inmersivo", () => {
   assert.match(shellSource, /immersive \? " is-immersive"/);
 });
 
+/*
+ * La identidad del revisor dejó de renderizarse como una barra propia sobre el
+ * contenido y pasó a vivir al pie de la navegación, así que ya no hay un
+ * `{!immersive && <Header` suelto: el Header viaja como `identity` del Sidebar.
+ *
+ * Lo que el test protege no cambia —que al entrar en revisión no quede ni la
+ * navegación ni la identidad ocupando pantalla, y que al salir vuelvan las
+ * dos—; ahora alcanza con una sola condición porque una contiene a la otra.
+ */
 check("salir de revisión restaura Sidebar y Header normales", () => {
   assert.match(shellSource, /\{!immersive && \([\s\S]*<Sidebar/);
-  assert.match(shellSource, /\{!immersive && <Header/);
+  assert.match(shellSource, /identity=\{<Header/);
+  assert.doesNotMatch(shellSource, /<main className="main-panel">\s*\{!immersive && <Header/);
   assert.match(shellSource, /localStorage\.setItem\(RAIL_STORAGE_KEY, collapsed/);
   assert.doesNotMatch(shellSource, /localStorage\.setItem\([^\n]*immersive/);
 });
