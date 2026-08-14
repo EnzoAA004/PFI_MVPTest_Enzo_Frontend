@@ -4269,3 +4269,28 @@ body,
     right: auto;
   }
 }
+
+@layer components {
+  /*
+   * La cabecera de identidad arrastra `background: var(--bg-app)` del CSS
+   * heredado, de cuando vivía arriba del panel de contenido y ese fondo la
+   * fundía con la pantalla. Al pie de la barra de navegación pinta un bloque
+   * del color del panel sobre una superficie oscura: en tema claro eso es una
+   * caja casi blanca, y encima el nombre usa --sidebar-text, que en claro es
+   * casi blanco también. Resultado: el nombre del revisor, ilegible.
+   *
+   * Dentro de la barra no hay nada que fundir: la cabecera es transparente y
+   * los colores salen de los tokens de la barra, que valen para los dos temas.
+   */
+  .sidebar-footer .top-header {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .sidebar-footer .header-actions {
+    gap: var(--sp-1);
+    width: 100%;
+  }
+}
