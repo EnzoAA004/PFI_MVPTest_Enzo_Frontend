@@ -165,4 +165,31 @@ check("filas agrupadas conservan id y callbacks del editor", () => {
   assert.ok(reviewSource.includes("groups={activeGroup ? measurementGroups : measurementSummaryGroups}"));
 });
 
+/*
+ * El resumen del agente mezclaba texto de gobernanza —idéntico en todos los
+ * estudios y ya presente en la barra superior de la sala y en la pantalla de
+ * ayuda— con la señal propia de la corrida (flags, reasons, recommendedAction).
+ * El backend sólo emite `agentDecision` en el camino degradado, así que en uso
+ * normal el panel ocupaba el centro de la pestaña donde se escriben las notas
+ * del informe para repetir por tercera vez una advertencia que no cambia.
+ *
+ * Se muestra sólo cuando tiene contenido propio. La advertencia permanente no
+ * depende de este panel: vive en la cabecera de la sala de lectura.
+ */
+const agentSummarySource = readFileSync("src/components/AgentSummary.tsx", "utf8");
+
+check("el resumen del agente se oculta cuando no tiene contenido propio", () => {
+  assert.match(agentSummarySource, /const hasAgentContent =/);
+  assert.match(agentSummarySource, /if \(!hasAgentContent\) return null;/);
+  for (const campo of ["flags.length", "reasons.length", "recommendedAction"]) {
+    assert.ok(agentSummarySource.includes(campo), `la condición debe considerar ${campo}`);
+  }
+});
+
+check("la advertencia permanente no depende del resumen del agente", () => {
+  const noticeSource = readFileSync("src/features/reading/WorkspaceGovernanceNotice.tsx", "utf8");
+  assert.match(noticeSource, /Revisión profesional requerida/);
+  assert.match(reviewSource, /<WorkspaceGovernanceNotice/);
+});
+
 console.log(`ux-clinical-inspector: ${passed} passed`);
