@@ -40,6 +40,8 @@ export type PlaneViewportProps = {
   selectedLandmarkId: string;
   onSelectLandmark: (id: string) => void;
   readonly: boolean;
+  /** Edición de cotas, independiente del modo de landmarks. */
+  measurementsReadonly?: boolean;
   addMode: boolean;
   /** Marcado del receso subarticular: solo lo activa el viewport axial. */
   subarticularMode?: boolean;
@@ -98,7 +100,7 @@ export type PlaneViewportProps = {
  */
 export function PlaneViewport({
   plane, caseLabel, seriesName, seriesRoleLabel, model, spacingLabel,
-  slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
+  slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, measurementsReadonly, addMode,
   subarticularMode, onSubarticularPoint, orientation, pixelSpacingMm,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
   measureTool, measureDraft, onMeasurePoint, onMeasureFreehand, annotations, aiMeasurements, aiMeasurableCount,
@@ -196,6 +198,7 @@ export function PlaneViewport({
           selectedLandmarkId={selectedLandmarkId}
           onSelectLandmark={onSelectLandmark}
           readonly={readonly}
+          measurementsReadonly={measurementsReadonly}
           addMode={addMode}
           subarticularMode={subarticularMode}
           onSubarticularPoint={onSubarticularPoint}

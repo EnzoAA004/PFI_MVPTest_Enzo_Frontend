@@ -74,6 +74,20 @@ type Props = {
   onAddLandmark?: (point: Point) => void;
   onLandmarkAddComplete?: () => void;
   readonly?: boolean;
+  /**
+   * Edición de cotas, separada de la de landmarks.
+   *
+   * `readonly` gobernaba las tres cosas con una sola llave: landmarks, contornos
+   * y cotas. Pero la que la enciende es "Editar landmark", un botón dentro de
+   * "Edición avanzada" cuyo texto sólo habla de landmarks, así que arrastrar el
+   * extremo de una medición estaba implementado y era indescubrible.
+   *
+   * Se separan porque el gesto es distinto: los landmarks son muchos puntos
+   * chicos y sin un modo se mueven de un roce, mientras que una cota sólo
+   * muestra tiradores cuando está seleccionada —seleccionarla ya es el acto
+   * deliberado—. Sin valor propio cae en `readonly`, que es el de antes.
+   */
+  measurementsReadonly?: boolean;
   addMode?: boolean;
   /**
    * Modo de marcado del receso subarticular: un clic sobre el corte axial.
@@ -328,6 +342,7 @@ export function MriSliceViewer({
   onAddLandmark,
   onLandmarkAddComplete,
   readonly = true,
+  measurementsReadonly,
   addMode = false,
   subarticularMode = false,
   onSubarticularPoint,
@@ -1138,7 +1153,7 @@ export function MriSliceViewer({
             ) : null}
             <MeasurementLayer
               referenceLine={referenceVisible ? referenceLine : null}
-              editable={!readonly && Boolean(onMoveMeasurePoint)}
+              editable={!(measurementsReadonly ?? readonly) && Boolean(onMoveMeasurePoint)}
               figures={visibleMeasures}
               draft={measureTool && (measureDraft.length > 0 || freehand.length > 0)
                 ? { kind: measureTool, points: freehand.length ? freehand : measureDraft }

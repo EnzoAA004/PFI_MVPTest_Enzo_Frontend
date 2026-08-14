@@ -1849,6 +1849,20 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   // Una serie que la IA no analizó no se anota ni se mide: las anotaciones
                   // se guardan contra la corrida, y esta serie no tiene una.
                   readonly={Boolean(viewed) || !editMode || activeViewportId !== binding.id}
+                  /*
+                   * Arrastrar el extremo de una cota no pasa por `editMode`.
+                   * Ese modo lo enciende "Editar landmark", cuyo texto sólo
+                   * habla de landmarks, así que la corrección por arrastre
+                   * estaba construida —y ya marca la medición como del
+                   * revisor— pero no había cómo descubrirla. Una cota sólo
+                   * muestra tiradores cuando está seleccionada, y seleccionarla
+                   * ya es deliberado: no necesita un modo global encima.
+                   *
+                   * Sí se agrega `reviewLocked`, que faltaba: la tabla no deja
+                   * escribir en un estudio finalizado, pero el visor lo dejaba
+                   * arrastrar igual.
+                   */
+                  measurementsReadonly={Boolean(viewed) || reviewLocked || activeViewportId !== binding.id}
                   addMode={landmarkAddMode && activeViewportId === binding.id}
                   // Solo el axial: el clasificador subarticular corre sobre esa serie.
                   orientation={viewed ? null : orientationFor(planeName)}
