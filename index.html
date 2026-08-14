@@ -4,13 +4,35 @@
   `:root { background: var(--bg-app) }` heredado, y `:root` es <html>. Con el
   atributo en <body>, ese fondo quedaba fuera del alcance del tema y el
   documento se seguía pintando con el claro por debajo de la aplicación.
+
+  Lo escribe el script de más abajo antes del primer pintado.
 -->
-<html lang="es" data-theme="clinical">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <title>PFI MVP Frontend</title>
+    <!--
+      El tema se resuelve antes del primer pintado. Si esto viviera en el bundle,
+      la pantalla se pintaría clara y saltaría a oscura al montar React, que es
+      el destello que se ve en cualquier aplicación que resuelve el tema tarde.
+      La lógica está duplicada a propósito con src/design/theme.ts: es el precio
+      de no tener destello, y son cuatro líneas.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = window.localStorage.getItem("pfi.theme");
+          var theme = stored === "dark" || stored === "light"
+            ? stored
+            : (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+          if (theme === "dark") document.documentElement.setAttribute("data-theme", "clinical");
+        } catch (error) {
+          document.documentElement.setAttribute("data-theme", "clinical");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

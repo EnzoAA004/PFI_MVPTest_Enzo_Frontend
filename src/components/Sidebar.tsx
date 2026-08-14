@@ -1,6 +1,8 @@
 import type { ViewKey } from "../appTypes";
 import { Fragment, type ComponentType, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, ListChecks, Settings, ShieldCheck, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, ListChecks, Moon, Settings, ShieldCheck, Sun, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { applyTheme, persistTheme, resolveTheme, type OperationsTheme } from "../design/theme";
 
 /**
  * Navigation follows the reading workflow, not the module structure.
@@ -26,6 +28,35 @@ interface SidebarProps {
   /** Identidad de quien firma la revisión. Vive al pie del nav, no en una
    *  barra propia sobre el contenido: es parte del marco, no de la pantalla. */
   identity?: ReactNode;
+}
+
+/**
+ * Alternador de tema de la superficie operativa. La sala de lectura no
+ * participa: declara `data-theme="reading"` sobre sí misma y gana por
+ * anidamiento, así que el estudio se lee siempre en oscuro.
+ */
+function ThemeToggle({ collapsed }: { collapsed: boolean }) {
+  const [theme, setTheme] = useState<OperationsTheme>(() => resolveTheme());
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  const next: OperationsTheme = theme === "dark" ? "light" : "dark";
+  const label = next === "light" ? "Cambiar a tema claro" : "Cambiar a tema oscuro";
+
+  return (
+    <button
+      className="sidebar-collapse"
+      type="button"
+      onClick={() => { persistTheme(next); setTheme(next); }}
+      aria-label={label}
+      title={collapsed ? label : undefined}
+    >
+      {next === "light" ? <Sun aria-hidden size={16} /> : <Moon aria-hidden size={16} />}
+      <span className="side-nav-label">{next === "light" ? "Tema claro" : "Tema oscuro"}</span>
+    </button>
+  );
 }
 
 export function Sidebar({ activeView, activeNavView = activeView, onChangeView, reviewQueueCount, systemOnline = true, collapsed = false, onToggleCollapsed, identity }: SidebarProps) {
@@ -63,6 +94,7 @@ export function Sidebar({ activeView, activeNavView = activeView, onChangeView, 
       <div className="sidebar-footer">
         {identity}
         <span className={systemOnline ? "system-status is-online" : "system-status is-degraded"}><ShieldCheck aria-hidden size={16} />v1.3.2</span>
+        <ThemeToggle collapsed={collapsed} />
         {onToggleCollapsed && (
           <button
             className="sidebar-collapse"
