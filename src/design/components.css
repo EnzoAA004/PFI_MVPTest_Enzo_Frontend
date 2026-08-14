@@ -3878,12 +3878,12 @@ body,
   }
 
   .side-nav button:hover {
-    color: var(--surface);
+    color: var(--sidebar-text);
     transform: none;
   }
 
   .side-nav button.active {
-    color: var(--surface);
+    color: var(--sidebar-text);
     font-weight: var(--fw-semibold);
     transform: none;
   }
@@ -4093,7 +4093,7 @@ body,
   .side-nav button.active {
     background: rgba(255, 255, 255, .07);
     border-left-color: var(--clinical-accent, var(--primary));
-    color: var(--surface);
+    color: var(--sidebar-text);
   }
 
   /* El contador de pendientes es un número, no una insignia. */
@@ -4108,7 +4108,7 @@ body,
     padding: 0;
   }
 
-  .side-nav button.active em { color: var(--surface); }
+  .side-nav button.active em { color: var(--sidebar-text); }
 
   /* La versión y el colapso son referencia y utilidad: no necesitan una caja
      cada uno al pie de la pantalla. */
@@ -4162,4 +4162,40 @@ body,
   .profile-chip strong { font-size: var(--fs-small); }
 
   .profile-chip small { font-size: 10px; }
+}
+
+@layer components {
+  /*
+   * Texto de la barra de navegación bajo el tema oscuro.
+   *
+   * `.side-nav button` se pintaba con `color-mix(in srgb, var(--surface) 78%,
+   * var(--text-muted))`: con --surface blanco la mezcla daba un gris claro
+   * legible sobre la barra oscura, pero al volverse oscura la superficie la
+   * fórmula se invierte y produce gris oscuro sobre casi negro —medido, 1.14:1
+   * contra el fondo, ilegible—. La mezcla se reemplaza por el token semántico,
+   * que es lo que la fórmula intentaba aproximar.
+   */
+  .side-nav button,
+  .sidebar-footer button,
+  .system-status,
+  .sidebar-collapse {
+    color: var(--sidebar-text-muted);
+  }
+
+  .side-nav button:hover,
+  .sidebar-footer button:hover,
+  .sidebar-collapse:hover {
+    color: var(--sidebar-text);
+  }
+
+  .side-nav button.active,
+  .side-nav button.active .side-nav-label {
+    color: var(--sidebar-text);
+  }
+
+  /* La identidad es el nombre de quien firma: no puede quedar más apagada que
+     la versión que tiene debajo. */
+  .profile-chip { color: var(--sidebar-text); }
+  .profile-chip strong { color: var(--sidebar-text); }
+  .profile-chip small { color: var(--sidebar-text-muted); }
 }

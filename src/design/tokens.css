@@ -114,6 +114,91 @@
   }
 
   /*
+   * Superficie operativa (oscura) — lista de trabajo, pacientes, cargador,
+   * configuración y acceso.
+   *
+   * Antes estas pantallas eran claras y la sala de lectura oscura, así que
+   * pasar de una a otra se sentía como cambiar de aplicación: el visor es el
+   * centro del producto y era el único que tenía identidad propia. Comparten
+   * la misma familia de color; la diferencia es de grado, no de idioma.
+   *
+   * Un escalón más claro que la sala de lectura, y a propósito: acá no hay una
+   * imagen cuyo rango dinámico haya que proteger, y una lista de 25 filas
+   * necesita más contraste entre superficie y borde que un viewport. Al entrar
+   * al estudio la pantalla se oscurece un paso más, que es exactamente lo que
+   * pasa al entrar a una sala de lectura.
+   *
+   * Los alias semánticos de :root son casi todos color-mix() sobre --surface y
+   * --bg-app, así que se recalculan solos contra los valores de acá. Los que
+   * caerían en un valor ilegible se redefinen explícitamente.
+   */
+  [data-theme="clinical"] {
+    --bg-app: #14181F;
+    --operations-canvas: #14181F;
+    --surface: #1A1F27;
+    --surface-elevated: #1F252E;
+    --surface-raised: #232933;
+    --border: #2B323D;
+    --border-subtle: #262C36;
+    --border-strong: #3A424F;
+    --text: #E6EAF0;
+    --text-muted: #939EAD;
+    /* La barra de navegación deja de ser un bloque de contraste contra un panel
+       claro: es la superficie más profunda de una misma escala. */
+    --bg-sidebar: #10141A;
+    --sidebar-text: #E6EAF0;
+    --sidebar-text-muted: #8B96A5;
+
+    /* Mismos acentos desaturados que el visor: sobre un fondo oscuro un tono
+       saturado vibra. */
+    --primary: #4F8DF7;
+    --ai: #9B7BF0;
+    --success: #3DBE72;
+    --warning: #E0A030;
+    --danger: #E5544B;
+    --info-bg: #1B2637;
+    --clinical-accent: #38A9C4;
+    --clinical-accent-soft: #16252B;
+
+    --status-pending: #4F8DF7;
+    --status-observed: #E0A030;
+    --status-completed: #3DBE72;
+    --status-dismissed: #7C8798;
+
+    --surface-subtle: #1E242D;
+    --surface-soft: #1B2637;
+    --surface-warm: color-mix(in srgb, var(--surface) 84%, var(--warning));
+    --surface-success: color-mix(in srgb, var(--surface) 86%, var(--success));
+    --surface-danger: color-mix(in srgb, var(--surface) 86%, var(--danger));
+    --surface-ai: color-mix(in srgb, var(--surface) 86%, var(--ai));
+    --surface-cyan: color-mix(in srgb, var(--surface) 84%, var(--clinical-accent));
+    --border-info: color-mix(in srgb, var(--border) 55%, var(--primary));
+    --border-warning: color-mix(in srgb, var(--border) 55%, var(--warning));
+    --border-success: color-mix(in srgb, var(--border) 55%, var(--success));
+    --border-danger: color-mix(in srgb, var(--border) 55%, var(--danger));
+    --text-primary-strong: #8FB6FA;
+    --text-success-strong: #7BD6A0;
+    --text-warning-strong: #EBC076;
+    --text-danger-strong: #F08A83;
+    --text-ai-strong: #BCA5F5;
+    --text-on-dark: var(--text);
+    --teal: #38A9C4;
+    --teal-strong: #6FC9DD;
+
+    --focus-ring: rgba(79, 141, 247, .32);
+    /* La elevación sale del borde y de una superficie más clara: una sombra
+       sobre un fondo oscuro no se ve. */
+    --shadow-sm: none;
+    --shadow-subtle: none;
+    --shadow-card: none;
+    --shadow-legacy: none;
+    --shadow-float: 0 16px 40px rgba(0, 0, 0, .55);
+    --shadow-modal: 0 24px 70px rgba(0, 0, 0, .7);
+
+    color-scheme: dark;
+  }
+
+  /*
    * Reading room (dark). Scoped to [data-theme="reading"] so the light clinical
    * palette above is untouched — worklist and administration stay light, only the
    * reading workspace goes dark.

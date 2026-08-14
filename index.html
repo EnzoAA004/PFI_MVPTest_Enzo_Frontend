@@ -1,5 +1,11 @@
 <!doctype html>
-<html lang="es">
+<!--
+  El tema va en <html> y no en <body>: components.css arrastra un
+  `:root { background: var(--bg-app) }` heredado, y `:root` es <html>. Con el
+  atributo en <body>, ese fondo quedaba fuera del alcance del tema y el
+  documento se seguía pintando con el claro por debajo de la aplicación.
+-->
+<html lang="es" data-theme="clinical">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

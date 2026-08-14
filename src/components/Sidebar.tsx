@@ -1,5 +1,5 @@
 import type { ViewKey } from "../appTypes";
-import { Fragment, type ComponentType } from "react";
+import { Fragment, type ComponentType, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, ListChecks, Settings, ShieldCheck, Users } from "lucide-react";
 
 /**
@@ -23,9 +23,12 @@ interface SidebarProps {
   systemOnline?: boolean;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  /** Identidad de quien firma la revisión. Vive al pie del nav, no en una
+   *  barra propia sobre el contenido: es parte del marco, no de la pantalla. */
+  identity?: ReactNode;
 }
 
-export function Sidebar({ activeView, activeNavView = activeView, onChangeView, reviewQueueCount, systemOnline = true, collapsed = false, onToggleCollapsed }: SidebarProps) {
+export function Sidebar({ activeView, activeNavView = activeView, onChangeView, reviewQueueCount, systemOnline = true, collapsed = false, onToggleCollapsed, identity }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -58,6 +61,7 @@ export function Sidebar({ activeView, activeNavView = activeView, onChangeView, 
         })}
       </nav>
       <div className="sidebar-footer">
+        {identity}
         <span className={systemOnline ? "system-status is-online" : "system-status is-degraded"}><ShieldCheck aria-hidden size={16} />v1.3.2</span>
         {onToggleCollapsed && (
           <button
