@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { searchPatients, type PatientSummary } from "../patientApi";
+import { OperationsPageHeader } from "./OperationsPageHeader";
 
 interface PatientsViewProps {
   onOpenPatient: (patientId: string) => void;
@@ -49,26 +50,28 @@ export function PatientsView({ onOpenPatient }: PatientsViewProps) {
 
   return (
     <div className="view-stack patient-directory-view">
-      <section className="page-heading compact-heading">
-        <div>
-          <p>Pacientes</p>
-          <h1>Pacientes registrados</h1>
-          <span>Entidades longitudinales de-identificadas.</span>
-        </div>
-        <div className="screen-summary" aria-live="polite">
-          <strong>{state.status === "ready" ? state.patients.length : "—"}</strong>
-          <span>{normalizedQuery ? "resultados" : "pacientes visibles"}</span>
-        </div>
-      </section>
+      {/*
+        El mismo encabezado que la lista de trabajo, y por el mismo motivo: la
+        barra lateral ya dice "Pacientes", así que el antetítulo lo repetía, y
+        el título de la tarjeta interna ("Índice de pacientes") era el tercer
+        nombre para la misma pantalla en veinte píxeles de alto.
+
+        Lo que sí se conserva como bajada es de dónde salen los datos: que la
+        lista venga del registro de pacientes y no de las referencias de los
+        estudios no se deduce mirándola, y es justamente la distinción que
+        PATIENT-PR2 introdujo.
+      */}
+      <OperationsPageHeader
+        title="Pacientes registrados"
+        description="Del registro de pacientes, no derivado de las referencias de los estudios."
+        meta={(
+          <span className="patient-directory-total" aria-live="polite">
+            {state.status === "ready" ? state.patients.length : "—"} {normalizedQuery ? "resultados" : "registrados"}
+          </span>
+        )}
+      />
 
       <section className="panel-card patient-directory-panel">
-        <div className="section-title">
-          <div>
-            <h2>Índice de pacientes</h2>
-            <p className="muted compact-copy">La lista proviene del registro real de pacientes; no se deriva de referencias de estudios.</p>
-          </div>
-        </div>
-
         <div className="patient-directory-search">
           <label className="worklist-search-input" htmlFor="patient-directory-query">
             <span>Buscar por referencia</span>

@@ -3940,42 +3940,54 @@ body,
   }
 
   .screen-summary span { font-size: var(--fs-micro); }
+}
 
-  /* --- Índice de pacientes ------------------------------------------------ */
-
-  /* La página ya se titula "Pacientes registrados": el encabezado de la
-     tarjeta repetía la misma jerarquía dos veces seguidas. Baja a subtítulo. */
-  .patient-directory-panel .section-title h2,
-  .patient-studies-panel .section-title h2 {
-    font-size: var(--fs-h3);
-    font-weight: var(--fw-semibold);
+@layer components {
+  /* Índice de pacientes: mismo idioma denso que la lista de trabajo ---------
+   * La pantalla pasó a usar el encabezado operativo compartido, así que la
+   * tarjeta interna ya no lleva su propio título: era el tercer nombre para la
+   * misma pantalla en veinte píxeles de alto.
+   */
+  .patient-directory-total {
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--fw-medium);
   }
 
-  .patient-directory-panel .compact-copy { font-size: var(--fs-small); }
+  /* La tarjeta contenedora se va por el mismo motivo que en la lista de
+     trabajo: la lista ya está delimitada por sus propias líneas. */
+  .patient-directory-panel {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    gap: var(--sp-3);
+    padding: 0;
+  }
 
-  /* El buscador ocupaba todo el ancho para un campo de referencia de nueve
-     caracteres. Se acota y toma la altura de control de la lista de trabajo. */
-  .patient-directory-search { grid-template-columns: minmax(0, 360px) auto; }
+  .patient-directory-search {
+    grid-template-columns: minmax(0, 320px) auto;
+    gap: var(--sp-2);
+  }
 
   .patient-directory-search .worklist-search-input span {
     font-size: var(--fs-micro);
     font-weight: var(--fw-medium);
-    letter-spacing: 0.04em;
+    letter-spacing: .04em;
   }
 
   .patient-directory-search .worklist-search-input input {
     border: 1px solid var(--border);
     border-radius: var(--radius-input);
     box-shadow: none;
+    font-family: var(--font-mono);
     font-size: var(--fs-small);
     min-height: var(--control-h);
     padding: 0 var(--sp-2);
   }
 
-  /* Un paciente por tarjeta de 93 px: seis referencias llenan la pantalla y
-     cincuenta serían impracticables. Es un índice para recorrer, no seis
-     objetos destacados, así que pasa a filas separadas por una línea — la
-     misma densidad que la lista de trabajo. */
+  /* Filas, no tarjetas: una referencia de paciente es una línea de índice. */
   .patient-directory-list { gap: 0; }
 
   .patient-directory-list li {
@@ -3983,22 +3995,33 @@ body,
     border-bottom: 1px solid var(--border);
     border-radius: 0;
     gap: var(--sp-3);
-    padding: var(--sp-2) var(--sp-3);
+    min-height: var(--row-h);
+    padding: var(--sp-1) var(--sp-2);
   }
 
-  .patient-directory-list li:last-child { border-bottom: 0; }
+  .patient-directory-list li:first-child {
+    border-top: 1px solid var(--border-strong);
+  }
 
   .patient-directory-list li:hover { background: var(--surface-subtle); }
 
-  .patient-directory-list strong {
-    font-size: var(--fs-body);
-    font-weight: var(--fw-medium);
+  .patient-directory-list li > div {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-1) var(--sp-3);
   }
 
-  .patient-directory-list span { font-size: var(--fs-small); }
+  /* La referencia se compara contra la columna PACIENTE de la lista de
+     trabajo: misma letra en las dos pantallas. */
+  .patient-directory-list strong {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-regular);
+  }
 
-  /* La misma acción repetida en cada fila no necesita el peso de un botón con
-     caja: es la acción obvia de la fila, no una decisión entre varias. */
+  .patient-directory-list span { font-size: var(--fs-micro); }
+
   .patient-directory-list button {
     background: none;
     border: 0;
@@ -4011,21 +4034,11 @@ body,
     white-space: nowrap;
   }
 
-  .patient-directory-list button:hover:not(:disabled) {
-    background: var(--info-bg);
-  }
-}
+  .patient-directory-list button:hover:not(:disabled) { background: var(--info-bg); }
 
-@layer components {
-  /* El bloque de arriba va sin consulta de medios, así que por orden de
-     aparición también gana dentro de `@media (max-width: 768px)`. Se repiten
-     acá las reglas que ese layout necesita distintas. */
   @media (max-width: 768px) {
-    /* A lo ancho de la pantalla no hay dos columnas que acotar. */
     .patient-directory-search { grid-template-columns: 1fr; }
 
-    /* Estirar al 100 % tenía sentido cuando la acción era un botón con caja:
-       como enlace queda un texto centrado y flotando en su propia línea. */
     .patient-directory-list button {
       align-self: start;
       padding-left: 0;

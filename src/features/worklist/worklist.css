@@ -321,6 +321,165 @@
   .wl-pagination button:hover:not(:disabled) { background: var(--surface-subtle); }
   .wl-pagination button:disabled { opacity: .45; cursor: default; }
 
+
+  /* ==========================================================================
+   * Pasada de densidad clínica.
+   *
+   * Lo anterior era el lenguaje de un panel de control: cada bloque envuelto en
+   * una tarjeta con radio, borde y sombra, cinco filtros repartidos en una
+   * franja de 52 px de alto, y filas de 48 px. En una lista de trabajo eso
+   * cuesta filas visibles: con el encabezado, la franja de filtros y la altura
+   * de fila anteriores entraban 17 estudios en una pantalla de 1080; ahora
+   * entran 27. La referencia no es un dashboard sino un visor de PACS, donde
+   * la pantalla es para los datos.
+   *
+   * La sala de lectura no se toca: esto es todo previo a abrir el estudio.
+   * ======================================================================= */
+
+  /* Filtros: dejan de ser una franja segmentada con su propio marco y pasan a
+     ser lo que son, un conjunto de opciones excluyentes sobre la lista. */
+  .wl-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-1);
+    grid-template-columns: none;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    padding-bottom: var(--sp-2);
+  }
+
+  .wl-chip {
+    display: inline-flex;
+    grid-template-columns: none;
+    align-items: baseline;
+    gap: var(--sp-2);
+    min-height: var(--control-h);
+    padding: 0 var(--sp-3);
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+  }
+
+  .wl-chip::after { display: none; }
+
+  .wl-chip:hover {
+    background: var(--surface-subtle);
+    color: var(--text);
+  }
+
+  .wl-chip.is-active {
+    background: var(--info-bg);
+    border-color: var(--border-info);
+    color: var(--text-primary-strong);
+  }
+
+  .wl-chip strong {
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--fw-semibold);
+  }
+
+  /* La tabla ya está delimitada por su encabezado y sus líneas: la tarjeta que
+     la envolvía sólo agregaba un marco alrededor de un marco. */
+  .wl-table-wrap {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .wl-table thead th {
+    background: none;
+    border-bottom: 1px solid var(--border-strong);
+    height: var(--control-h);
+    font-size: var(--fs-micro);
+    letter-spacing: .06em;
+  }
+
+  .wl-row {
+    height: var(--row-h);
+  }
+
+  .wl-table td {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  /* Todo lo que el profesional compara de una fila a la otra —identificador,
+     referencia de paciente, fecha— va en monoespaciada: las columnas quedan
+     alineadas carácter a carácter y un `caso-18` deja de parecerse a
+     `caso-1B`. */
+  .wl-case-id,
+  .wl-num {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wl-case-id {
+    color: var(--text);
+    font-weight: var(--fw-regular);
+    letter-spacing: -.01em;
+  }
+
+  .wl-case-desc {
+    font-family: var(--font-sans);
+  }
+
+
+  /* Cargador de datos ------------------------------------------------------
+   * Los "01 / 02 / 03" en color de acento numeraban tres secciones de un
+   * formulario que se completa en el orden que quiera quien lo usa: no eran
+   * pasos —no hay nada que impida escribir el ID de caso antes de elegir el
+   * paciente— y el número en color pesaba más que el nombre de la sección.
+   * Quedan como rótulos de sección, separados por una línea. */
+  .wl-section-title {
+    display: block;
+    margin: var(--sp-3) 0 0;
+    padding-bottom: var(--sp-1);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .wl-patient-heading strong {
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  /* Los campos toman la altura de control del resto de la aplicación. */
+  .wl-field input,
+  .wl-field select {
+    height: var(--control-h);
+    font-size: var(--fs-small);
+  }
+
+  .wl-field > span {
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+  }
+
+  /* El identificador de caso y la referencia se comparan contra la lista, así
+     que se escriben con la misma letra con que se leen ahí. */
+  .wl-field input#case-id,
+  .wl-field input[placeholder="CASE-XXXX"],
+  .wl-field input[placeholder="EST-2026-001"] {
+    font-family: var(--font-mono);
+  }
+
   @media (max-width: 900px) {
     .wl-filters { grid-template-columns: repeat(5, minmax(108px, 1fr)); overflow-x: auto; }
     .wl-actions { width: 100%; }

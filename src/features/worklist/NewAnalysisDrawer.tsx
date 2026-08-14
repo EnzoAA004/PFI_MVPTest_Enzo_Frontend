@@ -458,7 +458,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
             </p>
           )}
 
-          <h3 className="wl-section-title"><span aria-hidden="true">02</span> Datos del estudio</h3>
+          <h3 className="wl-section-title">Datos del estudio</h3>
 
           <label className="wl-field">
             <span>ID de caso de-identificado</span>
@@ -522,7 +522,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
 
           {metadataError && <p className="wl-drawer-error">{metadataError}</p>}
 
-          <h3 className="wl-section-title"><span aria-hidden="true">03</span> Imágenes</h3>
+          <h3 className="wl-section-title">Imágenes</h3>
 
           <div className="wl-upload">
             <div className="wl-upload-head">

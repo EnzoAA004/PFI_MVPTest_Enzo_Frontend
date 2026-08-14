@@ -118,7 +118,7 @@ export function PatientSelector({ disabled = false, selectedPatient, onSelected 
   return (
     <section aria-labelledby="patient-section-title" className="wl-patient-selector">
       <div className="wl-patient-heading">
-        <strong id="patient-section-title"><span aria-hidden="true">01</span> Paciente</strong>
+        <strong id="patient-section-title">Paciente</strong>
         <span>Obligatorio para un análisis nuevo</span>
       </div>
 
