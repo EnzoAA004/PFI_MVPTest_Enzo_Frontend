@@ -4199,3 +4199,73 @@ body,
   .profile-chip strong { color: var(--sidebar-text); }
   .profile-chip small { color: var(--sidebar-text-muted); }
 }
+
+@layer components {
+  /* ==========================================================================
+   * Riel colapsado, después de mover la identidad al pie.
+   *
+   * Las reglas del riel (shell.css) colapsan el texto con `font-size: 0` sobre
+   * el botón, contando con que los hijos hereden. El chip de perfil declara
+   * tamaños explícitos en su `strong` y su `small`, así que no los alcanzaba: a
+   * 56 px de ancho el nombre no entra y se salía por el borde izquierdo.
+   * ======================================================================= */
+  .app-layout.is-rail .profile-chip span,
+  .app-layout.is-rail .profile-chip > svg:last-child {
+    display: none;
+  }
+
+  .app-layout.is-rail .profile-chip {
+    justify-content: center;
+    min-width: 0;
+    padding: var(--sp-1);
+    width: 100%;
+  }
+
+  .app-layout.is-rail .sidebar-footer .top-header {
+    margin: 0;
+    min-height: 0;
+  }
+
+  .app-layout.is-rail .sidebar-footer .header-actions {
+    justify-content: center;
+  }
+
+  .app-layout.is-rail .profile-menu {
+    width: 100%;
+  }
+
+  /* La barra de acento del ítem activo es un borde, así que en el riel corría
+     el icono 2 px y lo descentraba. Como sombra interior ocupa cero. */
+  .app-layout.is-rail .side-nav button {
+    border-left-width: 0;
+  }
+
+  .app-layout.is-rail .side-nav button.active {
+    box-shadow: inset 2px 0 0 var(--clinical-accent, var(--primary));
+  }
+
+  /* Sin texto al lado, el contador se superpone al icono: necesita fondo. */
+  .app-layout.is-rail .side-nav button em {
+    background: var(--primary);
+    border-radius: var(--radius-pill);
+    color: #fff;
+    font-weight: var(--fw-semibold);
+  }
+
+  /*
+   * El menú de perfil se abría hacia abajo, que era correcto cuando la
+   * identidad vivía en una barra superior. Al pie de la navegación se abriría
+   * fuera de la pantalla, así que sale hacia arriba; en el riel, además, hacia
+   * el costado, porque 56 px no alcanzan para su ancho mínimo.
+   */
+  .sidebar-footer .profile-menu-panel {
+    bottom: calc(100% + var(--sp-2));
+    top: auto;
+  }
+
+  .app-layout.is-rail .sidebar-footer .profile-menu-panel {
+    bottom: 0;
+    left: calc(100% + var(--sp-2));
+    right: auto;
+  }
+}
