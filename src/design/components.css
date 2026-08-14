@@ -4047,3 +4047,119 @@ body,
     }
   }
 }
+
+@layer components {
+  /* ==========================================================================
+   * Des-ornamentación del marco.
+   *
+   * La barra lateral gastaba 248 px y toda su carga visual en tres enlaces: un
+   * cuadro de marca redondeado, un ítem activo dibujado como cápsula azul con
+   * su contador en un círculo teal, y dos botones con caja abajo para la
+   * versión y el colapso. Ninguno de esos adornos dice nada que el texto no
+   * diga ya.
+   *
+   * El marcador de sección pasa a ser una barra de acento a la izquierda: es lo
+   * que usan las herramientas donde la navegación tiene que estar presente sin
+   * competir con el contenido.
+   * ======================================================================= */
+  .sidebar {
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-2);
+  }
+
+  .brand-mark {
+    border-radius: var(--radius-sm, 4px);
+    height: 28px;
+    width: 28px;
+  }
+
+  .brand strong { font-size: var(--fs-body); }
+
+  .brand span { font-size: var(--fs-micro); }
+
+  .side-nav button,
+  .sidebar-footer button {
+    border-left: 2px solid transparent;
+    border-radius: 0;
+    font-size: var(--fs-small);
+    min-height: 32px;
+    padding: 0 var(--sp-3);
+  }
+
+  .side-nav button:hover {
+    background: rgba(255, 255, 255, .05);
+  }
+
+  .side-nav button.active {
+    background: rgba(255, 255, 255, .07);
+    border-left-color: var(--clinical-accent, var(--primary));
+    color: var(--surface);
+  }
+
+  /* El contador de pendientes es un número, no una insignia. */
+  .side-nav em {
+    background: none;
+    border-radius: 0;
+    color: var(--sidebar-text-muted);
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--fw-regular);
+    min-width: 0;
+    padding: 0;
+  }
+
+  .side-nav button.active em { color: var(--surface); }
+
+  /* La versión y el colapso son referencia y utilidad: no necesitan una caja
+     cada uno al pie de la pantalla. */
+  .sidebar-footer button,
+  .system-status {
+    background: none;
+    border: 0;
+    padding: 0 var(--sp-3);
+  }
+
+  .system-status { font-size: var(--fs-micro); }
+
+  .sidebar-collapse { font-size: var(--fs-micro); }
+
+  /* El chip de perfil era la única caja de una barra por lo demás vacía. */
+  .profile-chip {
+    background: none;
+    border: 0;
+    border-radius: var(--radius-sm, 4px);
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .profile-chip:hover { background: var(--surface-subtle); }
+
+  .top-header { margin-bottom: 0; }
+}
+
+@layer components {
+  /* La barra de identidad ocupaba ~76 px de alto para mostrar un nombre. Queda
+     como una tira al ras del borde superior: el nombre de quien firma la
+     revisión tiene que estar visible, pero no es contenido de la pantalla. */
+  .main-panel { padding-top: var(--sp-3); }
+
+  .top-header {
+    min-height: 24px;
+    margin-bottom: var(--sp-2);
+  }
+
+  .profile-chip {
+    min-height: 24px;
+    gap: var(--sp-1);
+  }
+
+  .profile-chip > svg:first-child {
+    width: 18px;
+    height: 18px;
+  }
+
+  .profile-chip span { line-height: 1.15; }
+
+  .profile-chip strong { font-size: var(--fs-small); }
+
+  .profile-chip small { font-size: 10px; }
+}

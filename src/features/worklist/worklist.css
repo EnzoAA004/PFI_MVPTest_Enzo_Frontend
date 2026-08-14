@@ -480,6 +480,121 @@
     font-family: var(--font-mono);
   }
 
+
+  /* ==========================================================================
+   * Pasada de des-ornamentación.
+   *
+   * La pasada anterior corrigió la densidad pero dejó el ornamento intacto, que
+   * es de donde venía la sensación de plantilla: en una sola pantalla convivían
+   * nueve radios distintos y cuatro cosas dibujadas como cápsula —los planos,
+   * la prioridad, el ítem activo del menú, el chip de perfil—, ninguna de las
+   * cuales es un control sobre el que se pueda hacer clic.
+   *
+   * El criterio es uno solo: **el color y la caja se reservan para la
+   * excepción**. Una lista donde 25 de 25 filas dicen "Media" en una cápsula
+   * ámbar no está informando la prioridad, la está tapando. Lo que se repite se
+   * escribe en gris; lo que hay que ver salta solo.
+   * ======================================================================= */
+
+  /* Los planos son dos siglas de tres letras, no dos etiquetas. */
+  .wl-planes { gap: var(--sp-2); }
+
+  .wl-plane {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-regular);
+    letter-spacing: .02em;
+  }
+
+  /* Prioridad y revisión: sin cápsula. El valor por defecto —"Media", que es el
+     de casi todas las filas— queda en gris; sólo "Alta" se lee de lejos, que es
+     exactamente para lo que sirve la columna. */
+  .wl-table .status-badge {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-regular);
+  }
+
+  .wl-table .status-badge.badge-red {
+    color: var(--text-danger-strong);
+    font-weight: var(--fw-semibold);
+  }
+
+  .wl-table .study-status {
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-regular);
+  }
+
+  /* El punto de estado se queda: es lo único de la fila que se recorre con la
+     vista en vertical sin leer una palabra. */
+  .wl-table .study-status-mark {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* La tabla tiene seis columnas. Estirarlas sobre 1900 px deja un hueco de
+     300 px entre CASO y PACIENTE y obliga a barrer la pantalla entera para
+     seguir una fila. Los datos se leen como un bloque. */
+  .wl-table-wrap { max-width: 1120px; }
+  .wl-align-end { text-align: left; }
+  .wl-table th[data-align="end"] { text-align: left; }
+
+  /* Menos radio en los controles: 4 px en vez de 8-12. En una herramienta el
+     borde redondeado no comunica nada, y a esta escala sólo suaviza la retícula
+     que hace legible una tabla. */
+  .wl-search,
+  .wl-primary,
+  .wl-pagination button {
+    border-radius: var(--radius-sm, 4px);
+  }
+
+  .wl-chip { border-radius: var(--radius-sm, 4px); }
+
+  .wl-search { height: var(--control-h); }
+
+  .wl-primary {
+    height: var(--control-h);
+    font-weight: var(--fw-medium);
+  }
+
+
+  /* El filtro activo era lo único que quedaba dibujado como cápsula azul, y por
+     eso pasó a ser lo más llamativo de la pantalla: más que el estudio de
+     prioridad alta, que es lo que hay que ver. Un subrayado marca cuál está
+     activo sin agregar una forma nueva. */
+  .wl-filters { gap: var(--sp-4); }
+
+  .wl-chip {
+    padding: 0 0 var(--sp-1);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    margin-bottom: -1px;
+  }
+
+  .wl-chip:hover {
+    background: none;
+    color: var(--text);
+  }
+
+  .wl-chip.is-active {
+    background: none;
+    border-bottom-color: var(--clinical-accent, var(--primary));
+    color: var(--text);
+  }
+
+  .wl-chip.is-active strong { color: var(--text); }
+
   @media (max-width: 900px) {
     .wl-filters { grid-template-columns: repeat(5, minmax(108px, 1fr)); overflow-x: auto; }
     .wl-actions { width: 100%; }
