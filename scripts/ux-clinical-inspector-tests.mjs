@@ -162,7 +162,15 @@ check("selectedLevel, drafts y slice siguen poseídos por StudyReviewView", () =
 check("filas agrupadas conservan id y callbacks del editor", () => {
   assert.ok(measurementPanelSource.includes("key={row.id}"));
   for (const callback of ["onSelect", "onHighlight", "onChangeValue", "onDelete"]) assert.ok(measurementPanelSource.includes(callback));
-  assert.ok(reviewSource.includes("groups={activeGroup ? measurementGroups : measurementSummaryGroups}"));
+  /*
+   * Sin nivel elegido ya no se lista nada: el resumen por categoría que iba acá
+   * reagrupaba por tipo las mismas mediciones que el navegador de arriba agrupa
+   * por nivel, y no hacía falta para llegar a ninguna —los contadores de nivel
+   * cubren el total, canal incluido—.
+   */
+  assert.ok(reviewSource.includes("groups={measurementGroups}"));
+  assert.ok(!reviewSource.includes("measurementSummaryGroups"), "el resumen por categoría no debe volver");
+  assert.match(reviewSource, /Seleccioná un nivel para ver sus mediciones/);
 });
 
 /*

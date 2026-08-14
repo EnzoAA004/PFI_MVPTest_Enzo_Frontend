@@ -1600,7 +1600,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     : [];
   const allPanelRows: PanelRow[] = [...aiPanelRows, ...reviewerPanelRows];
   const measurementGroups = groupMeasurements(panelRows);
-  const measurementSummaryGroups = groupMeasurements(allPanelRows);
 
   /** Cuántas mediciones tiene dibujables el nivel activo, para el panel de capas. */
   const aiMeasurableCount = resultRows.filter((row) => !row.experimental && (measureGeometry[row.id] ?? row.points)?.length).length;
@@ -1950,9 +1949,22 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   línea, y tocarla la elige. Sin eso, con tres cotas sobre el mismo
                   disco no hay forma de saber cuál corresponde a cuál número.
                 */}
-                {!activeGroup && <p className="rr-note">Seleccioná un nivel o expandí una categoría del plano activo.</p>}
+                {/*
+                  Sin nivel elegido no se lista nada. Antes se mostraba acá un
+                  resumen por categoría —Disco, Canal, Vértebra, Generales,
+                  Otras— que reagrupaba por tipo exactamente las mismas
+                  mediciones que el navegador de arriba ya agrupa por nivel: la
+                  misma información dos veces, con dos criterios, uno debajo del
+                  otro. Y no hacía falta para llegar a ninguna: los contadores
+                  cuadran —23 en discos, 15 en vértebras, 8 en transicionales y
+                  1 general, contra 21+6+15+1+4 por categoría—, así que cada
+                  medición, la del canal incluida, se alcanza desde su nivel.
+                */}
+                {!activeGroup ? (
+                  <p className="rr-note">Seleccioná un nivel para ver sus mediciones.</p>
+                ) : (
                 <MeasurementGroupList
-                  collapsible={!activeGroup}
+                  collapsible={false}
                   emptyNote={hasPlaneWorkspaces && !persistedMeasurements.length
                     ? `La serie ${activePlano === "axial" ? "axial" : "sagital"} de este estudio no aporta mediciones. Cambiá de plano o medí a mano.`
                     : undefined}
@@ -1965,9 +1977,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   onHighlight={setHighlightedMeasurementId}
                   onSelect={setSelectedMeasurementId}
                   readonly={reviewLocked}
-                  groups={activeGroup ? measurementGroups : measurementSummaryGroups}
+                  groups={measurementGroups}
                   selectedId={selectedMeasurementId}
                 />
+                )}
           </ReviewInspectorPanel>
 
           <ReviewInspectorPanel activeTab={panelTab} tab="ai">
