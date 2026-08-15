@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent } from "react";
 import { startAuthenticatedImageLoad, useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { displayLandmarkLabel, displayStructureLabel } from "../clinicalDisplay";
 import { paintSegmentation, type Segmentation } from "../features/reading/segmentation";
@@ -683,7 +683,15 @@ export function MriSliceViewer({
     slice?.onStep(delta);
   }
 
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+  /**
+   * Lo que la rueda necesita, y nada mas.
+   *
+   * Se tipa por forma en vez de atarlo al evento de React porque el mismo manejador
+   * lo usa el listener nativo de abajo, y los dos coinciden en esto.
+   */
+  type WheelLike = { ctrlKey: boolean; metaKey: boolean; deltaY: number; preventDefault: () => void };
+
+  function handleWheel(event: WheelLike) {
     /*
      * En una estación de lectura la rueda recorre el stack: es el gesto que más se
      * repite durante una lectura. El zoom pasa a Ctrl/⌘+rueda, que además es la
@@ -699,6 +707,29 @@ export function MriSliceViewer({
     const direction = event.deltaY > 0 ? -0.08 : 0.08;
     setZoom((value) => boundedZoom(value + fitZoom * direction));
   }
+
+  /*
+   * El `wheel` se engancha a mano y no por `onWheel`.
+   *
+   * React registra `wheel` como pasivo en la raiz, y en un listener pasivo el
+   * navegador ignora `preventDefault`. Con Ctrl+rueda eso significa que se hacia el
+   * zoom de la pagina entera ademas del de la imagen -justo el gesto que este
+   * manejador viene a reemplazar-, y sin Ctrl la pagina scrolleaba mientras avanzaba
+   * el corte. Con el mouse se nota; con el trackpad casi no, porque manda deltas
+   * chicos y el navegador los absorbe distinto.
+   *
+   * El manejador vive en una ref para que el listener no se vuelva a colgar en cada
+   * render ni se quede con un `zoom` o un `slice` viejos.
+   */
+  const wheelHandler = useRef(handleWheel);
+  wheelHandler.current = handleWheel;
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return undefined;
+    const listener = (event: globalThis.WheelEvent) => wheelHandler.current(event);
+    frame.addEventListener("wheel", listener, { passive: false });
+    return () => frame.removeEventListener("wheel", listener);
+  }, []);
 
   function handleFrameKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (!slice) return;
@@ -1077,7 +1108,6 @@ export function MriSliceViewer({
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onWheel={handleWheel}
         onKeyDown={handleFrameKeyDown}
         ref={frameRef}
         tabIndex={slice ? 0 : undefined}
