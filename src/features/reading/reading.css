@@ -1237,6 +1237,18 @@
 
   .rr-report-actions button:hover { color: var(--text-primary-strong); border-color: var(--border-info); }
 
+  /* El informe ofrecido al finalizar: se destaca porque aparece una sola vez, justo
+     cuando el estudio deja de cambiar, y perderselo obliga a ir a buscarlo. */
+  .rr-report-ready {
+    margin-top: var(--sp-2);
+    padding: var(--sp-2);
+    border: 1px solid var(--border-info);
+    border-radius: var(--radius-btn);
+    background: var(--surface-raised, transparent);
+  }
+
+  .rr-report-ready p { margin: 0 0 var(--sp-1); font-size: var(--fs-small); color: var(--text-primary-strong); }
+
   /* Right panel ---------------------------------------------------------- */
   .rr-panel {
     background: var(--surface);
