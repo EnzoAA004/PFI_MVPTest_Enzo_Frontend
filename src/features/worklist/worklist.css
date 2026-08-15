@@ -223,13 +223,27 @@
 
   .wl-align-end { text-align: right; }
 
+  /*
+   * `display: flex` sobre un <td> lo saca del algoritmo de tabla: la caja pasa
+   * a medir lo que mide su contenido en vez de estirarse a la altura de la
+   * fila, de modo que `vertical-align` deja de aplicar y el `justify-content`
+   * no tiene contra qué centrar. El resultado medido eran 16 px de desfase
+   * hacia arriba contra las otras cinco celdas, en las 25 filas.
+   *
+   * Las dos líneas se apilan igual con los spans en bloque, sin sacar la celda
+   * de la tabla. En el layout angosto no cambia nada: ahí `.wl-table td` ya
+   * redefine `display: grid` con más especificidad.
+   */
   .wl-case {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    vertical-align: middle;
     line-height: 1.25;
     padding-top: 4px;
     padding-bottom: 4px;
+  }
+
+  .wl-case-id,
+  .wl-case-desc {
+    display: block;
   }
 
   .wl-case-id {
@@ -306,6 +320,307 @@
 
   .wl-pagination button:hover:not(:disabled) { background: var(--surface-subtle); }
   .wl-pagination button:disabled { opacity: .45; cursor: default; }
+
+
+  /* ==========================================================================
+   * Pasada de densidad clínica.
+   *
+   * Lo anterior era el lenguaje de un panel de control: cada bloque envuelto en
+   * una tarjeta con radio, borde y sombra, cinco filtros repartidos en una
+   * franja de 52 px de alto, y filas de 48 px. En una lista de trabajo eso
+   * cuesta filas visibles: con el encabezado, la franja de filtros y la altura
+   * de fila anteriores entraban 17 estudios en una pantalla de 1080; ahora
+   * entran 27. La referencia no es un dashboard sino un visor de PACS, donde
+   * la pantalla es para los datos.
+   *
+   * La sala de lectura no se toca: esto es todo previo a abrir el estudio.
+   * ======================================================================= */
+
+  /* Filtros: dejan de ser una franja segmentada con su propio marco y pasan a
+     ser lo que son, un conjunto de opciones excluyentes sobre la lista. */
+  .wl-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-1);
+    grid-template-columns: none;
+    background: none;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    padding-bottom: var(--sp-2);
+  }
+
+  .wl-chip {
+    display: inline-flex;
+    grid-template-columns: none;
+    align-items: baseline;
+    gap: var(--sp-2);
+    min-height: var(--control-h);
+    padding: 0 var(--sp-3);
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+  }
+
+  .wl-chip::after { display: none; }
+
+  .wl-chip:hover {
+    background: var(--surface-subtle);
+    color: var(--text);
+  }
+
+  .wl-chip.is-active {
+    background: var(--info-bg);
+    border-color: var(--border-info);
+    color: var(--text-primary-strong);
+  }
+
+  .wl-chip strong {
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--fw-semibold);
+  }
+
+  /* La tabla ya está delimitada por su encabezado y sus líneas: la tarjeta que
+     la envolvía sólo agregaba un marco alrededor de un marco. */
+  .wl-table-wrap {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .wl-table thead th {
+    background: none;
+    border-bottom: 1px solid var(--border-strong);
+    height: var(--control-h);
+    font-size: var(--fs-micro);
+    letter-spacing: .06em;
+  }
+
+  .wl-row {
+    height: var(--row-h);
+  }
+
+  .wl-table td {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  /* Todo lo que el profesional compara de una fila a la otra —identificador,
+     referencia de paciente, fecha— va en monoespaciada: las columnas quedan
+     alineadas carácter a carácter y un `caso-18` deja de parecerse a
+     `caso-1B`. */
+  .wl-case-id,
+  .wl-num {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wl-case-id {
+    color: var(--text);
+    font-weight: var(--fw-regular);
+    letter-spacing: -.01em;
+  }
+
+  .wl-case-desc {
+    font-family: var(--font-sans);
+  }
+
+
+  /* Cargador de datos ------------------------------------------------------
+   * Los "01 / 02 / 03" en color de acento numeraban tres secciones de un
+   * formulario que se completa en el orden que quiera quien lo usa: no eran
+   * pasos —no hay nada que impida escribir el ID de caso antes de elegir el
+   * paciente— y el número en color pesaba más que el nombre de la sección.
+   * Quedan como rótulos de sección, separados por una línea. */
+  .wl-section-title {
+    display: block;
+    margin: var(--sp-3) 0 0;
+    padding-bottom: var(--sp-1);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .wl-patient-heading strong {
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  /* Los campos toman la altura de control del resto de la aplicación. */
+  .wl-field input,
+  .wl-field select {
+    height: var(--control-h);
+    font-size: var(--fs-small);
+  }
+
+  .wl-field > span {
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+  }
+
+  /* El identificador de caso y la referencia se comparan contra la lista, así
+     que se escriben con la misma letra con que se leen ahí. */
+  .wl-field input#case-id,
+  .wl-field input[placeholder="CASE-XXXX"],
+  .wl-field input[placeholder="EST-2026-001"] {
+    font-family: var(--font-mono);
+  }
+
+
+  /* ==========================================================================
+   * Pasada de des-ornamentación.
+   *
+   * La pasada anterior corrigió la densidad pero dejó el ornamento intacto, que
+   * es de donde venía la sensación de plantilla: en una sola pantalla convivían
+   * nueve radios distintos y cuatro cosas dibujadas como cápsula —los planos,
+   * la prioridad, el ítem activo del menú, el chip de perfil—, ninguna de las
+   * cuales es un control sobre el que se pueda hacer clic.
+   *
+   * El criterio es uno solo: **el color y la caja se reservan para la
+   * excepción**. Una lista donde 25 de 25 filas dicen "Media" en una cápsula
+   * ámbar no está informando la prioridad, la está tapando. Lo que se repite se
+   * escribe en gris; lo que hay que ver salta solo.
+   * ======================================================================= */
+
+  /* Los planos son dos siglas de tres letras, no dos etiquetas. */
+  .wl-planes { gap: var(--sp-2); }
+
+  .wl-plane {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-regular);
+    letter-spacing: .02em;
+  }
+
+  /* Prioridad y revisión: sin cápsula. El valor por defecto —"Media", que es el
+     de casi todas las filas— queda en gris; sólo "Alta" se lee de lejos, que es
+     exactamente para lo que sirve la columna. */
+  .wl-table .status-badge {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-regular);
+  }
+
+  .wl-table .status-badge.badge-red {
+    color: var(--text-danger-strong);
+    font-weight: var(--fw-semibold);
+  }
+
+  .wl-table .study-status {
+    color: var(--text-muted);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-regular);
+  }
+
+  /* El punto de estado se queda: es lo único de la fila que se recorre con la
+     vista en vertical sin leer una palabra. */
+  .wl-table .study-status-mark {
+    width: 6px;
+    height: 6px;
+  }
+
+  /*
+   * Reparto de columnas.
+   *
+   * Con el ancho automático el navegador distribuye el espacio sobrante en
+   * proporción al contenido, y como cuatro de las seis columnas son casi fijas
+   * —fecha, planos, revisión, prioridad— el sobrante caía casi entero entre
+   * CASO y PACIENTE: en una pantalla de 1900 px quedaba un hueco de ~300 px y
+   * había que barrer la pantalla para seguir una fila.
+   *
+   * Se reparte en porcentajes que suman 100, así que la tabla ocupa todo el
+   * ancho disponible y el sobrante va a las dos columnas de texto variable, que
+   * son las únicas que pueden usarlo. `table-layout: fixed` hace que el reparto
+   * no dependa del contenido: las columnas quedan en el mismo lugar aunque
+   * cambie la página, que es lo que permite comparar de una fila a la otra.
+   */
+  .wl-table { table-layout: fixed; }
+
+  /* El sobrante va a las dos primeras, que son las de texto de largo variable.
+     Las otras cuatro tienen contenido de largo conocido —una fecha ISO, dos
+     siglas, un estado, una prioridad— y ensancharlas sólo agrega hueco. */
+  .wl-table th:nth-child(1) { width: 30%; }
+  .wl-table th:nth-child(2) { width: 26%; }
+  .wl-table th:nth-child(3) { width: 12%; }
+  .wl-table th:nth-child(4) { width: 10%; }
+  .wl-table th:nth-child(5) { width: 12%; }
+  .wl-table th:nth-child(6) { width: 10%; }
+
+  /* Con anchos fijos un valor largo desbordaría la celda en vez de ensancharla:
+     se recorta con puntos suspensivos y el título completo queda en la fila. */
+  .wl-table td { overflow: hidden; text-overflow: ellipsis; }
+
+  .wl-align-end { text-align: left; }
+  .wl-table th[data-align="end"] { text-align: left; }
+
+  /* Menos radio en los controles: 4 px en vez de 8-12. En una herramienta el
+     borde redondeado no comunica nada, y a esta escala sólo suaviza la retícula
+     que hace legible una tabla. */
+  .wl-search,
+  .wl-primary,
+  .wl-pagination button {
+    border-radius: var(--radius-sm, 4px);
+  }
+
+  .wl-chip { border-radius: var(--radius-sm, 4px); }
+
+  .wl-search { height: var(--control-h); }
+
+  .wl-primary {
+    height: var(--control-h);
+    font-weight: var(--fw-medium);
+  }
+
+
+  /* El filtro activo era lo único que quedaba dibujado como cápsula azul, y por
+     eso pasó a ser lo más llamativo de la pantalla: más que el estudio de
+     prioridad alta, que es lo que hay que ver. Un subrayado marca cuál está
+     activo sin agregar una forma nueva. */
+  .wl-filters { gap: var(--sp-4); }
+
+  .wl-chip {
+    padding: 0 0 var(--sp-1);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    margin-bottom: -1px;
+  }
+
+  .wl-chip:hover {
+    background: none;
+    color: var(--text);
+  }
+
+  .wl-chip.is-active {
+    background: none;
+    border-bottom-color: var(--clinical-accent, var(--primary));
+    color: var(--text);
+  }
+
+  .wl-chip.is-active strong { color: var(--text); }
 
   @media (max-width: 900px) {
     .wl-filters { grid-template-columns: repeat(5, minmax(108px, 1fr)); overflow-x: auto; }

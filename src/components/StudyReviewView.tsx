@@ -12,9 +12,25 @@ import { allFindingsUnassigned, groupFindingsByLevel, type LevelGroup } from "..
 import { LevelNavigator } from "../features/reading/LevelNavigator";
 import { groupMeasurements } from "../features/reading/measurementGrouping";
 import { ReviewInspector, ReviewInspectorPanel, type ReviewInspectorTab } from "../features/reading/ReviewInspector";
+import {
+  ReadingWorkspaceBody,
+  ReadingWorkspaceHeader,
+  ReadingWorkspaceShell,
+  ReadingWorkspaceToolbar,
+} from "../features/reading/ReadingWorkspaceShell";
+import { SeriesSelector, type WorkspaceSeriesOption } from "../features/reading/SeriesSelector";
+import { ViewportGrid } from "../features/reading/ViewportGrid";
+import { resolveAnalyzedSliceSource } from "../features/reading/analyzedSliceSource";
+import {
+  layoutPresetAvailable,
+  viewportBindingsFor,
+  type ReadingLayoutPreset,
+  type ViewportBinding,
+} from "../features/reading/readingWorkspaceLayout";
 import { DegenerativeFindingsPanel } from "../features/reading/DegenerativeFindingsPanel";
 import { parseDegenerativeFindings, viewerPointToImagePixels, type DegenerativeFinding, type FindingSide } from "../features/reading/degenerativeFindings";
 import { DiscDegenerativeFindingsPanel } from "../features/reading/DiscDegenerativeFindingsPanel";
+import { DISC_FINDING_LABELS, DEPLOYMENT_LABELS, DEPLOYMENT_NOTES, displayDiscFindingValue } from "../features/reading/discFindingDisplay";
 import { GovernanceNotice } from "../features/reading/GovernanceNotice";
 import { WorkspaceGovernanceNotice } from "../features/reading/WorkspaceGovernanceNotice";
 import { DiscDegenerativeContractError, parsePersistedDiscDegenerativeFindings, type DiscFinding } from "../features/reading/discDegenerativeFindings";
@@ -33,7 +49,6 @@ import { updateStudyMetadata } from "../studyApi";
 import { displayModelKey, displayPrimaryPlane, displayStudyDate, displaySubjectRef } from "../studyDisplay";
 import { emptyStudyMetadataDraft, normalizeStudyMetadataInput, priorityToBackend, subjectRefErrorMessage, validateSubjectRef, type StudyMetadataDraft } from "../studyMetadata";
 import { studyRunToMriViewerModel } from "../viewModels/mriViewerViewModel";
-import { useAuthenticatedImageUrl } from "../authenticatedAssets";
 import { AgentSummary } from "./AgentSummary";
 import { AuditTrail } from "./AuditTrail";
 import { MriSliceViewer, type MeasurementOverlay, type RawSlicePixels, type SliceNavigation } from "./MriSliceViewer";
@@ -134,7 +149,9 @@ function planeRunRecord(run: AiRunResponse, plane: "sagittal" | "axial") {
   return asRecord(planes?.[plane]);
 }
 
-function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspace): StudySeries | null {
+type PersistedStudySeries = StudySeries & { sourceInputId?: string };
+
+function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspace): PersistedStudySeries | null {
   const planeRun = planeRunRecord(run, workspace.plane);
   // El contrato v1 publica la metadata volumétrica bajo `metadata` y v2 bajo
   // `input`; también se consulta el plano canónico persistido, que es de donde
@@ -143,6 +160,7 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
   const metadata = { ...asRecord(canonicalPlane?.input), ...asRecord(canonicalPlane?.metadata), ...asRecord(planeRun?.input), ...asRecord(planeRun?.metadata) };
   const rawSliceCount = metadata.sliceCount;
   const rawSelectedSlice = metadata.selectedSlice ?? metadata.selectedSliceIndex;
+  const sourceInputId = typeof metadata.inputId === "string" && metadata.inputId.trim() ? metadata.inputId.trim() : undefined;
   const sliceCount = typeof rawSliceCount === "number" && rawSliceCount > 0 ? rawSliceCount : 1;
   const selectedSlice = typeof rawSelectedSlice === "number" && rawSelectedSlice >= 0 ? rawSelectedSlice : 0;
   // Cantidad de previsualizaciones por corte que el AI Module realmente escribió.
@@ -171,6 +189,7 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
     plane: workspace.plane,
     sliceCount,
     selectedSlice,
+    sourceInputId,
     slicePreviewCount,
     inPlaneSpacingMm,
     imageUrl: workspace.inputUrl ?? null,
@@ -186,21 +205,6 @@ function seriesFromPlaneRun(run: AiRunResponse, workspace: PersistedPlaneWorkspa
 
 function readinessLabel(value?: string) {
   return displayTechnicalReadiness(value);
-}
-
-/**
- * URL de la previsualización de un corte, derivada de la del corte inferido.
- *
- * Ambas viven en el mismo directorio de assets de la corrida, así que se
- * reemplaza el último segmento y nada más: no se arma una ruta nueva ni se
- * concatena el índice a mano, de modo que el origen y el prefijo `/api/...` que
- * la política de origen exige quedan intactos.
- */
-function slicePreviewUrl(inputUrl: string | null | undefined, index: number) {
-  if (!inputUrl) return undefined;
-  const name = `slice-${String(index).padStart(3, "0")}.png`;
-  const separator = inputUrl.lastIndexOf("/");
-  return separator < 0 ? undefined : `${inputUrl.slice(0, separator + 1)}${name}`;
 }
 
 function clampSlice(index: number, total: number) {
@@ -240,19 +244,6 @@ function seriesUnsegmentedReason(series: StudyArchiveSeries) {
   return "La IA no corrió sobre esta serie; se muestra como imagen.";
 }
 
-
-/**
- * Miniatura del rail de series.
- *
- * Los assets del backend exigen Authorization, así que un <img src> directo se
- * pide sin cabeceras y recibe 401. Se carga con el mismo fetch autenticado que el
- * visor, que entrega un blob URL; mientras no haya imagen se muestra el índice.
- */
-function SeriesThumbnail({ url, index }: { url?: string | null; index: number }) {
-  const asset = useAuthenticatedImageUrl(url ?? undefined);
-  if (asset.state === "loaded" && asset.url) return <img src={asset.url} alt="" />;
-  return <em>{String(index + 1).padStart(2, "0")}</em>;
-}
 
 function deltaSeverity(delta: number | null, outlier?: boolean): DeltaSeverity {
   if (outlier) return "high";
@@ -427,6 +418,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>(run.review?.status ?? run.reviewStatus ?? "pendiente");
   const [notes, setNotes] = useState(run.review?.notes ?? run.review?.observations ?? "");
   const [saveMessage, setSaveMessage] = useState("");
+  /** El informe queda ofrecido cuando el estudio se finaliza. */
+  const [reportReady, setReportReady] = useState(false);
   const [panelTab, setPanelTab] = useState<ReviewInspectorTab>("measurements");
   const [selectedLevel, setSelectedLevel] = useState<string | null>(null);
   /*
@@ -445,9 +438,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   // Corte visible por plano. Arranca en el corte que analizó la IA y se mueve con
   // la rueda o el teclado; queda por plano para que cambiar de serie no lo pierda.
   const [sliceByPlane, setSliceByPlane] = useState<Record<string, number>>({});
-  // Disposición del stage: un plano a la vez o sagital y axial simultáneos, que es
-  // como se lee en la práctica (el axial se interpreta mirando dónde cae en sagital).
-  const [layout, setLayout] = useState<"single" | "dual">("single");
+  // El preset sólo organiza viewports; cada binding conserva su propio corte.
+  const [layoutPreset, setLayoutPreset] = useState<ReadingLayoutPreset>("reading");
+  const [activeViewportId, setActiveViewportId] = useState("sagittal");
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
 
   const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
   const [metadataDraft, setMetadataDraft] = useState<StudyMetadataDraft>(() => metadataDraftFromDetail(selectedDetail, run));
@@ -482,9 +476,17 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     setReviewStatus(run.review?.status ?? run.reviewStatus ?? "pendiente");
     setNotes(run.review?.notes ?? run.review?.observations ?? "");
     setReviewerValues({});
+    /*
+     * Tambien al cambiar de estudio, y aca no es cosmético: los ids de medición se
+     * repiten entre estudios -`sagittal-canal-ap-l2-l3` existe en todos-, asi que la
+     * geometría arrastrada en uno se le aplicaba al siguiente y dibujaba la cota de
+     * un paciente sobre la anatomía de otro.
+     */
+    setMeasureGeometry({});
     setLandmarkDrafts({});
     setLandmarkAddMode(false);
     setSaveMessage("");
+    setReportReady(false);
     setMetadataError("");
     setMetadataDialogOpen(false);
   }, [run.runId, run.review?.status, run.review?.notes, run.review?.observations, run.reviewStatus]);
@@ -627,7 +629,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     description: run.measurementsDescription ?? "Pipeline técnico preparado para recibir inferencia real.",
   };
   const currentSeries = seriesList.find((item: any) => item.id === selectedSeriesId) ?? seriesList.find((item: any) => item.plane === tab.toLowerCase()) ?? seriesList[0];
-  const activePlano = currentSeries?.plane === "axial" ? "axial" : "sagittal";
+  const activePlano: "sagittal" | "axial" = currentSeries?.plane === "axial" ? "axial" : "sagittal";
 
   /*
    * Las mediciones se leen del plano que se está mirando.
@@ -957,9 +959,12 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    * Se corta por los dos lados: identidad estable con useCallback y bail-out
    * devolviendo la misma referencia cuando el valor no cambió.
    */
-  const handleOverlayAvailableChange = useCallback((available: boolean) => {
-    setOverlayAvailableByPlano((current) => (current[activePlano] === available ? current : { ...current, [activePlano]: available }));
-  }, [activePlano]);
+  const handleSagittalOverlayAvailableChange = useCallback((available: boolean) => {
+    setOverlayAvailableByPlano((current) => (current.sagittal === available ? current : { ...current, sagittal: available }));
+  }, []);
+  const handleAxialOverlayAvailableChange = useCallback((available: boolean) => {
+    setOverlayAvailableByPlano((current) => (current.axial === available ? current : { ...current, axial: available }));
+  }, []);
 
   /*
    * Las series que traía el estudio, y cuál se está mirando en cada viewport.
@@ -983,8 +988,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     return studySeries.filter((item) => item.plane === plane || item.multiplanar);
   }
 
-  function viewedSeriesFor(plane: "sagittal" | "axial") {
-    const inputId = viewedSeriesByPlane[plane];
+  function viewedSeriesFor(plane: "sagittal" | "axial", bindingId: string = plane, defaultInputId?: string) {
+    const stored = viewedSeriesByPlane[bindingId];
+    const inputId = stored === undefined ? defaultInputId ?? null : stored;
     return inputId ? studySeries.find((item) => item.inputId === inputId) ?? null : null;
   }
 
@@ -993,9 +999,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
    * propia serie, su propio modelo de visor y su propio corte: los stacks son
    * independientes y no comparten índice.
    */
-  function planeViewportData(plane: "sagittal" | "axial"): { series: any; nav?: SliceNavigation } | null {
+  function planeViewportData(
+    plane: "sagittal" | "axial",
+    bindingId: string = plane,
+    defaultInputId?: string,
+  ): { series: any; nav?: SliceNavigation } | null {
     const series = seriesList.find((item: any) => item.plane === plane);
-    const viewed = viewedSeriesFor(plane);
+    const viewed = viewedSeriesFor(plane, bindingId, defaultInputId);
     /*
      * Una serie que la IA no analizó se navega igual que las demás, pero sus cortes
      * salen del catálogo del estudio y no de los assets de la corrida — no hay
@@ -1004,7 +1014,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
      */
     if (viewed) {
       const total = Math.max(viewed.sliceCount, 1);
-      const current = clampSlice(sliceByPlane[plane] ?? 0, total);
+      const current = clampSlice(sliceByPlane[bindingId] ?? 0, total);
       return {
         series: {
           id: viewed.inputId,
@@ -1023,10 +1033,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           hasImage: true,
           previewUrl: seriesSliceUrl(viewed.inputId, current),
           previewUrlFor: (index: number) => seriesSliceUrl(viewed.inputId, index),
-          onChange: (index: number) => setSliceByPlane((state) => ({ ...state, [plane]: clampSlice(index, total) })),
+          onChange: (index: number) => setSliceByPlane((state) => ({ ...state, [bindingId]: clampSlice(index, total) })),
           onStep: (delta: number) => setSliceByPlane((state) => ({
             ...state,
-            [plane]: clampSlice((state[plane] ?? 0) + delta, total),
+            [bindingId]: clampSlice((state[bindingId] ?? 0) + delta, total),
           })),
         } : undefined,
       };
@@ -1034,19 +1044,28 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     if (!series) return null;
     const total = series.sliceCount ?? 1;
     const aiIndex = clampSlice(series.selectedSlice ?? 0, total);
-    const current = clampSlice(sliceByPlane[plane] ?? aiIndex, total);
+    const current = clampSlice(sliceByPlane[bindingId] ?? aiIndex, total);
+    const analyzedSeries = series as StudySeries & { sourceInputId?: string };
+    const previewUrlFor = (index: number) => resolveAnalyzedSliceSource({
+      apiBaseUrl: API_BASE_URL,
+      sourceInputId: analyzedSeries.sourceInputId,
+      index,
+      aiIndex,
+      legacyInputUrl: series.imageUrl,
+      legacyPreviewCount: series.slicePreviewCount,
+    });
     const nav: SliceNavigation | undefined = total > 1
       ? {
         current,
         total,
         aiIndex,
-        hasImage: current === aiIndex || current < (series.slicePreviewCount ?? 0),
-        previewUrl: current === aiIndex ? undefined : slicePreviewUrl(series.imageUrl, current),
-        previewUrlFor: (index: number) => (index < (series.slicePreviewCount ?? 0) ? slicePreviewUrl(series.imageUrl, index) : undefined),
-        onChange: (index: number) => setSliceByPlane((state) => ({ ...state, [plane]: clampSlice(index, total) })),
+        hasImage: current === aiIndex || Boolean(previewUrlFor(current)),
+        previewUrl: previewUrlFor(current),
+        previewUrlFor,
+        onChange: (index: number) => setSliceByPlane((state) => ({ ...state, [bindingId]: clampSlice(index, total) })),
         onStep: (delta: number) => setSliceByPlane((state) => ({
           ...state,
-          [plane]: clampSlice((state[plane] ?? aiIndex) + delta, total),
+          [bindingId]: clampSlice((state[bindingId] ?? aiIndex) + delta, total),
         })),
       }
       : undefined;
@@ -1054,10 +1073,16 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   }
 
   const axialAvailable = seriesList.some((item: any) => item.plane === "axial");
-  /** Qué planos se montan en el stage según la disposición elegida. */
-  const visiblePlanes: Array<"sagittal" | "axial"> = layout === "dual" && axialAvailable
-    ? ["sagittal", "axial"]
-    : [activePlano];
+  const sagittalT1 = studySeries.find((item) => item.plane === "sagittal" && item.weighting.toLowerCase() === "t1" && !item.derived && !item.multiplanar);
+  const sagittalT2 = studySeries.find((item) => item.plane === "sagittal" && item.weighting.toLowerCase() === "t2" && !item.derived && !item.multiplanar);
+  const layoutAvailability = {
+    activePlane: activePlano,
+    axialAvailable,
+    sagittalT1InputId: sagittalT1?.inputId,
+    sagittalT2InputId: sagittalT2?.inputId,
+  };
+  const viewportBindings = viewportBindingsFor(layoutPreset, layoutAvailability);
+  const activeLayoutPreset = layoutPresetAvailable(layoutPreset, layoutAvailability) ? layoutPreset : "reading";
 
   const viewerModel = useMemo(
     () => studyRunToMriViewerModel({
@@ -1152,13 +1177,70 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   function selectSeries(series: any) {
     setSelectedSeriesId(series.id);
     setTab(series.plane === "axial" ? "Axial" : "Sagittal");
+    setActiveViewportId(series.plane === "axial" ? "axial" : "sagittal");
   }
 
+  function selectLayoutPreset(next: ReadingLayoutPreset) {
+    if (!layoutPresetAvailable(next, layoutAvailability)) return;
+    setLayoutPreset(next);
+    setTab("Sagittal");
+    setActiveViewportId(next === "t1-t2" ? "sagittal-t1" : "sagittal");
+    const sagittal = seriesList.find((item: any) => item.plane === "sagittal");
+    if (sagittal) setSelectedSeriesId(sagittal.id);
+  }
+
+  function activateViewport(binding: ViewportBinding) {
+    setActiveViewportId(binding.id);
+    setTab(binding.plane === "axial" ? "Axial" : "Sagittal");
+    const analyzed = seriesList.find((item: any) => item.plane === binding.plane);
+    if (analyzed) setSelectedSeriesId(analyzed.id);
+  }
+
+  const workspaceSeriesOptions: WorkspaceSeriesOption[] = seriesList
+    .filter((item: any) => item.plane === "sagittal" || item.plane === "axial")
+    .map((item: any) => ({
+      id: String(item.id),
+      label: String(item.name ?? (item.plane === "axial" ? "Axial" : "Sagital")),
+      role: "analyzed" as const,
+    }));
+
   function updateReviewerValue(measurement: MeasurementRow, value: string) {
+    /*
+     * Vaciar el campo es como se borra una corrección: `hasMeasurementDrafts` trata
+     * la cadena vacía como "no hay borrador" y la fila vuelve a mostrar el valor de
+     * la IA. La línea tiene que volver con él.
+     *
+     * Arrastrar un extremo escribe en dos lados -la geometría corregida y el valor
+     * recalculado- y borrar limpiaba solo el segundo, asi que la cota se quedaba donde
+     * la habia dejado el mouse con el número de la IA encima: una medición que dice
+     * una cosa y se dibuja como otra. Sin la línea de vuelta en su lugar tampoco hay
+     * como ver que el borrado surtió efecto.
+     */
+    if (value === "") restoreAiGeometry(measurement.id);
     setReviewerValues((current) => ({ ...current, [measurement.id]: value }));
   }
 
+  /** Devuelve una cota a los puntos con los que la publicó la IA. */
+  function restoreAiGeometry(measurementId: string) {
+    setMeasureGeometry((state) => {
+      if (!(measurementId in state)) return state;
+      const next = { ...state };
+      delete next[measurementId];
+      return next;
+    });
+  }
+
   function resetReviewerValue(measurementId: string) {
+    /*
+     * La línea vuelve junto con el número.
+     *
+     * Arrastrar un extremo escribe en dos lados: la geometría corregida y el valor
+     * recalculado. Deshacer limpiaba solo el valor, asi que la cota se quedaba donde
+     * la habia dejado el mouse mostrando el número de la IA encima: una medición que
+     * dice una cosa y se dibuja como otra. Y sin la línea de vuelta en su lugar no hay
+     * como ver que el borrado surtió efecto.
+     */
+    restoreAiGeometry(measurementId);
     const row = resultRows.find((item) => item.id === measurementId);
     if (row?.persistedValue !== "" && row?.aiValue !== undefined && row.aiValue !== null) {
       setReviewerValues((current) => ({ ...current, [measurementId]: String(row.aiValue) }));
@@ -1178,6 +1260,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
   function resetReviewerDrafts() {
     setReviewerValues({});
+    // Por lo mismo que en `resetReviewerValue`: descartar los borradores tiene que
+    // devolver las cotas a donde las dejó la IA, no solo sus números.
+    setMeasureGeometry({});
     setLandmarkDrafts({});
     setContourDrafts({});
     setLandmarkAddMode(false);
@@ -1339,11 +1424,121 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
       + loose("Sin nivel asignado", structuredReport.unassigned, "La corrida no pudo asociarlas a un nivel. No es lo mismo que no aplicar a ninguno.");
   }
 
-  async function exportHtml() {
+  /**
+   * Los hallazgos degenerativos del informe.
+   *
+   * El informe salia solo con mediciones: los numeros, sin las patologias que la
+   * corrida encontro. Un informe de RM lumbar que dice cuanto mide el canal pero no
+   * que hay una hernia en L4-L5 no es el informe que el medico necesita llevarse.
+   *
+   * Se arman con las mismas etiquetas y la misma regla de resumen que el panel de
+   * pantalla -incluido tratar `absent` y `none` como no-hallazgo y sacar el Pfirrmann
+   * de la cuenta, porque es un grado y no una presencia-. Si el documento contara los
+   * hallazgos distinto que la pantalla donde se los reviso, no habria forma de saber
+   * cual de los dos leyo el medico.
+   */
+  function findingsSection() {
+    const findings = discDegenerativeSnapshot.findings;
+    if (!findings.length) {
+      const motivo = discDegenerativeSnapshot.contractError
+        ?? discDegenerativeSnapshot.unavailable
+        ?? "La corrida no informó hallazgos degenerativos.";
+      return `<p class="muted">${escapeHtml(motivo)}</p>`;
+    }
+    /*
+     * Fuera los `not_product_supported`, igual que el panel de pantalla.
+     *
+     * No es un filtro de ruido sino de gobernanza: son resultados de investigacion,
+     * no una capacidad soportada, y la interfaz los deja fuera de los hallazgos por
+     * nivel a proposito. Incluirlos en el documento hacia que el informe listara cinco
+     * hallazgos en L4-L5 donde la pantalla mostraba cuatro, que es la clase de
+     * diferencia que obliga a preguntar cual de los dos vale.
+     */
+    const porNivel = new Map<string, DiscFinding[]>();
+    for (const finding of findings.filter((item) => item.deploymentStatus !== "not_product_supported")) {
+      const actual = porNivel.get(finding.level);
+      if (actual) actual.push(finding);
+      else porNivel.set(finding.level, [finding]);
+    }
+    const filas = [...porNivel.entries()].map(([level, items]) => {
+      const pfirrmann = items.find((item) => item.findingType === "pfirrmann_grade");
+      const positivos = items.filter((item) => item.findingType !== "pfirrmann_grade"
+        && item.label !== "absent" && item.label !== "none");
+      const detalle = positivos.length
+        ? `<ul>${positivos.map((item) => `<li>${escapeHtml(DISC_FINDING_LABELS[item.findingType])}: `
+            + `${escapeHtml(displayDiscFindingValue(item.label))} `
+            + `<span>(${escapeHtml(DEPLOYMENT_LABELS[item.deploymentStatus])})</span></li>`).join("")}</ul>`
+        : `<span class="muted">Sin hallazgos</span>`;
+      return `<tr><td><strong>${escapeHtml(level)}</strong></td>`
+        + `<td>${pfirrmann ? escapeHtml(displayDiscFindingValue(pfirrmann.label)) : "—"}</td>`
+        + `<td>${detalle}</td></tr>`;
+    }).join("");
+    /*
+     * Los de investigacion van aparte y rotulados, no mezclados arriba.
+     *
+     * Se informan porque el medico los pidio en el documento, pero fuera de la tabla
+     * por nivel: si entraran ahi, el informe contaria cinco hallazgos en L4-L5 donde
+     * la pantalla muestra cuatro, y esa diferencia obliga a preguntar cual de los dos
+     * vale. Separados, el conteo clinico sigue siendo el mismo en los dos lados y la
+     * informacion no se pierde: queda donde su condicion se lee junto al dato.
+     */
+    const investigacion = findings.filter((item) => item.deploymentStatus === "not_product_supported"
+      && item.findingType !== "pfirrmann_grade"
+      && item.label !== "absent" && item.label !== "none");
+    const bloqueInvestigacion = investigacion.length
+      ? `<section class="research"><h3>Resultados de investigación</h3>`
+        + `<p class="muted">${escapeHtml(DEPLOYMENT_NOTES.not_product_supported)}`
+        + ` No se cuentan entre los hallazgos por nivel.</p><ul>`
+        + investigacion.map((item) => `<li><strong>${escapeHtml(item.level)}</strong> — `
+            + `${escapeHtml(DISC_FINDING_LABELS[item.findingType])}: `
+            + `${escapeHtml(displayDiscFindingValue(item.label))}</li>`).join("")
+        + `</ul></section>`
+      : "";
+    return `<table><thead><tr><th>Nivel</th><th>Pfirrmann</th><th>Hallazgos</th></tr></thead><tbody>${filas}</tbody></table>${bloqueInvestigacion}`;
+  }
+
+  /**
+   * El documento del informe, uno solo.
+   *
+   * Lo comparten la descarga del archivo y la ventana de impresion: si cada salida
+   * armara su propio HTML, el PDF que firma el medico podria decir algo distinto que
+   * el .html que quedo guardado, y no habria forma de saber cual vale.
+   */
+  function buildReportHtml() {
     const payload = exportPayload();
     const measurementRows = payload.measurements.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong><br><span>${escapeHtml(row.level)}</span></td><td>${escapeHtml(row.aiValue)} ${escapeHtml(row.unit)}</td><td>${escapeHtml(row.reviewerValue ?? "sin cambios")}</td><td>${escapeHtml(row.deltaFormatted)}</td><td>${escapeHtml(row.status)}</td><td>${row.outlier ? "Si" : "No"}</td></tr>`).join("");
-    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}.level{border-top:1px solid #e2e8f0;padding:12px 0}.level h3{margin:0 0 6px;font-size:15px}.level ul{margin:0;padding-left:20px}.level li{margin:3px 0;font-size:14px}.flag{color:#b45309;font-style:normal;font-size:12px;font-weight:700}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Corrida ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatusLabel)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Hallazgos por nivel</h2>${reportSections()}<h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
-    downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-informe.html`, html, "text/html;charset=utf-8");
+    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RM lumbar PFI - ${escapeHtml(payload.caseId)}</title><style>body{font-family:Inter,Segoe UI,Arial,sans-serif;margin:32px;color:#102033;background:#f8fafc}.report{background:#fff;border:1px solid #d8e6f4;border-radius:18px;box-shadow:0 18px 50px rgba(15,23,42,.08);padding:28px;max-width:1080px;margin:auto}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-size:12px;font-weight:800}h1{margin:6px 0 4px;font-size:28px}.muted{color:#64748b}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0}.card{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#f8fbff}.card strong{display:block;font-size:20px;margin-top:4px}table{border-collapse:collapse;width:100%;margin-top:16px}th{background:#eef4fb;text-align:left;font-size:12px;text-transform:uppercase;color:#475569}td,th{border-bottom:1px solid #e2e8f0;padding:12px;vertical-align:top}td span{color:#64748b;font-size:12px}.notice{border:1px solid #bae6fd;background:#f0f9ff;border-radius:14px;padding:12px;margin-top:18px}.footer{font-size:12px;color:#64748b;margin-top:20px}.level{border-top:1px solid #e2e8f0;padding:12px 0}.level h3{margin:0 0 6px;font-size:15px}.level ul{margin:0;padding-left:20px}.level li{margin:3px 0;font-size:14px}.flag{color:#b45309;font-style:normal;font-size:12px;font-weight:700}.research{border:1px dashed #cbd5e1;border-radius:14px;padding:12px 16px;margin-top:16px;background:#fbfdff}.research h3{margin:0 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:#475569}.research ul{margin:8px 0 0;padding-left:20px}.research li{font-size:14px;margin:3px 0}@media print{body{background:#fff;margin:0}.report{box-shadow:none;border:0}}</style></head><body><main class="report"><div class="eyebrow">Plataforma de análisis de RM lumbar PFI</div><h1>Resumen académico de revisión</h1><p class="muted">Caso ${escapeHtml(payload.caseId)} · Corrida ${escapeHtml(payload.runId)} · Generado ${escapeHtml(payload.generatedAt)}</p><section class="grid"><div class="card">Estado<strong>${escapeHtml(payload.reviewStatusLabel)}</strong></div><div class="card">Modo<strong>${escapeHtml(payload.inferenceMode)}</strong></div><div class="card">Mediciones<strong>${payload.summary.measurementsTotal}</strong></div><div class="card">Atípicos<strong>${payload.summary.outliers}</strong></div></section><section class="notice"><strong>Alcance:</strong> uso académico/investigación, datos de-identificados, requiere revisión profesional y no constituye diagnóstico clínico. No incluye imágenes crudas. Preparación: ${escapeHtml(payload.modelReadiness)}.</section><h2>Hallazgos por nivel</h2>${reportSections()}<h2>Hallazgos degenerativos</h2>${findingsSection()}<h2>Mediciones IA vs revisor</h2><table><thead><tr><th>Medición</th><th>IA</th><th>Revisor</th><th>Delta</th><th>Estado</th><th>Atípico</th></tr></thead><tbody>${measurementRows}</tbody></table><h2>Notas</h2><p>${escapeHtml(payload.notes || "Sin notas registradas.")}</p><div class="footer">Referencia de sujeto deidentificada: ${escapeHtml(payload.subjectRef)} · Fecha de estudio: ${escapeHtml(payload.studyDate)} · Modelo: ${escapeHtml(payload.modelKey)}</div></main></body></html>`;
+    return html;
+  }
+
+  async function exportHtml() {
+    downloadTextFile(`${safeFileFragment(displayRun.caseId)}-${safeFileFragment(displayRun.runId)}-informe.html`, buildReportHtml(), "text/html;charset=utf-8");
+  }
+
+  /**
+   * Abre el informe listo para imprimir, que es como se lo guarda en PDF.
+   *
+   * No se genera el PDF a mano: haria falta una libreria embebida solo para redibujar
+   * lo que el navegador ya sabe paginar, y el resultado seria un segundo documento que
+   * mantener. El dialogo de impresion tiene "Guardar como PDF" de destino y respeta el
+   * `@media print` que la hoja ya trae.
+   *
+   * La ventana se abre desde el clic y no despues de una espera: un `window.open`
+   * diferido lo bloquea el navegador por venir sin gesto del usuario.
+   */
+  function printReport() {
+    const ventana = window.open("", "_blank");
+    if (!ventana) {
+      setSaveMessage("El navegador bloqueó la ventana del informe. Habilitá las ventanas emergentes para este sitio.");
+      return;
+    }
+    ventana.document.write(buildReportHtml());
+    ventana.document.close();
+    ventana.focus();
+    // Esperar a que el documento asiente antes de imprimir: sin esto el dialogo puede
+    // salir sobre una pagina todavia vacia.
+    ventana.addEventListener("load", () => ventana.print());
+    if (ventana.document.readyState === "complete") ventana.print();
   }
 
   /*
@@ -1381,6 +1576,19 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     }
     if (hasMeasurementDrafts) commitReviewerMeasurements();
     setSaveMessage(status === "pendiente" ? "Borrador guardado correctamente" : status === "observado" ? "Estudio marcado como observado." : status === "aceptado" ? "Estudio finalizado y aprobado por el revisor." : "Estudio descartado por el revisor.");
+    /*
+     * Al finalizar queda el informe listo para llevarse.
+     *
+     * Es el momento en que el estudio deja de cambiar: las mediciones ya se cerraron
+     * unas lineas mas arriba y el estado pasa a solo lectura, asi que el documento
+     * emitido aca es el que corresponde a lo que se acaba de firmar. Antes habia que
+     * acordarse de ir a exportar, y un informe que hay que recordar generar es un
+     * informe que no se genera.
+     *
+     * Se ofrece, no se dispara: abrir el dialogo de impresion sin que nadie lo pida
+     * seria arrebatarle la pantalla al revisor justo despues de guardar.
+     */
+    setReportReady(status === "aceptado");
   }
 
   async function saveStudyMetadata() {
@@ -1561,7 +1769,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     : [];
   const allPanelRows: PanelRow[] = [...aiPanelRows, ...reviewerPanelRows];
   const measurementGroups = groupMeasurements(panelRows);
-  const measurementSummaryGroups = groupMeasurements(allPanelRows);
 
   /** Cuántas mediciones tiene dibujables el nivel activo, para el panel de capas. */
   const aiMeasurableCount = resultRows.filter((row) => !row.experimental && (measureGeometry[row.id] ?? row.points)?.length).length;
@@ -1699,9 +1906,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
   // la IA: es el índice de referencia mientras se recorre el stack.
 
   return (
-    <div className="rr" data-theme="reading">
-      <header className="rr-topbar">
-        <button className="rr-back" onClick={onBackToStudies} type="button">← Lista de trabajo</button>
+    <ReadingWorkspaceShell>
+      <ReadingWorkspaceHeader>
+        <button className="rr-back" onClick={onBackToStudies} type="button">← Estudios</button>
         <div className="rr-case">
           <strong>{caseLabel}</strong>
           <span>
@@ -1710,58 +1917,53 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             {" · "}{subjectLabel}
           </span>
         </div>
+        {workspaceSeriesOptions.length > 0 && (
+          <SeriesSelector
+            onSelect={(id) => {
+              const series = seriesList.find((item: any) => String(item.id) === id);
+              if (series) { setLayoutPreset("reading"); selectSeries(series); }
+            }}
+            options={workspaceSeriesOptions}
+            selectedId={String(currentSeries?.id ?? workspaceSeriesOptions[0]?.id ?? "")}
+          />
+        )}
         <WorkspaceGovernanceNotice />
         <div className="rr-topbar-right">
-          {/*
-            1×2 solo se ofrece cuando el estudio trae axial: sin axial la mitad
-            inferior quedaría vacía y el control prometería una comparación que
-            no existe.
-          */}
-          <div className="rr-layout-picker" role="group" aria-label="Disposición del visor">
-            <button className={layout === "single" ? "is-active" : ""} onClick={() => setLayout("single")} type="button" title="Un plano a pantalla completa">1×1</button>
-            <button
-              className={layout === "dual" ? "is-active" : ""}
-              disabled={!axialAvailable}
-              onClick={() => setLayout("dual")}
-              title={axialAvailable ? "Sagital y axial simultáneos" : "El estudio no tiene plano axial persistido"}
-              type="button"
+          <label className="rr-layout-control">
+            <span>Layout</span>
+            <select
+              aria-label="Preset de layout"
+              onChange={(event) => selectLayoutPreset(event.target.value as ReadingLayoutPreset)}
+              value={activeLayoutPreset}
             >
-              1×2
-            </button>
-          </div>
+              <option value="reading">Lectura</option>
+              <option disabled={!axialAvailable} value="sagittal-axial">Sagital + Axial</option>
+              <option disabled={!layoutPresetAvailable("t1-t2", layoutAvailability)} value="t1-t2">T1 + T2</option>
+            </select>
+          </label>
           <span className="rr-status" data-status={review.status ?? "pendiente"}>
             <i aria-hidden />{displayReviewStatus(review.status ?? "pendiente")}
           </span>
+          <button
+            aria-expanded={!inspectorCollapsed}
+            className="rr-ghost rr-inspector-toggle"
+            onClick={() => setInspectorCollapsed((value) => !value)}
+            type="button"
+          >
+            {inspectorCollapsed ? "Mostrar inspector" : "Ocultar inspector"}
+          </button>
           <button className="rr-ghost" onClick={() => setMetadataDialogOpen(true)} type="button">Editar datos</button>
         </div>
-      </header>
+      </ReadingWorkspaceHeader>
 
-      <div className="rr-body">
-        <aside className="rr-series" aria-label="Series del estudio">
-          <p className="rr-rail-title">Series</p>
-          {seriesList.length ? seriesList.map((item: any, index: number) => (
-            <button className={`rr-serie ${currentSeries?.id === item.id ? "is-active" : ""}`} key={item.id} onClick={() => selectSeries(item)} type="button">
-              <span className="rr-thumb">
-                <SeriesThumbnail url={item.imageUrl} index={index} />
-              </span>
-              <span className="rr-serie-name">{item.name}</span>
-              <span className="rr-serie-meta">{item.sliceCount ? `${item.sliceCount} corte${item.sliceCount === 1 ? "" : "s"}` : item.available ? "1 corte" : "sin asset"}</span>
-            </button>
-          )) : <p className="rr-note">Sin planos persistidos.</p>}
-
-          <button className={`rr-serie ${tab === "3D Reconstruction" ? "is-active" : ""}`} onClick={() => setTab("3D Reconstruction")} type="button">
-            <span className="rr-thumb"><em>3D</em></span>
-            <span className="rr-serie-name">Proxy 3D</span>
-            <span className="rr-serie-meta">experimental</span>
-          </button>
-        </aside>
-
-        <main className="rr-stage" data-layout={layout}>
+      <ReadingWorkspaceBody inspectorCollapsed={inspectorCollapsed}>
+        <ViewportGrid preset={activeLayoutPreset}>
           {tab === "3D Reconstruction" ? (
-            <div className="rr-viewport"><SpineReconstructionPreview proxy={threeDProxyViewModel} /></div>
+            <div className="rr-viewport rr-3d-workspace"><SpineReconstructionPreview proxy={threeDProxyViewModel} /></div>
           ) : (
-            visiblePlanes.map((planeName) => {
-              const data = planeViewportData(planeName);
+            viewportBindings.map((binding) => {
+              const planeName = binding.plane;
+              const data = planeViewportData(planeName, binding.id, binding.defaultSeriesInputId);
               if (!data) return null;
               const workspace = planeName === "axial" ? axialWorkspace : sagittalWorkspace;
               /*
@@ -1771,22 +1973,25 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                * corrió, y pintarla sobre otra serie afirmaría algo que nadie calculó.
                * Se apagan acá, en un solo lugar, y la pantalla dice por qué.
                */
-              const viewed = viewedSeriesFor(planeName);
+              const viewed = viewedSeriesFor(planeName, binding.id, binding.defaultSeriesInputId);
+              const storedSeriesId = viewedSeriesByPlane[binding.id];
+              const viewedSeriesId = storedSeriesId === undefined ? binding.defaultSeriesInputId ?? null : storedSeriesId;
               return (
                 <PlaneViewport
-                  key={planeName}
+                  key={binding.id}
                   plane={planeName}
                   caseLabel={caseLabel}
                   seriesName={data.series.name}
+                  seriesRoleLabel={viewed || binding.role === "reference" ? "Referencia" : "Analizada IA"}
                   seriesChoices={seriesChoicesFor(planeName)}
-                  viewedSeriesId={viewedSeriesByPlane[planeName]}
+                  viewedSeriesId={viewedSeriesId}
                   analyzedSeriesName={seriesList.find((item: any) => item.plane === planeName)?.name ?? null}
                   unsegmentedReason={viewed ? seriesUnsegmentedReason(viewed) : ""}
                   onSelectSeries={(inputId) => {
-                    setViewedSeriesByPlane((state) => ({ ...state, [planeName]: inputId }));
+                    setViewedSeriesByPlane((state) => ({ ...state, [binding.id]: inputId }));
                     // El corte vuelve al principio: los stacks tienen largos distintos
                     // y el índice de una serie no significa nada en otra.
-                    setSliceByPlane((state) => ({ ...state, [planeName]: 0 }));
+                    setSliceByPlane((state) => ({ ...state, [binding.id]: 0 }));
                   }}
                   model={studyRunToMriViewerModel({
                     plane: planeName,
@@ -1795,8 +2000,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     masks: viewed ? [] : masksForPlane(planeName),
                     landmarks: viewed ? [] : displayLandmarks,
                   })}
-                  modelLabel={displayRun.modelVersion ?? modelArtifact?.version ?? displayModelKey(displayRun.modelKey)}
-                  inferenceLabel={inferenceModeLabel(inferenceMode)}
                   /*
                    * La escala sale de la serie que se está mostrando, que es la misma
                    * que usan las mediciones. Antes leía `quality.pixelSpacingMm`, un
@@ -1808,16 +2011,30 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     ? `${data.series.inPlaneSpacingMm[0].toFixed(3)} x ${data.series.inPlaneSpacingMm[1].toFixed(3)} mm/px`
                     : quality?.pixelSpacingMm ? `${quality.pixelSpacingMm} mm/px` : "escala no informada"}
                   slice={data.nav}
-                  active={activePlano === planeName}
-                  onActivate={() => selectSeries(data.series)}
+                  active={activeViewportId === binding.id}
+                  onActivate={() => activateViewport(binding)}
                   selectedLandmarkId={selectedLandmark}
                   onSelectLandmark={setSelectedLandmark}
                   // Una serie que la IA no analizó no se anota ni se mide: las anotaciones
                   // se guardan contra la corrida, y esta serie no tiene una.
-                  readonly={Boolean(viewed) || !editMode || activePlano !== planeName}
-                  addMode={landmarkAddMode && activePlano === planeName}
+                  readonly={Boolean(viewed) || !editMode || activeViewportId !== binding.id}
+                  /*
+                   * Arrastrar el extremo de una cota no pasa por `editMode`.
+                   * Ese modo lo enciende "Editar landmark", cuyo texto sólo
+                   * habla de landmarks, así que la corrección por arrastre
+                   * estaba construida —y ya marca la medición como del
+                   * revisor— pero no había cómo descubrirla. Una cota sólo
+                   * muestra tiradores cuando está seleccionada, y seleccionarla
+                   * ya es deliberado: no necesita un modo global encima.
+                   *
+                   * Sí se agrega `reviewLocked`, que faltaba: la tabla no deja
+                   * escribir en un estudio finalizado, pero el visor lo dejaba
+                   * arrastrar igual.
+                   */
+                  measurementsReadonly={Boolean(viewed) || reviewLocked || activeViewportId !== binding.id}
+                  addMode={landmarkAddMode && activeViewportId === binding.id}
                   // Solo el axial: el clasificador subarticular corre sobre esa serie.
-                  orientation={orientationFor(planeName)}
+                  orientation={viewed ? null : orientationFor(planeName)}
                   // El mismo espaciado que usa el texto de la esquina y que las
                   // mediciones: la barra no puede contradecir al número que hay al lado.
                   pixelSpacingMm={data.series.inPlaneSpacingMm?.length === 2
@@ -1846,8 +2063,8 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     });
                   }}
                   onLandmarkAddComplete={() => setLandmarkAddMode(false)}
-                  onOverlayAvailableChange={handleOverlayAvailableChange}
-                  measureTool={activePlano === planeName ? measureTool.tool : null}
+                  onOverlayAvailableChange={planeName === "axial" ? handleAxialOverlayAvailableChange : handleSagittalOverlayAvailableChange}
+                  measureTool={activeViewportId === binding.id ? measureTool.tool : null}
                   measureDraft={measureTool.points}
                   onMeasurePoint={(point, frame, pixels) => {
                     const closed = measureTool.addPoint(point);
@@ -1893,7 +2110,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
               );
             })
           )}
-        </main>
+        </ViewportGrid>
 
         <ReviewInspector activeTab={panelTab} onTabChange={setPanelTab}>
           <ReviewInspectorPanel activeTab={panelTab} tab="measurements">
@@ -1915,9 +2132,22 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   línea, y tocarla la elige. Sin eso, con tres cotas sobre el mismo
                   disco no hay forma de saber cuál corresponde a cuál número.
                 */}
-                {!activeGroup && <p className="rr-note">Seleccioná un nivel o expandí una categoría del plano activo.</p>}
+                {/*
+                  Sin nivel elegido no se lista nada. Antes se mostraba acá un
+                  resumen por categoría —Disco, Canal, Vértebra, Generales,
+                  Otras— que reagrupaba por tipo exactamente las mismas
+                  mediciones que el navegador de arriba ya agrupa por nivel: la
+                  misma información dos veces, con dos criterios, uno debajo del
+                  otro. Y no hacía falta para llegar a ninguna: los contadores
+                  cuadran —23 en discos, 15 en vértebras, 8 en transicionales y
+                  1 general, contra 21+6+15+1+4 por categoría—, así que cada
+                  medición, la del canal incluida, se alcanza desde su nivel.
+                */}
+                {!activeGroup ? (
+                  <p className="rr-note">Seleccioná un nivel para ver sus mediciones.</p>
+                ) : (
                 <MeasurementGroupList
-                  collapsible={!activeGroup}
+                  collapsible={false}
                   emptyNote={hasPlaneWorkspaces && !persistedMeasurements.length
                     ? `La serie ${activePlano === "axial" ? "axial" : "sagital"} de este estudio no aporta mediciones. Cambiá de plano o medí a mano.`
                     : undefined}
@@ -1930,9 +2160,10 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                   onHighlight={setHighlightedMeasurementId}
                   onSelect={setSelectedMeasurementId}
                   readonly={reviewLocked}
-                  groups={activeGroup ? measurementGroups : measurementSummaryGroups}
+                  groups={measurementGroups}
                   selectedId={selectedMeasurementId}
                 />
+                )}
           </ReviewInspectorPanel>
 
           <ReviewInspectorPanel activeTab={panelTab} tab="ai">
@@ -1951,7 +2182,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                     requestBlockedReason={degenerativeRequestBlockedReason}
                     roi={demoMode ? undefined : {
                       active: subarticularMode,
-                      available: axialAvailable && visiblePlanes.includes("axial"),
+                      available: axialAvailable && viewportBindings.some((binding) => binding.plane === "axial"),
                       onToggle: () => {
                         if (subarticularMode) cancelRoi();
                         else { setSubarticularMode(true); setRoiDraft(null); setRoiError(undefined); }
@@ -1972,6 +2203,21 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
           <ReviewInspectorPanel activeTab={panelTab} tab="more">
             <div className="rr-more-sections">
+              <details className="rr-more-section">
+                <summary>Reconstrucción 3D</summary>
+                <div className="rr-more-section-body">
+                  <p className="rr-section-title">Proxy 3D experimental</p>
+                  <p className="rr-note">Vista secundaria para inspección académica; no sustituye los planos adquiridos.</p>
+                  <button
+                    className="rr-more-action"
+                    onClick={() => setTab("3D Reconstruction")}
+                    type="button"
+                  >
+                    Abrir reconstrucción 3D
+                  </button>
+                </div>
+              </details>
+
               <details className="rr-more-section" open>
                 <summary>Anotaciones</summary>
                 <div className="rr-more-section-body">
@@ -2100,6 +2346,7 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
                 <p className="rr-section-title">Exportar</p>
                 <div className="rr-report-actions">
+                  <button onClick={printReport} type="button">PDF</button>
                   <button onClick={() => { void exportHtml(); }} type="button">HTML</button>
                   <button onClick={() => { void exportCsv(); }} type="button">CSV</button>
                   <button onClick={() => { void exportJson(); }} type="button">JSON</button>
@@ -2207,39 +2454,22 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
                 <button className="rr-primary" disabled={confirmDisabled} onClick={() => void save(reviewStatus)} title={reviewStatus === "pendiente" ? "Usá Guardar borrador para conservar una revisión pendiente." : undefined} type="button">Confirmar</button>
               </div>
               {saveMessage && <p className="rr-ok" role="status">{saveMessage}</p>}
+              {reportReady && (
+                <div className="rr-report-ready">
+                  <p>El informe del estudio finalizado está listo.</p>
+                  <div className="rr-report-actions">
+                    <button onClick={printReport} type="button">Descargar PDF</button>
+                    <button onClick={() => { void exportHtml(); }} type="button">Guardar HTML</button>
+                  </div>
+                </div>
+              )}
             </div>
           </ReviewInspectorPanel>
         </ReviewInspector>
-      </div>
+      </ReadingWorkspaceBody>
 
-      {/* div y no footer: role="toolbar" ya describe la barra, y un contentinfo con rol
-          de toolbar encima le da al lector de pantalla dos semanticas en pugna. */}
-      <div className="rr-toolbar" role="toolbar" aria-label="Herramientas de lectura">
-        <button
-          className={`rr-tool${editMode ? " is-active" : ""}`}
-          disabled={!activeCoordinateSpace}
-          onClick={() => { setEditMode((value) => !value); setLandmarkAddMode(false); }}
-          title={activeCoordinateSpace ? "Mover landmarks de IA como borrador del revisor" : "El backend no informó el espacio de coordenadas"}
-          type="button"
-        >
-          Editar landmark
-        </button>
-        <button
-          className={`rr-tool${landmarkAddMode ? " is-active" : ""}`}
-          disabled={!editMode || !activeCoordinateSpace}
-          onClick={() => setLandmarkAddMode((value) => !value)}
-          title={!activeCoordinateSpace ? "El backend no informó el espacio de coordenadas" : editMode ? "Clic sobre la imagen para agregar un landmark" : "Activá Editar landmark primero"}
-          type="button"
-        >
-          Agregar landmark
-        </button>
-        <span className="rr-toolbar-sep" aria-hidden />
-        {/*
-          Medir no depende del espacio de coordenadas de la IA: es geometría propia
-          del revisor sobre la imagen. Sí depende del corte visible, que es a lo que
-          la medición queda anclada.
-        */}
-        {(Object.keys(TOOL_LABELS) as MeasurementKind[]).map((kind) => (
+      <ReadingWorkspaceToolbar>
+        {(["distance", "angle"] as MeasurementKind[]).map((kind) => (
           <button
             className={`rr-tool${measureTool.tool === kind ? " is-active" : ""}`}
             key={kind}
@@ -2250,19 +2480,59 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
             {TOOL_LABELS[kind].name}
           </button>
         ))}
-        <span className="rr-toolbar-sep" aria-hidden />
-        <button className="rr-tool" disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores"} type="button">
-          Deshacer
-        </button>
-        <button className="rr-tool" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Volver a los valores persistidos" : "No hay mediciones editadas"} type="button">
-          Restaurar mediciones
-        </button>
+
+        <details className="rr-tool-menu">
+          <summary>{measureTool.tool && !["distance", "angle"].includes(measureTool.tool) ? `Herramientas · ${TOOL_LABELS[measureTool.tool].name}` : "Herramientas"}</summary>
+          <div className="rr-tool-menu-popover">
+            {(["listhesis", "roi", "probe"] as MeasurementKind[]).map((kind) => (
+              <button
+                className={`rr-tool${measureTool.tool === kind ? " is-active" : ""}`}
+                key={kind}
+                onClick={() => { measureTool.select(kind); setLandmarkAddMode(false); }}
+                title={TOOL_LABELS[kind].hint}
+                type="button"
+              >
+                {TOOL_LABELS[kind].name}
+              </button>
+            ))}
+          </div>
+        </details>
+
+        <details className="rr-tool-menu">
+          <summary>Edición avanzada</summary>
+          <div className="rr-tool-menu-popover">
+            <button
+              className={`rr-tool${editMode ? " is-active" : ""}`}
+              disabled={!activeCoordinateSpace}
+              onClick={() => { setEditMode((value) => !value); setLandmarkAddMode(false); }}
+              title={activeCoordinateSpace ? "Mover landmarks de IA como borrador del revisor" : "El backend no informó el espacio de coordenadas"}
+              type="button"
+            >
+              Editar landmark
+            </button>
+            <button
+              className={`rr-tool${landmarkAddMode ? " is-active" : ""}`}
+              disabled={!editMode || !activeCoordinateSpace}
+              onClick={() => setLandmarkAddMode((value) => !value)}
+              title={!activeCoordinateSpace ? "El backend no informó el espacio de coordenadas" : editMode ? "Clic sobre la imagen para agregar un landmark" : "Activá Editar landmark primero"}
+              type="button"
+            >
+              Agregar landmark
+            </button>
+            <button className="rr-tool" disabled={!hasReviewerDrafts} onClick={resetReviewerDrafts} title={hasReviewerDrafts ? "Descartar borradores del revisor" : "No hay borradores"} type="button">
+              Deshacer
+            </button>
+            <button className="rr-tool" disabled={!hasMeasurementDrafts} onClick={() => setReviewerValues({})} title={hasMeasurementDrafts ? "Volver a los valores persistidos" : "No hay mediciones editadas"} type="button">
+              Restaurar mediciones
+            </button>
+          </div>
+        </details>
 
         <span className="rr-toolbar-end">
           {hasReviewerDrafts ? <span>{reviewerDraftCount} med · {landmarkDraftCount} lm · {contourDraftCount} contornos en borrador</span> : null}
           <span className="rr-kbd">?</span>
         </span>
-      </div>
+      </ReadingWorkspaceToolbar>
 
       {metadataDialogOpen && (
         <StudyMetadataDialog
@@ -2278,6 +2548,6 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
           onSubjectRefBlur={() => setMetadataError(subjectRefLocked ? "" : validateSubjectRef(metadataDraft.subjectRef) ?? "")}
         />
       )}
-    </div>
+    </ReadingWorkspaceShell>
   );
 }

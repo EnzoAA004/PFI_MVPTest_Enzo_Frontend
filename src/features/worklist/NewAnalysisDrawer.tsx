@@ -15,7 +15,9 @@ import {
 } from "../../studyMetadata";
 import {
   initialProductAnalysisState,
+  retryDiscFindingsFromPreparedSources,
   runP109ProductFlow,
+  runSingleProductRetry,
   type ProductAnalysisState,
   type ProductFlowPhase,
 } from "./productAnalysisFlow";
@@ -174,6 +176,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   const runInFlightRef = useRef(false);
   const progressRef = useRef<HTMLElement | null>(null);
   const interactionLocked = running || associationState.status === "associating" || analysisStage === "opening";
+  const productRetryLock = useRef(false);
 
   /*
    * Escape cierra el drawer. Es el equivalente por teclado del clic en el fondo, y lo
@@ -296,19 +299,35 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
   }
 
   async function retryProductExtensions() {
-    if (!persistedRun || running) return;
-    setRunning(true);
-    setAnalysisStage("completing");
-    try {
-      const nextProductState = await runProductExtensions(persistedRun);
-      if (["completed", "degraded"].includes(nextProductState.phase) && associationState.status === "associated") {
-        openCompletedStudy(persistedRun.caseId);
-      } else {
-        setAnalysisStage("idle");
+    if (!persistedRun || !productState || running) return;
+    await runSingleProductRetry(productRetryLock, async () => {
+      setRunning(true);
+      setAnalysisStage("completing");
+      try {
+        if (productState.failureStage === "disc_findings") {
+          await retryDiscFindingsFromPreparedSources({
+            caseId: persistedRun.caseId,
+            multiplanarRunId: persistedRun.runId,
+            study: persistedRun.study,
+            state: productState,
+            onState: (state) => {
+              setProductState(state);
+              setMessage(state.message);
+            },
+          });
+          setAnalysisStage("idle");
+        } else {
+          const nextProductState = await runProductExtensions(persistedRun);
+          if (["completed", "degraded"].includes(nextProductState.phase) && associationState.status === "associated") {
+            openCompletedStudy(persistedRun.caseId);
+          } else {
+            setAnalysisStage("idle");
+          }
+        }
+      } finally {
+        setRunning(false);
       }
-    } finally {
-      setRunning(false);
-    }
+    });
   }
 
   async function attemptPatientAssociation(
@@ -458,7 +477,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
             </p>
           )}
 
-          <h3 className="wl-section-title"><span aria-hidden="true">02</span> Datos del estudio</h3>
+          <h3 className="wl-section-title">Datos del estudio</h3>
 
           <label className="wl-field">
             <span>ID de caso de-identificado</span>
@@ -522,7 +541,7 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
 
           {metadataError && <p className="wl-drawer-error">{metadataError}</p>}
 
-          <h3 className="wl-section-title"><span aria-hidden="true">03</span> Imágenes</h3>
+          <h3 className="wl-section-title">Imágenes</h3>
 
           <div className="wl-upload">
             <div className="wl-upload-head">
@@ -557,8 +576,8 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
                     const roles = [
                       studyUpload.study?.sagittal?.seriesIndex === index ? "multiplanar sagital" : null,
                       studyUpload.study?.axial?.seriesIndex === index ? "multiplanar axial" : null,
-                      studyUpload.study?.sagittalT1?.seriesIndex === index ? "P10.7 T1" : null,
-                      studyUpload.study?.sagittalT2?.seriesIndex === index ? "P10.7 T2" : null,
+                      studyUpload.study?.sagittalT1?.seriesIndex === index ? "fuente de hallazgos T1" : null,
+                      studyUpload.study?.sagittalT2?.seriesIndex === index ? "fuente de hallazgos T2" : null,
                     ].filter((role): role is string => Boolean(role));
                     const usedFor = roles.length ? roles.join(" · ") : null;
                     return (
@@ -652,6 +671,11 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
                   );
                 })}
               </ul>
+              {productState.failureStage === "disc_findings" && (
+                <p className="wl-upload-state">
+                  <strong>Clasificación discal</strong> · No se pudo completar
+                </p>
+              )}
             </section>
           )}
 
@@ -688,10 +712,10 @@ export function NewAnalysisDrawer({ onClose, onAnalysisReady }: Props) {
           ) : persistedRun && associationState.status === "associated" && productState?.phase === "error" ? (
             <>
               <button className="wl-drawer-cancel" disabled={running} onClick={() => onAnalysisReady(persistedRun.caseId)} type="button">
-                Abrir sin P10.7
+                Abrir sin hallazgos discales
               </button>
               <button className="wl-drawer-run" disabled={running || !productState.retryable} onClick={() => void retryProductExtensions()} type="button">
-                {running ? "Reintentando…" : productState.retryable ? "Reintentar P10.7" : "P10.7 no disponible"}
+                {running ? "Reintentando…" : productState.retryable ? "Reintentar hallazgos discales" : "Hallazgos discales no disponibles"}
               </button>
             </>
           ) : persistedRun && associationState.status === "associated" && productState && ["completed", "degraded"].includes(productState.phase) ? (

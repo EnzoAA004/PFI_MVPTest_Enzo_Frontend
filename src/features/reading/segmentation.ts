@@ -51,9 +51,9 @@ export type Segmentation = {
 };
 
 /**
- * Paleta cualitativa. No codifica clase ni severidad: su único trabajo es que dos
- * estructuras vecinas no compartan color, para que se vea si la IA separó los
- * discos donde correspondía o fusionó dos.
+ * Paleta cualitativa. No codifica clase ni severidad. El resolver de presentación
+ * puede compartir un slot entre cuerpo y elementos posteriores de la misma
+ * vértebra; discos y demás instancias conservan su slot propio.
  */
 export const INSTANCE_COLORS = [
   "#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231",
@@ -63,6 +63,68 @@ export const INSTANCE_COLORS = [
 
 export function instanceColor(index: number) {
   return INSTANCE_COLORS[(index - 1 + INSTANCE_COLORS.length) % INSTANCE_COLORS.length];
+}
+
+/**
+ * Resuelve únicamente el color de presentación de una instancia.
+ *
+ * El cuerpo vertebral es la fuente de verdad cromática. Un elemento posterior con
+ * nivel explícito busca el cuerpo del mismo nivel; si no tiene nivel, sólo puede
+ * asociarse con un cuerpo que solape verticalmente. Los discos nunca participan de
+ * la resolución y conservan su color de instancia.
+ */
+export function resolveSegmentationDisplayColor(instance: SegmentationInstance, segmentation?: Segmentation) {
+  if (instance.label === "posterior_element" && segmentation) {
+    const bodies = segmentation.instances.filter((candidate) => (
+      candidate.label === "vertebra" && candidate.classKey === "vertebra_group"
+    ));
+    const sameLevelBody = instance.level
+      ? bodies.find((candidate) => candidate.level === instance.level)
+      : undefined;
+    const body = sameLevelBody ?? (!instance.level ? overlappingBody(instance, bodies, segmentation) : undefined);
+    if (body) return instanceColor(body.index);
+  }
+  return instanceColor(instance.index);
+}
+
+type VerticalSpan = { top: number; bottom: number };
+
+function segmentationVerticalSpans(segmentation: Segmentation) {
+  const spans = new Map<number, VerticalSpan>();
+  let offset = 0;
+  for (let cursor = 0; cursor < segmentation.data.length; cursor += 2) {
+    const value = segmentation.data[cursor];
+    const length = segmentation.data[cursor + 1];
+    if (value !== 0 && length > 0) {
+      const top = Math.floor(offset / segmentation.width);
+      const bottom = Math.floor((offset + length - 1) / segmentation.width);
+      const current = spans.get(value);
+      spans.set(value, {
+        top: current ? Math.min(current.top, top) : top,
+        bottom: current ? Math.max(current.bottom, bottom) : bottom,
+      });
+    }
+    offset += length;
+  }
+  return spans;
+}
+
+function overlappingBody(
+  posterior: SegmentationInstance,
+  bodies: SegmentationInstance[],
+  segmentation: Segmentation,
+) {
+  const spans = segmentationVerticalSpans(segmentation);
+  const posteriorSpan = spans.get(posterior.index);
+  if (!posteriorSpan) return undefined;
+  let best: { body: SegmentationInstance; overlap: number } | undefined;
+  for (const body of bodies) {
+    const bodySpan = spans.get(body.index);
+    if (!bodySpan) continue;
+    const overlap = Math.min(posteriorSpan.bottom, bodySpan.bottom) - Math.max(posteriorSpan.top, bodySpan.top) + 1;
+    if (overlap > 0 && (!best || overlap > best.overlap)) best = { body, overlap };
+  }
+  return best?.body;
 }
 
 /** Lee la segmentación de un plano, o undefined si no viaja o está incompleta. */
@@ -86,7 +148,7 @@ function hexToRgb(hex: string) {
 }
 
 /**
- * Expande el RLE a píxeles RGBA, con un color por instancia.
+ * Expande el RLE a píxeles RGBA, con el color de presentación resuelto por instancia.
  *
  * `hidden` lleva los índices que el revisor apagó; se saltean en vez de pintarse
  * transparentes para no recorrer dos veces la imagen.
@@ -100,7 +162,7 @@ export function paintSegmentation(
   const pixels = image.data;
   const colors = new Map<number, readonly [number, number, number]>();
   for (const instance of segmentation.instances) {
-    colors.set(instance.index, hexToRgb(instanceColor(instance.index)));
+    colors.set(instance.index, hexToRgb(resolveSegmentationDisplayColor(instance, segmentation)));
   }
 
   let offset = 0;

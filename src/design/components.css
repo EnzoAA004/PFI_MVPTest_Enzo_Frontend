@@ -3753,3 +3753,544 @@ body,
   flex: 1 1 160px;
   min-width: 140px;
 }
+
+/* ============================================================================
+ * Pasada visual de entrega — acceso, barra de navegación e índice de pacientes.
+ *
+ * UI-PR1 y UI-PR2 migraron la lista de trabajo a su propia hoja con tokens
+ * (features/worklist/worklist.css). Las pantallas que quedaron fuera de esos
+ * dos PRs siguen sobre el legado de este archivo, donde la misma regla está
+ * declarada en dos o tres lugares y conviven pesos tipográficos 750 / 800 /
+ * 850 / 900 que ninguna fuente cargada tiene —Inter llega a 700, así que todos
+ * colapsan al mismo trazo—. Eso es lo que hace que Pacientes y el acceso se
+ * lean como otra aplicación al lado de la lista de trabajo.
+ *
+ * El bloque reabre la capa al final para ganar sin desenredar las
+ * declaraciones previas de cada selector. No toca marcado: es presentación.
+ * Lo que sigue después de la entrega es mover cada pantalla a su hoja de
+ * feature y borrar el legado, como ya se hizo con la lista de trabajo.
+ * ========================================================================= */
+@layer components {
+  /* --- Acceso ------------------------------------------------------------
+   * La tarjeta es translúcida (94 %) y está apoyada sobre un fondo con un
+   * corte diagonal duro al 45 %: la diagonal se ve a través del formulario y
+   * parte las etiquetas en dos tonos, que se lee como un error de render.
+   * La tarjeta pasa a ser opaca y el corte se degrada en vez de quedar a filo.
+   */
+  .auth-page {
+    background:
+      radial-gradient(circle at 22% 14%, color-mix(in srgb, var(--teal) 26%, transparent), transparent 44%),
+      linear-gradient(140deg, var(--bg-sidebar) 0%, var(--bg-sidebar) 54%, color-mix(in srgb, var(--bg-sidebar) 45%, var(--info-bg)) 76%, var(--info-bg) 100%);
+    padding: var(--sp-6);
+  }
+
+  .auth-card {
+    background: var(--surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-modal);
+    gap: var(--sp-4);
+    padding: var(--sp-6);
+  }
+
+  .auth-copy {
+    border-radius: var(--radius-card);
+    padding: var(--sp-4);
+  }
+
+  .auth-copy h1 {
+    font-size: var(--fs-h1);
+    font-weight: var(--fw-semibold);
+    letter-spacing: -0.01em;
+  }
+
+  /* El texto de arriba es una etiqueta, no un párrafo: en peso 900 competía
+     con el título que tiene justo debajo. */
+  .auth-copy p {
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.06em;
+  }
+
+  .auth-brand strong { font-weight: var(--fw-semibold); }
+  .auth-brand span { font-size: var(--fs-small); }
+
+  .auth-tabs { border-radius: var(--radius-btn); }
+
+  .auth-tabs button {
+    border-radius: var(--radius-chip);
+    font-size: var(--fs-body);
+    font-weight: var(--fw-medium);
+    min-height: var(--toolbar-h);
+  }
+
+  .auth-tabs button.active {
+    box-shadow: var(--shadow-sm);
+    font-weight: var(--fw-semibold);
+  }
+
+  .auth-form label {
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+  }
+
+  .auth-form input {
+    background: var(--surface);
+    border-radius: var(--radius-input);
+    min-height: var(--toolbar-h);
+    padding: 0 var(--sp-3);
+  }
+
+  /* --- Barra de navegación ------------------------------------------------
+   * El fondo es un degradado de un color hacia sí mismo, que no produce
+   * ningún efecto, y los espaciados son píxeles sueltos. La entrada activa
+   * además se desplaza 2 px: sobre una lista de tres ítems el salto se lee
+   * como un defecto, no como una respuesta al puntero.
+   */
+  .sidebar {
+    background: var(--bg-sidebar);
+    gap: var(--sp-6);
+    padding: var(--sp-4) var(--sp-3);
+  }
+
+  .brand { gap: var(--sp-3); }
+
+  .brand-mark {
+    border-radius: var(--radius-btn);
+    font-weight: var(--fw-semibold);
+    height: 36px;
+    width: 36px;
+  }
+
+  .brand strong {
+    font-size: var(--fs-h3);
+    font-weight: var(--fw-semibold);
+  }
+
+  .brand span { font-size: var(--fs-small); }
+
+  .side-nav button,
+  .sidebar-footer button {
+    border-radius: var(--radius-btn);
+    font-size: var(--fs-body);
+    font-weight: var(--fw-medium);
+    min-height: var(--toolbar-h);
+  }
+
+  .side-nav button:hover {
+    color: var(--sidebar-text);
+    transform: none;
+  }
+
+  .side-nav button.active {
+    color: var(--sidebar-text);
+    font-weight: var(--fw-semibold);
+    transform: none;
+  }
+
+  /* --- Menú de perfil -----------------------------------------------------
+   * `--shadow-md` no existe en tokens.css —están sm, subtle, legacy, card,
+   * float y modal—, así que el desplegable se abre sin sombra, plano sobre la
+   * tabla y sin nada que lo despegue de las filas.
+   */
+  .profile-menu-panel { box-shadow: var(--shadow-card); }
+
+  .profile-chip {
+    gap: var(--sp-2);
+    min-height: 36px;
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .profile-chip strong {
+    font-size: var(--fs-body);
+    font-weight: var(--fw-semibold);
+  }
+
+  .profile-chip small {
+    font-size: var(--fs-micro);
+    line-height: 1.3;
+  }
+
+  /* --- Encabezado de página ----------------------------------------------
+   * 2.1 rem con letter-spacing -0.05em contra los 18 px del título de la lista
+   * de trabajo: la misma jerarquía anunciada con dos tamaños que difieren casi
+   * al doble. Se alinea con `.wl-title h1`.
+   */
+  .page-heading h1,
+  .history-hero h1,
+  .compact-heading h1 {
+    font-size: var(--fs-h1);
+    font-weight: var(--fw-semibold);
+    letter-spacing: -0.01em;
+  }
+
+  .page-heading p,
+  .history-hero p {
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-semibold);
+    letter-spacing: 0.06em;
+  }
+
+  /* El contador de la derecha compite con el título por ser lo más grande de
+     la pantalla; en la lista de trabajo el equivalente ("49 de 50 estudios")
+     es texto atenuado al lado del título. */
+  .screen-summary strong {
+    font-size: var(--fs-h2);
+    font-weight: var(--fw-semibold);
+  }
+
+  .screen-summary span { font-size: var(--fs-micro); }
+}
+
+@layer components {
+  /* Índice de pacientes: mismo idioma denso que la lista de trabajo ---------
+   * La pantalla pasó a usar el encabezado operativo compartido, así que la
+   * tarjeta interna ya no lleva su propio título: era el tercer nombre para la
+   * misma pantalla en veinte píxeles de alto.
+   */
+  .patient-directory-total {
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--fw-medium);
+  }
+
+  /* La tarjeta contenedora se va por el mismo motivo que en la lista de
+     trabajo: la lista ya está delimitada por sus propias líneas. */
+  .patient-directory-panel {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    gap: var(--sp-3);
+    padding: 0;
+  }
+
+  .patient-directory-search {
+    grid-template-columns: minmax(0, 320px) auto;
+    gap: var(--sp-2);
+  }
+
+  .patient-directory-search .worklist-search-input span {
+    font-size: var(--fs-micro);
+    font-weight: var(--fw-medium);
+    letter-spacing: .04em;
+  }
+
+  .patient-directory-search .worklist-search-input input {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-input);
+    box-shadow: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    min-height: var(--control-h);
+    padding: 0 var(--sp-2);
+  }
+
+  /* Filas, no tarjetas: una referencia de paciente es una línea de índice. */
+  .patient-directory-list { gap: 0; }
+
+  .patient-directory-list li {
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    gap: var(--sp-3);
+    min-height: var(--row-h);
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .patient-directory-list li:first-child {
+    border-top: 1px solid var(--border-strong);
+  }
+
+  .patient-directory-list li:hover { background: var(--surface-subtle); }
+
+  .patient-directory-list li > div {
+    align-items: baseline;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-1) var(--sp-3);
+  }
+
+  /* La referencia se compara contra la columna PACIENTE de la lista de
+     trabajo: misma letra en las dos pantallas. */
+  .patient-directory-list strong {
+    font-family: var(--font-mono);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-regular);
+  }
+
+  .patient-directory-list span { font-size: var(--fs-micro); }
+
+  .patient-directory-list button {
+    background: none;
+    border: 0;
+    border-radius: var(--radius-chip);
+    color: var(--text-primary-strong);
+    font-size: var(--fs-small);
+    font-weight: var(--fw-medium);
+    min-height: var(--control-h);
+    padding: 0 var(--sp-2);
+    white-space: nowrap;
+  }
+
+  .patient-directory-list button:hover:not(:disabled) { background: var(--info-bg); }
+
+  @media (max-width: 768px) {
+    .patient-directory-search { grid-template-columns: 1fr; }
+
+    .patient-directory-list button {
+      align-self: start;
+      padding-left: 0;
+      text-align: left;
+      width: auto;
+    }
+  }
+}
+
+@layer components {
+  /* ==========================================================================
+   * Des-ornamentación del marco.
+   *
+   * La barra lateral gastaba 248 px y toda su carga visual en tres enlaces: un
+   * cuadro de marca redondeado, un ítem activo dibujado como cápsula azul con
+   * su contador en un círculo teal, y dos botones con caja abajo para la
+   * versión y el colapso. Ninguno de esos adornos dice nada que el texto no
+   * diga ya.
+   *
+   * El marcador de sección pasa a ser una barra de acento a la izquierda: es lo
+   * que usan las herramientas donde la navegación tiene que estar presente sin
+   * competir con el contenido.
+   * ======================================================================= */
+  .sidebar {
+    gap: var(--sp-4);
+    padding: var(--sp-4) var(--sp-2);
+  }
+
+  .brand-mark {
+    border-radius: var(--radius-sm, 4px);
+    height: 28px;
+    width: 28px;
+  }
+
+  .brand strong { font-size: var(--fs-body); }
+
+  .brand span { font-size: var(--fs-micro); }
+
+  .side-nav button,
+  .sidebar-footer button {
+    border-left: 2px solid transparent;
+    border-radius: 0;
+    font-size: var(--fs-small);
+    min-height: 32px;
+    padding: 0 var(--sp-3);
+  }
+
+  .side-nav button:hover {
+    background: rgba(255, 255, 255, .05);
+  }
+
+  .side-nav button.active {
+    background: rgba(255, 255, 255, .07);
+    border-left-color: var(--clinical-accent, var(--primary));
+    color: var(--sidebar-text);
+  }
+
+  /* El contador de pendientes es un número, no una insignia. */
+  .side-nav em {
+    background: none;
+    border-radius: 0;
+    color: var(--sidebar-text-muted);
+    font-size: var(--fs-small);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--fw-regular);
+    min-width: 0;
+    padding: 0;
+  }
+
+  .side-nav button.active em { color: var(--sidebar-text); }
+
+  /* La versión y el colapso son referencia y utilidad: no necesitan una caja
+     cada uno al pie de la pantalla. */
+  .sidebar-footer button,
+  .system-status {
+    background: none;
+    border: 0;
+    padding: 0 var(--sp-3);
+  }
+
+  .system-status { font-size: var(--fs-micro); }
+
+  .sidebar-collapse { font-size: var(--fs-micro); }
+
+  /* El chip de perfil era la única caja de una barra por lo demás vacía. */
+  .profile-chip {
+    background: none;
+    border: 0;
+    border-radius: var(--radius-sm, 4px);
+    padding: var(--sp-1) var(--sp-2);
+  }
+
+  .profile-chip:hover { background: var(--surface-subtle); }
+
+  .top-header { margin-bottom: 0; }
+}
+
+@layer components {
+  /* La barra de identidad ocupaba ~76 px de alto para mostrar un nombre. Queda
+     como una tira al ras del borde superior: el nombre de quien firma la
+     revisión tiene que estar visible, pero no es contenido de la pantalla. */
+  .main-panel { padding-top: var(--sp-3); }
+
+  .top-header {
+    min-height: 24px;
+    margin-bottom: var(--sp-2);
+  }
+
+  .profile-chip {
+    min-height: 24px;
+    gap: var(--sp-1);
+  }
+
+  .profile-chip > svg:first-child {
+    width: 18px;
+    height: 18px;
+  }
+
+  .profile-chip span { line-height: 1.15; }
+
+  .profile-chip strong { font-size: var(--fs-small); }
+
+  .profile-chip small { font-size: 10px; }
+}
+
+@layer components {
+  /*
+   * Texto de la barra de navegación bajo el tema oscuro.
+   *
+   * `.side-nav button` se pintaba con `color-mix(in srgb, var(--surface) 78%,
+   * var(--text-muted))`: con --surface blanco la mezcla daba un gris claro
+   * legible sobre la barra oscura, pero al volverse oscura la superficie la
+   * fórmula se invierte y produce gris oscuro sobre casi negro —medido, 1.14:1
+   * contra el fondo, ilegible—. La mezcla se reemplaza por el token semántico,
+   * que es lo que la fórmula intentaba aproximar.
+   */
+  .side-nav button,
+  .sidebar-footer button,
+  .system-status,
+  .sidebar-collapse {
+    color: var(--sidebar-text-muted);
+  }
+
+  .side-nav button:hover,
+  .sidebar-footer button:hover,
+  .sidebar-collapse:hover {
+    color: var(--sidebar-text);
+  }
+
+  .side-nav button.active,
+  .side-nav button.active .side-nav-label {
+    color: var(--sidebar-text);
+  }
+
+  /* La identidad es el nombre de quien firma: no puede quedar más apagada que
+     la versión que tiene debajo. */
+  .profile-chip { color: var(--sidebar-text); }
+  .profile-chip strong { color: var(--sidebar-text); }
+  .profile-chip small { color: var(--sidebar-text-muted); }
+}
+
+@layer components {
+  /* ==========================================================================
+   * Riel colapsado, después de mover la identidad al pie.
+   *
+   * Las reglas del riel (shell.css) colapsan el texto con `font-size: 0` sobre
+   * el botón, contando con que los hijos hereden. El chip de perfil declara
+   * tamaños explícitos en su `strong` y su `small`, así que no los alcanzaba: a
+   * 56 px de ancho el nombre no entra y se salía por el borde izquierdo.
+   * ======================================================================= */
+  .app-layout.is-rail .profile-chip span,
+  .app-layout.is-rail .profile-chip > svg:last-child {
+    display: none;
+  }
+
+  .app-layout.is-rail .profile-chip {
+    justify-content: center;
+    min-width: 0;
+    padding: var(--sp-1);
+    width: 100%;
+  }
+
+  .app-layout.is-rail .sidebar-footer .top-header {
+    margin: 0;
+    min-height: 0;
+  }
+
+  .app-layout.is-rail .sidebar-footer .header-actions {
+    justify-content: center;
+  }
+
+  .app-layout.is-rail .profile-menu {
+    width: 100%;
+  }
+
+  /* La barra de acento del ítem activo es un borde, así que en el riel corría
+     el icono 2 px y lo descentraba. Como sombra interior ocupa cero. */
+  .app-layout.is-rail .side-nav button {
+    border-left-width: 0;
+  }
+
+  .app-layout.is-rail .side-nav button.active {
+    box-shadow: inset 2px 0 0 var(--clinical-accent, var(--primary));
+  }
+
+  /* Sin texto al lado, el contador se superpone al icono: necesita fondo. */
+  .app-layout.is-rail .side-nav button em {
+    background: var(--primary);
+    border-radius: var(--radius-pill);
+    color: #fff;
+    font-weight: var(--fw-semibold);
+  }
+
+  /*
+   * El menú de perfil se abría hacia abajo, que era correcto cuando la
+   * identidad vivía en una barra superior. Al pie de la navegación se abriría
+   * fuera de la pantalla, así que sale hacia arriba; en el riel, además, hacia
+   * el costado, porque 56 px no alcanzan para su ancho mínimo.
+   */
+  .sidebar-footer .profile-menu-panel {
+    bottom: calc(100% + var(--sp-2));
+    top: auto;
+  }
+
+  .app-layout.is-rail .sidebar-footer .profile-menu-panel {
+    bottom: 0;
+    left: calc(100% + var(--sp-2));
+    right: auto;
+  }
+}
+
+@layer components {
+  /*
+   * La cabecera de identidad arrastra `background: var(--bg-app)` del CSS
+   * heredado, de cuando vivía arriba del panel de contenido y ese fondo la
+   * fundía con la pantalla. Al pie de la barra de navegación pinta un bloque
+   * del color del panel sobre una superficie oscura: en tema claro eso es una
+   * caja casi blanca, y encima el nombre usa --sidebar-text, que en claro es
+   * casi blanco también. Resultado: el nombre del revisor, ilegible.
+   *
+   * Dentro de la barra no hay nada que fundir: la cabecera es transparente y
+   * los colores salen de los tokens de la barra, que valen para los dos temas.
+   */
+  .sidebar-footer .top-header {
+    background: none;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .sidebar-footer .header-actions {
+    gap: var(--sp-1);
+    width: 100%;
+  }
+}

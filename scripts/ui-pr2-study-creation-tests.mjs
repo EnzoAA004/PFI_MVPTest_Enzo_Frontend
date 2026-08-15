@@ -37,10 +37,18 @@ test("el placeholder ya no parece un dataset técnico", () => {
   assert.doesNotMatch(drawer, /placeholder="SPIDER-101"/);
 });
 
+/*
+ * Los "01 / 02 / 03" en color de acento salieron en la pasada de densidad: no
+ * eran pasos —nada impide escribir el ID de caso antes de elegir el paciente—
+ * y el número pesaba más que el nombre de la sección. El intento del test no
+ * cambia: el formulario tiene que seguir nombrando sus tres partes y decir en
+ * una línea qué se hace ahí.
+ */
 test("el flujo explica paciente, estudio, imágenes y análisis", () => {
   assert.match(drawer, /Seleccioná el paciente, completá los datos del estudio, cargá las imágenes y ejecutá el análisis/);
-  assert.match(drawer, />02<\/span> Datos del estudio/);
-  assert.match(drawer, />03<\/span> Imágenes/);
+  assert.match(drawer, /<h3 className="wl-section-title">Datos del estudio<\/h3>/);
+  assert.match(drawer, /<h3 className="wl-section-title">Imágenes<\/h3>/);
+  assert.doesNotMatch(drawer, /aria-hidden="true">0\d<\/span>/);
 });
 
 test("el análisis muestra progreso honesto sin porcentaje inventado", () => {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { OrientationLabels } from "./orientationMarkers";
 import { MriSliceViewer, type MeasurementOverlay, type RawSlicePixels, type SliceNavigation } from "../../components/MriSliceViewer";
-import { instanceColor, instanceLabel, type Segmentation } from "./segmentation";
+import { instanceLabel, resolveSegmentationDisplayColor, type Segmentation } from "./segmentation";
 import { displayStructureLabel } from "../../clinicalDisplay";
 import type { StudyArchiveSeries } from "../../appTypes";
 import type { SlicePixelsMeta } from "./pixels";
@@ -31,9 +31,8 @@ export type PlaneViewportProps = {
   plane: "sagittal" | "axial";
   caseLabel: string;
   seriesName: string;
+  seriesRoleLabel: "Analizada IA" | "Referencia";
   model: ReturnType<typeof studyRunToMriViewerModel>;
-  modelLabel: string;
-  inferenceLabel: string;
   spacingLabel: string;
   slice?: SliceNavigation;
   active: boolean;
@@ -41,6 +40,8 @@ export type PlaneViewportProps = {
   selectedLandmarkId: string;
   onSelectLandmark: (id: string) => void;
   readonly: boolean;
+  /** Edición de cotas, independiente del modo de landmarks. */
+  measurementsReadonly?: boolean;
   addMode: boolean;
   /** Marcado del receso subarticular: solo lo activa el viewport axial. */
   subarticularMode?: boolean;
@@ -98,8 +99,8 @@ export type PlaneViewportProps = {
  * axiales no se recorren con el mismo índice.
  */
 export function PlaneViewport({
-  plane, caseLabel, seriesName, model, modelLabel, inferenceLabel, spacingLabel,
-  slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, addMode,
+  plane, caseLabel, seriesName, seriesRoleLabel, model, spacingLabel,
+  slice, active, onActivate, selectedLandmarkId, onSelectLandmark, readonly, measurementsReadonly, addMode,
   subarticularMode, onSubarticularPoint, orientation, pixelSpacingMm,
   onMoveLandmark, onAddLandmark, onLandmarkAddComplete, onOverlayAvailableChange,
   measureTool, measureDraft, onMeasurePoint, onMeasureFreehand, annotations, aiMeasurements, aiMeasurableCount,
@@ -183,11 +184,11 @@ export function PlaneViewport({
         <div className="rr-corner rr-corner-tl"><strong>{caseLabel}</strong></div>
         <div className="rr-corner rr-corner-tr">
           <strong>{seriesName}</strong>
-          {sliceLabel}
+          {sliceLabel}{"\n"}<span className="rr-viewport-role">{seriesRoleLabel}</span>
         </div>
-        {/* Parámetros de display: modelo, modo de inferencia y la ventana actual. */}
+        {/* W/L es información de lectura. Modelo y modo viven en Más → Técnico. */}
         <div className="rr-corner rr-corner-bl">
-          {modelLabel}{"\n"}{inferenceLabel}{displayParams ? `\n${displayParams}` : ""}
+          {displayParams}
         </div>
         <div className="rr-corner rr-corner-br">
           {spacingLabel}
@@ -197,6 +198,7 @@ export function PlaneViewport({
           selectedLandmarkId={selectedLandmarkId}
           onSelectLandmark={onSelectLandmark}
           readonly={readonly}
+          measurementsReadonly={measurementsReadonly}
           addMode={addMode}
           subarticularMode={subarticularMode}
           onSubarticularPoint={onSubarticularPoint}
@@ -247,7 +249,7 @@ export function PlaneViewport({
                     onChange={() => onToggleInstance(instance.index)}
                     type="checkbox"
                   />
-                  <i style={{ background: instanceColor(instance.index) }} />
+                  <i style={{ background: resolveSegmentationDisplayColor(instance, segmentation) }} />
                   <span>{instanceLabel(instance, displayStructureLabel)}</span>
                 </label>
               </li>

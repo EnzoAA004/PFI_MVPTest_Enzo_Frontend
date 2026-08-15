@@ -39,10 +39,27 @@ test("Worklist usa el page header operativo reutilizable", () => {
   assert.match(pageHeader, /operations-page-header/);
 });
 
-test("el header presenta eyebrow, contexto y acción primaria", () => {
-  assert.match(worklist, /eyebrow="Estudios"/);
-  assert.match(worklist, /description="Revisión y seguimiento de estudios procesados\."/);
+/*
+ * UI-PR1 fijaba acá un antetítulo "ESTUDIOS" y la bajada "Revisión y
+ * seguimiento de estudios procesados". Las dos salieron en la pasada de
+ * densidad: la barra lateral ya dice en qué sección está el usuario, y
+ * describir la pantalla a quien la está mirando cuesta ~40 px de alto, que en
+ * una lista de trabajo es una fila menos visible.
+ *
+ * Lo que el test protege sigue siendo lo mismo —que el encabezado identifique
+ * la pantalla y ofrezca la acción primaria—; lo que cambia es que ya no fija
+ * el texto decorativo que lo acompañaba.
+ */
+test("el header identifica la pantalla y ofrece la acción primaria", () => {
+  assert.match(worklist, /title="Lista de trabajo"/);
   assert.match(worklist, /Nuevo análisis/);
+  assert.doesNotMatch(worklist, /eyebrow=/);
+});
+
+test("el encabezado operativo no impone antetítulo ni bajada", () => {
+  assert.doesNotMatch(pageHeader, /operations-eyebrow/);
+  assert.match(pageHeader, /description\?: string/);
+  assert.match(pageHeader, /description \? <p>\{description\}<\/p> : null/);
 });
 
 test("la búsqueda mantiene label accesible y control search", () => {

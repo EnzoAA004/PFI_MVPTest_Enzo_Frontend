@@ -114,10 +114,8 @@ export function Worklist({ studies, loading = false, onOpenReview, onAnalysisRea
   return (
     <div className="wl">
       <OperationsPageHeader
-        eyebrow="Estudios"
         title="Lista de trabajo"
-        description="Revisión y seguimiento de estudios procesados."
-        meta={<span className="wl-total">{rows.length} de {studies.length} estudios</span>}
+        meta={<span className="wl-total">{rows.length} de {studies.length}</span>}
         actions={(
           <div className="wl-actions">
           <label className="wl-search">

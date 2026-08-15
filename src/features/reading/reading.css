@@ -2,9 +2,8 @@
  * Reading room — dark, image-first workspace.
  *
  * It deliberately breaks out of the page flow: reading a study is a mode, not a
- * page section. The room covers the viewport to the right of the sidebar (which
- * stays available for navigation) so the image gets the whole screen instead of
- * being a card in the middle column, below the fold.
+ * page section. The room covers the complete viewport while the study route is
+ * active; AppShell restores its normal navigation when the reader leaves.
  *
  * Namespaced under .rr and self-contained. Dark values come from the
  * [data-theme="reading"] token scope, which .rr sets on itself.
@@ -12,17 +11,17 @@
 @layer components {
   .rr {
     position: fixed;
-    inset: 0 0 0 var(--sidebar-w);
+    inset: 0;
     z-index: 40;
     display: grid;
     grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--toolbar-h);
+    width: 100vw;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
     background: var(--bg-app);
     color: var(--text);
     font-size: var(--fs-small);
-  }
-
-  @media (max-width: 1180px) {
-    .rr { inset: 0; }
   }
 
   /* Top bar ------------------------------------------------------------- */
@@ -61,6 +60,7 @@
     gap: var(--sp-2);
     min-width: 0;
     overflow: hidden;
+    flex: 1 1 auto;
   }
 
   .rr-case strong {
@@ -123,12 +123,52 @@
   }
 
   .rr-topbar-right {
-    margin-left: auto;
     display: flex;
     align-items: center;
     gap: var(--sp-2);
     flex: none;
   }
+
+  .rr-workspace-series,
+  .rr-layout-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: var(--fs-micro);
+  }
+
+  .rr-workspace-series { flex: 0 1 230px; }
+  .rr-workspace-series-label,
+  .rr-layout-control > span { text-transform: uppercase; letter-spacing: .05em; }
+
+  .rr-workspace-series select,
+  .rr-layout-control select {
+    min-width: 0;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    background: var(--surface-subtle);
+    color: var(--text);
+    font: inherit;
+    padding: 0 24px 0 7px;
+  }
+
+  .rr-workspace-series select { flex: 1; }
+
+  .rr-series-role,
+  .rr-viewport-role {
+    color: var(--text-primary-strong);
+    font-size: 9px;
+    font-weight: var(--fw-semibold);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .rr-series-role.is-reference,
+  .rr-viewport-role { color: var(--text-muted); }
 
   .rr-status {
     display: inline-flex;
@@ -166,13 +206,14 @@
   /* Body ---------------------------------------------------------------- */
   .rr-body {
     display: grid;
-    grid-template-columns: 124px minmax(0, 1fr) 340px;
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 22vw, 420px);
     min-height: 0;
+    position: relative;
+    overflow: hidden;
   }
 
-  @media (max-width: 1320px) {
-    .rr-body { grid-template-columns: 104px minmax(0, 1fr) 300px; }
-  }
+  .rr-body[data-inspector="collapsed"] { grid-template-columns: minmax(0, 1fr); }
+  .rr-body[data-inspector="collapsed"] > .rr-panel { display: none; }
 
   /* Series rail ---------------------------------------------------------- */
   .rr-series {
@@ -699,7 +740,9 @@
     background: var(--border);
   }
 
-  @media (min-aspect-ratio: 3/2) {
+  /* Desktop: incluso con el inspector abierto, dos columnas de ~500 px ofrecen
+     una lectura comparativa mejor que dos viewports apilados de poca altura. */
+  @media (min-width: 1280px) {
     .rr-stage[data-layout="dual"] {
       grid-template-rows: none;
       grid-template-columns: 1fr 1fr;
@@ -872,8 +915,8 @@
     border: 0;
     border-top: 1px solid var(--border);
     border-radius: 0;
-    /* Fixed height, scrolled instead of wrapped: the strips must not change height,
-       because the bottom corner annotations are anchored just above them. */
+    /* Los controles internos no se modifican: cuando el ancho no alcanza, una barra
+       visible indica que hay más herramientas en vez de esconderlas sin señal. */
     flex-wrap: nowrap;
     overflow-x: auto;
     justify-content: flex-start;
@@ -899,12 +942,11 @@
 
   .rr-viewport .plane-controls-panel .toggle-row { flex: none; white-space: nowrap; }
 
-  /* Las dos barras desplazables mostraban su scrollbar y sumaban ruido sobre el
-     visor; se sigue pudiendo desplazar con rueda o teclado. */
   .rr-viewport .viewer-controls,
-  .rr-viewport .plane-controls-panel { scrollbar-width: none; }
-  .rr-viewport .viewer-controls::-webkit-scrollbar,
-  .rr-viewport .plane-controls-panel::-webkit-scrollbar { display: none; }
+  .rr-viewport .plane-controls-panel {
+    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-width: thin;
+  }
 
   .rr-viewport .viewer-controls button,
   .rr-viewport .plane-controls-panel button {
@@ -1194,6 +1236,18 @@
   }
 
   .rr-report-actions button:hover { color: var(--text-primary-strong); border-color: var(--border-info); }
+
+  /* El informe ofrecido al finalizar: se destaca porque aparece una sola vez, justo
+     cuando el estudio deja de cambiar, y perderselo obliga a ir a buscarlo. */
+  .rr-report-ready {
+    margin-top: var(--sp-2);
+    padding: var(--sp-2);
+    border: 1px solid var(--border-info);
+    border-radius: var(--radius-btn);
+    background: var(--surface-raised, transparent);
+  }
+
+  .rr-report-ready p { margin: 0 0 var(--sp-1); font-size: var(--fs-small); color: var(--text-primary-strong); }
 
   /* Right panel ---------------------------------------------------------- */
   .rr-panel {
@@ -1600,6 +1654,23 @@
 
   .rr-panel textarea { min-height: 84px; resize: vertical; }
 
+  .rr-panel .panel-card {
+    margin: 0;
+    padding: var(--sp-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    background: var(--surface-subtle);
+    box-shadow: none;
+    color: var(--text);
+  }
+
+  .rr-panel .panel-card .section-title h2,
+  .rr-panel .panel-card dd,
+  .rr-panel .panel-card li { color: var(--text); }
+
+  .rr-panel .panel-card dt,
+  .rr-panel .panel-card .muted { color: var(--text-muted); }
+
   .rr-panel textarea:focus,
   .rr-panel select:focus,
   .rr-panel input:focus {
@@ -1652,6 +1723,7 @@
     background: var(--surface);
     border-top: 1px solid var(--border);
     min-width: 0;
+    overflow: visible;
   }
 
   .rr-tool {
@@ -1694,6 +1766,94 @@
     color: var(--text-muted);
     font-size: var(--fs-micro);
     font-variant-numeric: tabular-nums;
+  }
+
+  .rr-tool-menu {
+    position: relative;
+    flex: none;
+  }
+
+  .rr-tool-menu > summary {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 var(--sp-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: var(--fs-micro);
+    list-style: none;
+    white-space: nowrap;
+  }
+
+  .rr-tool-menu > summary::-webkit-details-marker { display: none; }
+  .rr-tool-menu > summary::after { content: "▴"; margin-left: 6px; font-size: 9px; }
+  .rr-tool-menu > summary:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  .rr-tool-menu-popover {
+    position: absolute;
+    z-index: 20;
+    bottom: calc(100% + 7px);
+    left: 0;
+    display: grid;
+    min-width: 190px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    background: var(--surface);
+    box-shadow: 0 -8px 24px rgb(0 0 0 / .28);
+  }
+
+  .rr-tool-menu-popover .rr-tool { width: 100%; justify-content: flex-start; }
+
+  .rr-more-action {
+    width: 100%;
+    min-height: 30px;
+    margin-top: var(--sp-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-btn);
+    background: var(--surface-subtle);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .rr-3d-workspace { min-width: 0; min-height: 0; }
+
+  @media (max-width: 1399px) {
+    .rr-topbar { gap: var(--sp-2); }
+    .rr-case { flex: 0 1 230px; max-width: 230px; }
+    .rr-case span { display: none; }
+    .rr-workspace-series { flex: 0 1 190px; min-width: 170px; }
+    .rr-workspace-series-label { display: none; }
+    .rr-workspace-governance > summary span:first-child { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+    .rr-inspector-toggle { max-width: 34px; overflow: hidden; color: transparent; position: relative; }
+    .rr-inspector-toggle::after { content: "Panel"; color: var(--text-muted); position: absolute; inset: 0; display: grid; place-items: center; }
+  }
+
+  @media (max-width: 1179px) {
+    .rr-body { grid-template-columns: minmax(0, 1fr); }
+    .rr-body > .rr-panel {
+      position: absolute;
+      z-index: 15;
+      inset: 0 0 0 auto;
+      width: min(380px, 92vw);
+      box-shadow: -12px 0 32px rgb(0 0 0 / .38);
+    }
+    .rr-workspace-governance { display: none; }
+    .rr-case { max-width: 180px; }
+  }
+
+  @media (max-width: 1023px) {
+    .rr-workspace-series-label,
+    .rr-layout-control > span,
+    .rr-status { display: none; }
+    .rr-case { display: none; }
+    .rr-topbar-right { margin-left: auto; }
+    .rr-toolbar-end { display: none; }
   }
 
   .rr-kbd {
