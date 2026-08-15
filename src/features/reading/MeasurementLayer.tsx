@@ -187,7 +187,18 @@ function Figure({ figure, kind, tick }: { figure: MeasurementFigure; kind: Measu
 export function MeasurementLayer({
   figures, draft, referenceLine, selectedId, highlightedId, zoom, editable, onSelect, onDragStart,
 }: Props) {
-  const fontSize = 6 / zoom;
+  /*
+   * 8 y no 6: medido sobre la aplicacion, el valor anterior renderizaba a 10 px de
+   * alto en pantalla, que es chico para leer un numero clinico de un vistazo. Las
+   * estaciones de lectura rondan los 12-14. La division por el zoom es lo que
+   * mantiene ese tamano constante mientras la anatomia crece.
+   *
+   * Subirlo no es gratis: la placa se dimensiona a partir de esta constante, asi que
+   * un numero mas grande empuja mas lejos a las placas que se estorban entre si -en
+   * el axial son ocho sobre la misma estructura-. 8 es lo que entra sin que esa
+   * columna se desarme.
+   */
+  const fontSize = 8 / zoom;
   const tick = 2.2 / zoom;
   const handle = 2.4 / zoom;
   /*
@@ -241,7 +252,6 @@ export function MeasurementLayer({
       {figures.map((figure) => {
         if (!figure.points.length) return null;
         const selected = figure.id === selectedId;
-        const anchor = anchors.get(figure.id) ?? plateBase(figure.kind, figure.points);
         const state = selected ? " is-selected" : figure.id === highlightedId ? " is-highlighted" : "";
         return (
           <g
@@ -262,7 +272,6 @@ export function MeasurementLayer({
               />
             )}
             <Figure figure={figure} kind={figure.kind} tick={tick} />
-            {figure.label && <Plate x={anchor.x} y={anchor.y} text={figure.label} size={fontSize} />}
             {selected && editable && figure.points.map((point, index) => (
               <circle
                 className="mri-measure-handle"
@@ -273,6 +282,29 @@ export function MeasurementLayer({
                 r={handle}
               />
             ))}
+          </g>
+        );
+      })}
+      {/*
+        * Las placas van en una segunda pasada, sobre todas las figuras.
+        *
+        * Dibujadas dentro del grupo de su propia cota quedaban a merced del orden: la
+        * linea de una cota posterior se pintaba encima de la placa de una anterior y
+        * le tachaba el numero. Con el texto chico apenas se notaba; agrandarlo lo hizo
+        * evidente, y un numero tachado es justo lo que un valor clinico no puede ser.
+        *
+        * Van fuera del grupo que escucha el clic a proposito: la placa no selecciona.
+        * Esta corrida al costado de la cota, asi que apretarla seleccionaria algo que
+        * no esta debajo del cursor.
+        */}
+      {figures.map((figure) => {
+        if (!figure.points.length || !figure.label) return null;
+        const anchor = anchors.get(figure.id) ?? plateBase(figure.kind, figure.points);
+        const selected = figure.id === selectedId;
+        const state = selected ? " is-selected" : figure.id === highlightedId ? " is-highlighted" : "";
+        return (
+          <g className={`mri-measure mri-measure-${figure.source}${state}`} key={`plate-${figure.id}`}>
+            <Plate x={anchor.x} y={anchor.y} text={figure.label} size={fontSize} />
           </g>
         );
       })}
