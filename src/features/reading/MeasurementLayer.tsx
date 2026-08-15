@@ -84,8 +84,18 @@ function Tick({ at, along, size }: { at: AnnotationPoint; along: AnnotationPoint
  * se estima en anchos de carácter de una tipografía monoespaciada, que es la que usa
  * el visor justamente porque cada carácter mide lo mismo.
  */
+function plateWidth(text: string, size: number) {
+  return text.length * size * 0.62 + size * 0.7;
+}
+
+type Box = { x: number; y: number; w: number; h: number };
+
+function overlaps(a: Box, b: Box) {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
 function Plate({ x, y, text, size }: { x: number; y: number; text: string; size: number }) {
-  const width = text.length * size * 0.62 + size * 0.7;
+  const width = plateWidth(text, size);
   const height = size * 1.5;
   return (
     <g className="mri-measure-plate">
@@ -95,25 +105,42 @@ function Plate({ x, y, text, size }: { x: number; y: number; text: string; size:
   );
 }
 
-/** Dónde apoyar la placa de cada tipo, sin taparle la estructura que mide. */
-function plateAnchor(kind: MeasurementKind, points: AnnotationPoint[], gap: number): AnnotationPoint {
-  if (kind === "probe") return { x: points[0].x, y: points[0].y - gap };
-  if (kind === "roi") {
-    const top = points.reduce((best, point) => (point.y < best.y ? point : best), points[0]);
-    return { x: top.x, y: top.y - gap };
-  }
+/**
+ * Desde qué punto se aparta la placa de cada tipo.
+ *
+ * Es el lugar que la medición "señala": el que el médico mira para juzgarla. La
+ * placa no se apoya ahí sino a una distancia de ahí.
+ */
+function plateBase(kind: MeasurementKind, points: AnnotationPoint[]): AnnotationPoint {
+  if (kind === "probe") return points[0];
+  if (kind === "roi") return points.reduce((best, point) => (point.y < best.y ? point : best), points[0]);
+  // En el vértice del ángulo, que es donde el médico mira para juzgarlo.
   if (kind === "angle" && points.length >= 4) {
-    // En el vértice del ángulo, que es donde el médico mira para juzgarlo.
-    return { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 - gap };
+    return { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 };
   }
-  if (kind === "listhesis" && points.length >= 3) {
-    return { x: points[2].x, y: points[2].y - gap };
-  }
-  // Distancia: fuera de la línea, corrido a lo largo de su propia dirección, para no
-  // quedar encima de lo que se está midiendo.
+  if (kind === "listhesis" && points.length >= 3) return points[2];
   const [from, to] = points;
-  const direction = unitVector(from, to);
-  return { x: to.x + direction.x * gap, y: to.y + direction.y * gap };
+  return { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+}
+
+/**
+ * Hacia dónde apartarla.
+ *
+ * En una distancia, perpendicular a la propia línea. Antes se corría a lo largo de
+ * su dirección, más allá del extremo, y ahí es justo donde está el tirador para
+ * arrastrarla: en una cota horizontal la tapaba con media placa entera. Se notaba
+ * sobre todo en el axial, donde las cotas son cortas y la placa mide lo mismo que
+ * en cualquier otro plano.
+ *
+ * Perpendicular y desde el medio despeja los dos extremos de una vez, que es
+ * además donde el ojo espera leer la medida de un segmento.
+ */
+function plateDirection(kind: MeasurementKind, points: AnnotationPoint[]): AnnotationPoint {
+  if (kind !== "distance" || points.length < 2) return { x: 0, y: -1 };
+  const direction = unitVector(points[0], points[1]);
+  const normal = { x: -direction.y, y: direction.x };
+  // Siempre hacia arriba, para que dos cotas paralelas no se lean una a cada lado.
+  return normal.y > 0 ? { x: -normal.x, y: -normal.y } : normal;
 }
 
 function Figure({ figure, kind, tick }: { figure: MeasurementFigure; kind: MeasurementKind; tick: number }) {
@@ -163,7 +190,37 @@ export function MeasurementLayer({
   const fontSize = 6 / zoom;
   const tick = 2.2 / zoom;
   const handle = 2.4 / zoom;
-  const gap = fontSize * 1.1;
+  /*
+   * Media altura de la placa + el radio del tirador + un respiro. Deducido y no
+   * elegido: con el valor de antes la placa quedaba a 2.1 de un tirador de 2.4 de
+   * radio, así que lo tapaba siempre.
+   */
+  const clearance = (fontSize * 1.5) / 2 + handle + fontSize * 0.35;
+  /*
+   * Apartar cada placa de su propio punto no alcanza cuando hay muchas. En el axial
+   * ocho cotas cruzan la misma estructura, sus centros caen casi en el mismo lugar
+   * y las placas terminan apiladas unas sobre otras, que es tan ilegible como
+   * taparle el extremo a la cota. Así que se ubican de a una y, si la que sigue
+   * pisa a una ya puesta, se aleja otro escalón por su propia perpendicular hasta
+   * encontrar hueco. Con tope de intentos: sin él una cota podría irse del corte.
+   */
+  const plateHeight = fontSize * 1.5;
+  const anchors = new Map<string, AnnotationPoint>();
+  const placed: Box[] = [];
+  for (const figure of figures) {
+    if (!figure.points.length || !figure.label) continue;
+    const base = plateBase(figure.kind, figure.points);
+    const direction = plateDirection(figure.kind, figure.points);
+    const width = plateWidth(figure.label, fontSize);
+    const at = (distance: number) => ({ x: base.x + direction.x * distance, y: base.y + direction.y * distance });
+    const boxAt = (point: AnnotationPoint): Box => ({ x: point.x - width / 2, y: point.y - plateHeight / 2, w: width, h: plateHeight });
+    let anchor = at(clearance);
+    for (let step = 1; step <= 6 && placed.some((other) => overlaps(other, boxAt(anchor))); step += 1) {
+      anchor = at(clearance + step * plateHeight * 1.25);
+    }
+    placed.push(boxAt(anchor));
+    anchors.set(figure.id, anchor);
+  }
   if (!figures.length && !draft && !referenceLine) return null;
 
   return (
@@ -184,7 +241,7 @@ export function MeasurementLayer({
       {figures.map((figure) => {
         if (!figure.points.length) return null;
         const selected = figure.id === selectedId;
-        const anchor = plateAnchor(figure.kind, figure.points, gap);
+        const anchor = anchors.get(figure.id) ?? plateBase(figure.kind, figure.points);
         const state = selected ? " is-selected" : figure.id === highlightedId ? " is-highlighted" : "";
         return (
           <g
