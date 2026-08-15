@@ -473,6 +473,13 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     setReviewStatus(run.review?.status ?? run.reviewStatus ?? "pendiente");
     setNotes(run.review?.notes ?? run.review?.observations ?? "");
     setReviewerValues({});
+    /*
+     * Tambien al cambiar de estudio, y aca no es cosmético: los ids de medición se
+     * repiten entre estudios -`sagittal-canal-ap-l2-l3` existe en todos-, asi que la
+     * geometría arrastrada en uno se le aplicaba al siguiente y dibujaba la cota de
+     * un paciente sobre la anatomía de otro.
+     */
+    setMeasureGeometry({});
     setLandmarkDrafts({});
     setLandmarkAddMode(false);
     setSaveMessage("");
@@ -1194,10 +1201,42 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
     }));
 
   function updateReviewerValue(measurement: MeasurementRow, value: string) {
+    /*
+     * Vaciar el campo es como se borra una corrección: `hasMeasurementDrafts` trata
+     * la cadena vacía como "no hay borrador" y la fila vuelve a mostrar el valor de
+     * la IA. La línea tiene que volver con él.
+     *
+     * Arrastrar un extremo escribe en dos lados -la geometría corregida y el valor
+     * recalculado- y borrar limpiaba solo el segundo, asi que la cota se quedaba donde
+     * la habia dejado el mouse con el número de la IA encima: una medición que dice
+     * una cosa y se dibuja como otra. Sin la línea de vuelta en su lugar tampoco hay
+     * como ver que el borrado surtió efecto.
+     */
+    if (value === "") restoreAiGeometry(measurement.id);
     setReviewerValues((current) => ({ ...current, [measurement.id]: value }));
   }
 
+  /** Devuelve una cota a los puntos con los que la publicó la IA. */
+  function restoreAiGeometry(measurementId: string) {
+    setMeasureGeometry((state) => {
+      if (!(measurementId in state)) return state;
+      const next = { ...state };
+      delete next[measurementId];
+      return next;
+    });
+  }
+
   function resetReviewerValue(measurementId: string) {
+    /*
+     * La línea vuelve junto con el número.
+     *
+     * Arrastrar un extremo escribe en dos lados: la geometría corregida y el valor
+     * recalculado. Deshacer limpiaba solo el valor, asi que la cota se quedaba donde
+     * la habia dejado el mouse mostrando el número de la IA encima: una medición que
+     * dice una cosa y se dibuja como otra. Y sin la línea de vuelta en su lugar no hay
+     * como ver que el borrado surtió efecto.
+     */
+    restoreAiGeometry(measurementId);
     const row = resultRows.find((item) => item.id === measurementId);
     if (row?.persistedValue !== "" && row?.aiValue !== undefined && row.aiValue !== null) {
       setReviewerValues((current) => ({ ...current, [measurementId]: String(row.aiValue) }));
@@ -1217,6 +1256,9 @@ export function StudyReviewView({ run, studyReview, measurements, auditTrail, sa
 
   function resetReviewerDrafts() {
     setReviewerValues({});
+    // Por lo mismo que en `resetReviewerValue`: descartar los borradores tiene que
+    // devolver las cotas a donde las dejó la IA, no solo sus números.
+    setMeasureGeometry({});
     setLandmarkDrafts({});
     setContourDrafts({});
     setLandmarkAddMode(false);
